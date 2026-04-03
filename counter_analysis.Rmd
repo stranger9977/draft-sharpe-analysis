@@ -826,7 +826,8 @@ ggplot(ngs_rb, aes(x = cmbn_score, y = player_label, fill = ngs_tier)) +
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
   ) +
-  scale_x_continuous(limits = c(50, 105), expand = expansion(mult = c(0, 0.05))) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
+  coord_cartesian(xlim = c(50, NA)) +
   labs(
     title = "2025 RB Prospects: NGS Combined Score",
     subtitle = "Love's 94.3 is tied for #1 overall (all positions) with Sonny Styles | ProdScr: 95.9 (highest of any prospect)",
@@ -871,18 +872,16 @@ top_2025_all <- ngs_prospects %>%
     pos_group = factor(pos_group, levels = key_positions)
   )
 
-# Use geom_segment + geom_point (lollipop) instead of geom_col so x-axis offset works
-ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, color = ngs_tier)) +
-  geom_segment(aes(x = 55, xend = cmbn_score, yend = player_label_unique),
-               linewidth = 3, alpha = 0.7) +
-  geom_point(size = 3) +
-  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.3, size = 2.5, fontface = "bold", show.legend = FALSE) +
-  scale_color_manual(
+ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tier)) +
+  geom_col(width = 0.7, alpha = 0.85) +
+  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 2.5, fontface = "bold") +
+  scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
   ) +
   scale_y_discrete(labels = function(x) str_remove(x, "^.*___")) +
-  scale_x_continuous(limits = c(55, 100), breaks = seq(60, 100, 10)) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
+  coord_cartesian(xlim = c(55, NA)) +
   facet_wrap(~pos_group, scales = "free_y", ncol = 3) +
   labs(
     title = "2025 Draft Class: Top 5 Prospects by NGS Combined Score",
