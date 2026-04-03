@@ -467,6 +467,10 @@ cat(paste0(
   "% of cap, while top WRs command ~",
   round(max(df_eligible %>% filter(pos_group == "WR") %>% pull(second_apy_cap_pct)) * 100),
   "%. The upside is structurally capped.\n\n",
+  "3. **The position structurally splits snaps.** Even Bijan Robinson — a 1st team All-Pro — ",
+  "plays only ~74% of Atlanta's offensive snaps. Tyler Allgeier, a 5th-round pick, handles ",
+  "another ~30%. An elite left tackle plays 97% of snaps. The RB position *requires* a ",
+  "committee, which caps the snap-based surplus any single back can generate.\n\n",
   "In this framework, a Round 2 WR looks like a substantially better risk-adjusted investment ",
   "than a top-10 RB — though this model measures contract value, not on-field impact, a ",
   "distinction that matters most for running backs.\n"
