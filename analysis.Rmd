@@ -138,34 +138,52 @@ cat(paste0(
 ))
 ```
 
-### What About RB at Pick #3?
+### What About RB in the Top 5?
 
-```{r rb-pick3, results='asis'}
+```{r rb-top5, results='asis'}
 # All top-5 RBs in our dataset
-top5_rb <- player_lookup %>% filter(pos_group == "RB", pick <= 5, season <= 2022)
-pick3_rb <- player_lookup %>% filter(pos_group == "RB", pick == 3, season <= 2022)
+top5_rb <- player_lookup %>% filter(pos_group == "RB", pick >= 2, pick <= 5, season <= 2022)
 
-# All pick #3 selections
-pick3_all <- player_lookup %>% filter(pick == 3, season <= 2022)
-pick3_elite <- pick3_all %>% filter(player_return > elite_threshold)
+# All picks 2-5
+picks_2_5 <- player_lookup %>% filter(pick >= 2, pick <= 5, season <= 2022)
+picks_2_5_elite <- picks_2_5 %>% filter(player_return > elite_threshold)
 
 cat(paste0(
-  "Mock drafts have an RB going as high as **#3 overall** this year. The data has something to say about that.\n\n",
+  "Mock drafts have an RB going as high as **#3 overall** this year. Pick #3 falls in the ",
+  "top-10 tier, where the Sharpe ratio for RB is **", round(rb_top10$sharpe_elite, 2),
+  "** — the worst of any offensive position.\n\n",
 
-  "Since 2010, only **one RB has been drafted at #3**: Trent Richardson (2012). ",
-  "He wasn't a hit — snap ratio of just ", round(pick3_rb$snap_ratio[1], 2),
-  "× — and returned only ", percent(pick3_rb$player_return[1], accuracy = 0.1), " of cap. ",
-  "Across all ", nrow(top5_rb), " RBs drafted in the top 5, the hit rate is ",
+  "What does -0.62 mean in practice? Here are the ", nrow(top5_rb),
+  " RBs drafted at picks 2–5 since 2010:\n\n",
+
+  "| Player | Pick | Year | Hit? | Player Return |\n",
+  "|---|---|---|---|---|\n"
+))
+
+for (i in seq_len(nrow(top5_rb))) {
+  cat(paste0(
+    "| ", top5_rb$pfr_player_name[i],
+    " | #", top5_rb$pick[i],
+    " | ", top5_rb$season[i],
+    " | ", ifelse(top5_rb$is_hit[i], "Yes", "No"),
+    " | ", percent(top5_rb$player_return[i], accuracy = 0.1),
+    " |\n"
+  ))
+}
+
+cat(paste0(
+  "\nThree of four became starters — the hit rate (",
   percent(mean(top5_rb$is_hit), accuracy = 1),
-  " — but **none produced an elite return** (mean: ",
-  percent(mean(top5_rb$player_return), accuracy = 0.1),
-  " vs. the ", percent(elite_threshold, accuracy = 0.1), " elite threshold).\n\n",
+  ") is strong. But **none cracked the elite threshold** of ",
+  percent(elite_threshold, accuracy = 0.1),
+  ". The average return was just ", percent(mean(top5_rb$player_return), accuracy = 0.1),
+  " — roughly a third of what a top-5 QB produces.\n\n",
 
-  "For context, pick #3 has been used ", nrow(pick3_all), " times since 2010. ",
-  "The selections that *did* produce elite returns? ",
-  paste(pick3_elite$pfr_player_name, paste0("(", pick3_elite$pos_group, ", ", pick3_elite$season, ")"), collapse = ", "),
-  ". The position matters — and at #3, the opportunity cost of passing on EDGE or QB ",
-  "to take an RB is historically steep."
+  "For context, across *all* positions drafted at picks 2–5 since 2010, the selections that produced ",
+  "elite returns were: ",
+  paste(picks_2_5_elite$pfr_player_name, paste0("(", picks_2_5_elite$pos_group, ", ", picks_2_5_elite$season, ")"), collapse = ", "),
+  ". Every one is a QB, EDGE, or OT — the positions where top-10 Sharpe is positive. ",
+  "The opportunity cost of using a top-5 pick on RB is not hypothetical; it's structural."
 ))
 ```
 
