@@ -12,7 +12,7 @@ cat("===================================\n\n")
 
 POSITION_MAP <- c(
   "QB" = "QB",
-  "RB" = "RB", "FB" = "RB",
+  "RB" = "RB", "FB" = "RB", "HB" = "RB",
   "WR" = "WR",
   "TE" = "TE",
   "T" = "OT", "OT" = "OT", "LT" = "OT", "RT" = "OT",
@@ -21,7 +21,7 @@ POSITION_MAP <- c(
   "DT" = "DL", "NT" = "DL", "DL" = "DL", "IDL" = "DL",
   "LB" = "LB", "ILB" = "LB", "MLB" = "LB",
   "CB" = "CB", "DB" = "CB",
-  "S" = "S", "SS" = "S", "FS" = "S"
+  "S" = "S", "SS" = "S", "FS" = "S", "SAF" = "S"
 )
 
 HIT_THRESHOLDS <- tibble::tibble(
@@ -554,6 +554,182 @@ cat(sprintf("  Love check: %s (cmbn_score: %s)\n",
             love_check$player[1], love_check$cmbn_score[1]))
 
 write_csv(ngs_prospects, "output/v2/ngs_prospects_2025.csv")
+
+# --- 6b. Historical NGS Scores (joined to draft data) --------------------------
+
+cat("Loading historical NGS scores...\n")
+ngs_historical <- read_csv("data/ngs_historical_scores.csv", show_col_types = FALSE) |>
+  filter(CmbnScr != "-") |>
+  mutate(
+    CmbnScr = as.numeric(CmbnScr),
+    AthleteScr = as.numeric(AthleteScr),
+    ProdScr = suppressWarnings(as.numeric(ProdScr))
+  ) |>
+  select(player = playerFullName, position, college = College,
+         cmbn_score = CmbnScr, athlete_score = AthleteScr, prod_score = ProdScr) |>
+  mutate(
+    name_norm = normalize_name(player),
+    pos_group = case_when(
+      position %in% names(POSITION_MAP) ~ POSITION_MAP[position],
+      TRUE ~ NA_character_
+    )
+  ) |>
+  filter(!is.na(pos_group))
+
+cat(sprintf("  %d historical players with NGS scores\n", nrow(ngs_historical)))
+
+# Join to draft data via normalized name + position group
+# Handle duplicates (e.g., Adrian Peterson x2) by keeping the match
+# closest in draft year to the player's NFL career
+draft_ngs_join <- draft_all |>
+  mutate(name_norm = normalize_name(pfr_player_name)) |>
+  select(pfr_player_id, pfr_player_name, name_norm, pos_group, season, pick, round, team, car_av, w_av)
+
+ngs_matched <- ngs_historical |>
+  inner_join(draft_ngs_join, by = c("name_norm", "pos_group"), relationship = "many-to-many") |>
+  # Deduplicate: for each NGS record × draft record combo,
+
+  # prefer the more recent draft pick (NGS data skews modern)
+  group_by(name_norm, pos_group) |>
+  slice_max(season, n = 1, with_ties = FALSE) |>
+  ungroup()
+
+cat(sprintf("  Matched %d historical NGS players to draft records\n", nrow(ngs_matched)))
+cat(sprintf("  Draft seasons covered: %d-%d\n", min(ngs_matched$season), max(ngs_matched$season)))
+
+# Spot-check: top RBs
+cat("\n  Top 10 matched RBs by NGS Combined Score:\n")
+ngs_matched |>
+  filter(pos_group == "RB") |>
+  arrange(desc(cmbn_score)) |>
+  head(10) |>
+  select(player, cmbn_score, prod_score, season, pick) |>
+  print(n = Inf)
+
+# --- NGS-based blue-chip classification (prospective) --------------------------
+# Blue chip = top decile of CmbnScr within position group (pre-draft signal)
+
+ngs_blue_chip <- ngs_matched |>
+  group_by(pos_group) |>
+  mutate(
+    ngs_pctl = percent_rank(cmbn_score),
+    is_ngs_blue_chip = ngs_pctl >= 0.90
+  ) |>
+  ungroup()
+
+cat(sprintf("  NGS blue chips: %d of %d matched players\n",
+            sum(ngs_blue_chip$is_ngs_blue_chip), nrow(ngs_blue_chip)))
+
+# Add NGS scores to existing blue_chip data
+blue_chip <- blue_chip |>
+  left_join(
+    ngs_blue_chip |>
+      select(pfr_player_id, cmbn_score, athlete_score, prod_score,
+             ngs_pctl, is_ngs_blue_chip),
+    by = "pfr_player_id"
+  )
+
+write_csv(blue_chip, "output/v2/blue_chip.csv")
+cat("  Updated blue_chip.csv with NGS scores\n")
+
+# Save full NGS-matched dataset
+write_csv(ngs_blue_chip, "output/v2/ngs_historical_matched.csv")
+cat("  Saved output/v2/ngs_historical_matched.csv\n")
+
+# --- NGS-based class depth (prospective class quality) -------------------------
+# Use official NGS tiers: Below Avg (50-60), Average (60-70), Good (70-90), Elite (90+)
+# Class depth = count of Good+ (>=70) prospects per class
+
+# First, tag each player with their NGS tier
+ngs_matched <- ngs_matched |>
+  mutate(
+    ngs_tier = case_when(
+      cmbn_score >= 90 ~ "Elite",
+      cmbn_score >= 70 ~ "Good",
+      cmbn_score >= 60 ~ "Average",
+      TRUE ~ "Below Avg"
+    ),
+    ngs_tier = factor(ngs_tier, levels = c("Elite", "Good", "Average", "Below Avg"))
+  )
+
+ngs_class_quality <- ngs_matched |>
+  filter(season <= MAX_DRAFT_SEASON) |>
+  group_by(season, pos_group) |>
+  summarise(
+    ngs_n = n(),
+    ngs_mean_cmbn = mean(cmbn_score, na.rm = TRUE),
+    ngs_max_cmbn = max(cmbn_score, na.rm = TRUE),
+    ngs_mean_prod = mean(prod_score, na.rm = TRUE),
+    ngs_top_gap = max(cmbn_score, na.rm = TRUE) - nth(sort(cmbn_score, decreasing = TRUE), 2, default = NA),
+    ngs_n_elite = sum(cmbn_score >= 90, na.rm = TRUE),
+    ngs_n_good_plus = sum(cmbn_score >= 70, na.rm = TRUE),
+    ngs_n_avg_plus = sum(cmbn_score >= 60, na.rm = TRUE),
+    ngs_pct_good_plus = mean(cmbn_score >= 70, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+cat(sprintf("  NGS class quality: %d season-position combos\n", nrow(ngs_class_quality)))
+
+# Merge into class_depth
+class_depth <- class_depth |>
+  left_join(ngs_class_quality, by = c("season", "pos_group"))
+
+# Deep/Thin based on count of Good+ (>=70) prospects
+# above position median = Deep, below = Thin
+class_depth <- class_depth |>
+  group_by(pos_group) |>
+  mutate(
+    ngs_median_good_plus = median(ngs_n_good_plus, na.rm = TRUE),
+    ngs_class_quality = case_when(
+      is.na(ngs_n_good_plus) ~ NA_character_,
+      ngs_n_good_plus > ngs_median_good_plus ~ "Deep",
+      ngs_n_good_plus < ngs_median_good_plus ~ "Thin",
+      TRUE ~ "Average"
+    )
+  ) |>
+  ungroup()
+
+write_csv(class_depth, "output/v2/class_depth.csv")
+cat("  Updated class_depth.csv with NGS class quality metrics\n")
+
+# Save tier-level class breakdown for charting (ALL years, not just Sharpe-eligible)
+ngs_class_tiers <- ngs_matched |>
+  group_by(season, pos_group, ngs_tier) |>
+  summarise(n = n(), .groups = "drop")
+
+# Also add 2025 prospect class tiers from the prospect file
+ngs_2025_tiers <- ngs_prospects |>
+  mutate(
+    ngs_tier = case_when(
+      cmbn_score >= 90 ~ "Elite",
+      cmbn_score >= 70 ~ "Good",
+      cmbn_score >= 60 ~ "Average",
+      TRUE ~ "Below Avg"
+    ),
+    ngs_tier = factor(ngs_tier, levels = c("Elite", "Good", "Average", "Below Avg"))
+  ) |>
+  group_by(pos_group, ngs_tier) |>
+  summarise(n = n(), .groups = "drop") |>
+  mutate(season = 2025L)
+
+# If 2025 already exists from historical match, replace with prospect file (more complete)
+ngs_class_tiers <- ngs_class_tiers |>
+  filter(season != 2025) |>
+  bind_rows(ngs_2025_tiers)
+
+write_csv(ngs_class_tiers, "output/v2/ngs_class_tiers.csv")
+cat("  Saved output/v2/ngs_class_tiers.csv\n")
+
+# Also re-save matched with tier column
+write_csv(ngs_matched, "output/v2/ngs_historical_matched.csv")
+
+# Spot-check: RB class quality by year
+cat("\n  RB class quality (NGS) by year:\n")
+class_depth |>
+  filter(pos_group == "RB", !is.na(ngs_mean_cmbn)) |>
+  select(season, hit_rate, class_quality, ngs_class_quality, ngs_n_good_plus, ngs_n_elite, ngs_max_cmbn, ngs_top_gap) |>
+  arrange(season) |>
+  print(n = Inf)
 
 # --- 7. Prospective Class Depth (Draft Capital) --------------------------------
 
