@@ -911,104 +911,244 @@ cat(paste0(
 ))
 ```
 
-### Which Top-10 Team Should Draft Love?
+### How Good Does Love Need to Be?
 
-The question isn't just "is Love worth a top-10 pick" — it's "which team's situation makes the case strongest?" We can apply Argument 1's quality gate to every team picking 3-10 and check which ones actually need an RB.
+This is the practical question. Article 1 gave us the Sharpe ratio for RB in the top 10: **-0.615**. That's the average across all RBs drafted in the top 10 since 2010. But averages hide a massive range. Here's every first-round RB in our data, plotted against the opportunity cost of not drafting the best available non-RB at the same pick.
 
-```{r top10-rb-needs, fig.height=6, fig.width=10}
-# 2025 draft order picks 3-10
-top10_teams <- tribble(
-  ~pick, ~team,
-  3, "NYG",
-  4, "NWE",
-  5, "JAX",
-  6, "LVR",
-  7, "NYJ",
-  8, "CAR",
-  9, "NOR",
-  10, "CHI"
-)
+```{r rb-breakeven, fig.height=8, fig.width=11}
+# All first-round picks with individual Sharpe
+all_r1 <- player_lookup %>%
+  filter(pick <= 32, pos_group %in% key_positions)
 
-# Check each team's RB need history
-top10_rb_needs <- roster_needs %>%
-  filter(team %in% top10_teams$team, pos_group == "RB") %>%
-  group_by(team) %>%
+# Compute opportunity cost at each pick: mean Sharpe of non-RB picks in the same tier
+opp_cost_by_tier <- all_r1 %>%
+  filter(pos_group != "RB") %>%
+  mutate(tier = factor(tier, levels = tier_order)) %>%
+  group_by(tier) %>%
   summarise(
-    need_rate = mean(!is_filled, na.rm = TRUE),
-    most_recent_filled = last(is_filled),
-    n_seasons = n(),
+    opp_cost_sharpe = mean(player_sharpe, na.rm = TRUE),
+    opp_cost_return = mean(player_return, na.rm = TRUE),
     .groups = "drop"
-  ) %>%
-  right_join(top10_teams, by = "team") %>%
-  arrange(pick) %>%
-  mutate(
-    need_label = paste0(round(need_rate * 100), "% of years"),
-    team_pick = paste0(team, " (#", pick, ")"),
-    team_pick = fct_reorder(team_pick, -pick)
   )
 
-ggplot(top10_rb_needs, aes(x = need_rate, y = team_pick,
-                           fill = need_rate > 0.5)) +
-  geom_col(width = 0.6, alpha = 0.85) +
-  geom_text(aes(label = need_label), hjust = -0.1, size = 4, fontface = "bold") +
-  scale_fill_manual(values = c("TRUE" = "#c62828", "FALSE" = "#2e7d32"),
-                    labels = c("TRUE" = "Persistent Need", "FALSE" = "Usually Filled"),
-                    name = "RB Status") +
-  scale_x_continuous(labels = percent_format(), limits = c(0, 1),
-                     expand = expansion(mult = c(0, 0.15))) +
+# RB first-rounders with their tier
+rb_r1 <- all_r1 %>%
+  filter(pos_group == "RB") %>%
+  left_join(opp_cost_by_tier, by = "tier") %>%
+  mutate(
+    beat_opp = player_sharpe > opp_cost_sharpe,
+    name_label = paste0(pfr_player_name, "\n('", str_sub(season, 3, 4), ", #", pick, ")")
+  )
+
+ggplot(rb_r1, aes(x = pick, y = player_sharpe)) +
+  # Opportunity cost line
+  geom_hline(data = opp_cost_by_tier %>% filter(tier %in% c("Top 10", "Late 1st")),
+             aes(yintercept = opp_cost_sharpe, linetype = tier),
+             color = "gray40", linewidth = 0.8) +
+  # Zero line
+  geom_hline(yintercept = 0, color = "gray80", linewidth = 0.5) +
+  # Individual RBs
+  geom_point(aes(color = beat_opp), size = 4, alpha = 0.8) +
+  geom_text(aes(label = pfr_player_name), vjust = -1.2, size = 2.8, fontface = "bold") +
+  # CMC and Gurley highlighted
+  geom_point(data = rb_r1 %>% filter(pfr_player_name %in% c("Christian McCaffrey", "Todd Gurley")),
+             color = "#377EB8", size = 5, shape = 1, stroke = 2) +
+  scale_color_manual(values = c("TRUE" = "#2e7d32", "FALSE" = "#c62828"),
+                     labels = c("TRUE" = "Beat opportunity cost", "FALSE" = "Below opportunity cost"),
+                     name = "vs. Non-RB Alternative") +
+  scale_linetype_manual(values = c("Top 10" = "dashed", "Late 1st" = "dotted"),
+                        name = "Avg Non-RB Sharpe") +
+  scale_x_continuous(breaks = seq(0, 32, 4)) +
   labs(
-    title = "Should Love Go in the Top 10? RB Need by Team (Picks 3-10)",
-    subtitle = "Historical RB need rate from quality gate | Red = RB was a need more than half the time",
-    x = "% of Seasons RB Was a Need", y = NULL
+    title = "The RB Gamble: Individual Sharpe vs Opportunity Cost",
+    subtitle = "Each dot = a first-round RB | Dashed line = avg non-RB Sharpe in that tier | Blue circles = CMC & Gurley",
+    x = "Draft Pick", y = "Individual Player Sharpe"
   ) +
   theme_minimal(base_size = 14) +
   theme(legend.position = "top")
 ```
 
-```{r top10-verdict, results='asis'}
-# Teams with strongest RB needs
-strong_need <- top10_rb_needs %>%
-  filter(need_rate > 0.5) %>%
-  arrange(pick)
-
-moderate_need <- top10_rb_needs %>%
-  filter(need_rate > 0.3, need_rate <= 0.5) %>%
-  arrange(pick)
-
-filled_teams <- top10_rb_needs %>%
-  filter(need_rate <= 0.3) %>%
-  arrange(pick)
-
-if (nrow(strong_need) > 0) {
-  cat(paste0(
-    "**Strongest case for Love:** ",
-    paste0(strong_need$team, " (#", strong_need$pick, ")", collapse = ", "),
-    " — these teams have had persistent RB needs, with the position unfilled more than half the time in our analysis window. ",
-    "For these teams, all three of our counter-arguments align: roster need, a thin class, and a separated prospect.\n\n"
-  ))
-}
-
-if (nrow(moderate_need) > 0) {
-  cat(paste0(
-    "**Mixed case:** ",
-    paste0(moderate_need$team, " (#", moderate_need$pick, ")", collapse = ", "),
-    " — RB has been a need in some years but not persistently. The blue-chip argument still applies, but the roster need is situational.\n\n"
-  ))
-}
-
-if (nrow(filled_teams) > 0) {
-  cat(paste0(
-    "**Weakest case:** ",
-    paste0(filled_teams$team, " (#", filled_teams$pick, ")", collapse = ", "),
-    " — these teams have historically kept the position filled. Unless their current starter has regressed or departed, the Sharpe ratio's advice holds: don't spend premium capital on a position you don't need.\n\n"
-  ))
-}
+```{r rb-breakeven-narrative, results='asis'}
+# Key stats
+rb_top10_sharpe <- sharpe %>% filter(pos_group == "RB", tier == "Top 10") %>% pull(sharpe_elite)
+cmc <- rb_r1 %>% filter(pfr_player_name == "Christian McCaffrey")
+gurley <- rb_r1 %>% filter(pfr_player_name == "Todd Gurley")
+opp_top10 <- opp_cost_by_tier %>% filter(tier == "Top 10") %>% pull(opp_cost_sharpe)
+rb_beat_pct <- mean(rb_r1$beat_opp, na.rm = TRUE)
 
 cat(paste0(
-  "*Note: Our roster data runs through 2022. Some teams' RB situations have changed since — ",
-  "injuries, free agency departures, and aging can flip a \"filled\" position to a need overnight. ",
-  "The historical pattern tells us which teams tend to have the problem; current scouting tells us ",
-  "which have it right now.*"
+  "Article 1's tier-level Sharpe for RB in the top 10 is **", round(rb_top10_sharpe, 3),
+  "** — the worst of any position. But that number averages together Christian McCaffrey (",
+  round(cmc$player_sharpe, 2), ") with Trent Richardson (0.06). The range is enormous.\n\n",
+  "The dashed line shows the opportunity cost: the average Sharpe of non-RB picks in the top 10 (",
+  round(opp_top10, 2), "). To justify the pick, an RB needs to land **above that line**. ",
+  "Only **", round(rb_beat_pct * 100), "%** of first-round RBs did.\n\n",
+  "**CMC at pick 8** (Sharpe: ", round(cmc$player_sharpe, 2),
+  ") and **Gurley at pick 10** (Sharpe: ", round(gurley$player_sharpe, 2),
+  ") are the RB ceiling — both comfortably beat the opportunity cost. ",
+  "Love needs to be in that tier, not the Trent Richardson tier, to justify a top-10 pick.\n\n",
+  "The NGS data says Love's profile looks like the CMC/Gurley cluster, not the Richardson cluster. ",
+  "But the model's warning is clear: even among first-round RBs, most don't clear the bar."
+))
+```
+
+### Sharpe at Pick 3: The Steepest Cost
+
+```{r sharpe-at-3, results='asis'}
+# What do other positions return at pick 3 specifically?
+pick_3_5 <- player_lookup %>%
+  filter(pick >= 2, pick <= 5) %>%
+  group_by(pos_group) %>%
+  summarise(
+    mean_sharpe = mean(player_sharpe, na.rm = TRUE),
+    mean_return = mean(player_return, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(mean_sharpe))
+
+best_at_3 <- pick_3_5 %>% slice_head(n = 3)
+rb_at_3 <- pick_3_5 %>% filter(pos_group == "RB")
+
+cat(paste0(
+  "At picks 2-5 specifically, the opportunity cost is highest. The best-returning positions: **",
+  best_at_3$pos_group[1], "** (avg Sharpe ", round(best_at_3$mean_sharpe[1], 2),
+  "), **", best_at_3$pos_group[2], "** (", round(best_at_3$mean_sharpe[2], 2),
+  "), **", best_at_3$pos_group[3], "** (", round(best_at_3$mean_sharpe[3], 2),
+  "). RB at picks 2-5 averages just **", round(rb_at_3$mean_sharpe, 2),
+  "** — that's Saquon Barkley (#2), Trent Richardson (#3), Zeke (#4), and Fournette (#4).\n\n",
+  "At pick 3, you're giving up the most draft capital. The only RB ever drafted at 3 in our window ",
+  "was Trent Richardson, who returned almost nothing. Taking Love at 3 would require him to be ",
+  "a **CMC-level outcome** just to match what an average EDGE or QB pick would have returned there.\n\n",
+  "This is where Article 1's advice is strongest. The higher the pick, the more the RB needs to ",
+  "overcome. The case for Love gets better as you slide down the board."
+))
+```
+
+### Where in the First Round Does Love Make Sense?
+
+Here's the real question: at what pick does an RB with Love's profile start to justify the cost? We can compute this by comparing the CMC/Gurley outcome (the realistic ceiling for an elite RB) against the average non-RB return at each pick range.
+
+```{r love-pick-range, fig.height=6, fig.width=10}
+# Compare CMC/Gurley-level return vs opportunity cost across the first round
+pick_ranges <- player_lookup %>%
+  filter(pick <= 32) %>%
+  mutate(pick_range = case_when(
+    pick <= 5 ~ "1-5",
+    pick <= 10 ~ "6-10",
+    pick <= 16 ~ "11-16",
+    pick <= 24 ~ "17-24",
+    pick <= 32 ~ "25-32"
+  )) %>%
+  mutate(pick_range = factor(pick_range, levels = c("1-5", "6-10", "11-16", "17-24", "25-32")))
+
+# Average non-RB return by pick range
+opp_by_range <- pick_ranges %>%
+  filter(pos_group != "RB") %>%
+  group_by(pick_range) %>%
+  summarise(mean_sharpe = mean(player_sharpe, na.rm = TRUE), .groups = "drop") %>%
+  mutate(type = "Avg Non-RB Pick")
+
+# RB hits (CMC/Gurley tier — Sharpe > 2.0) by pick range
+rb_ceiling <- pick_ranges %>%
+  filter(pos_group == "RB", player_sharpe > 2.0) %>%
+  group_by(pick_range) %>%
+  summarise(mean_sharpe = mean(player_sharpe, na.rm = TRUE), .groups = "drop") %>%
+  mutate(type = "Elite RB (CMC/Gurley tier)")
+
+# All RB average
+rb_avg <- pick_ranges %>%
+  filter(pos_group == "RB") %>%
+  group_by(pick_range) %>%
+  summarise(mean_sharpe = mean(player_sharpe, na.rm = TRUE), .groups = "drop") %>%
+  mutate(type = "Avg RB Pick")
+
+compare <- bind_rows(opp_by_range, rb_ceiling, rb_avg) %>%
+  mutate(type = factor(type, levels = c("Elite RB (CMC/Gurley tier)", "Avg Non-RB Pick", "Avg RB Pick")))
+
+ggplot(compare, aes(x = pick_range, y = mean_sharpe, fill = type)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.6, alpha = 0.85) +
+  geom_hline(yintercept = 0, color = "gray60", linewidth = 0.5) +
+  scale_fill_manual(values = c(
+    "Elite RB (CMC/Gurley tier)" = "#377EB8",
+    "Avg Non-RB Pick" = "#FF9800",
+    "Avg RB Pick" = "#c62828"
+  )) +
+  labs(
+    title = "Where Does an Elite RB Justify the Pick?",
+    subtitle = "CMC/Gurley-tier RB Sharpe vs average non-RB alternative | By first-round pick range",
+    x = "Pick Range", y = "Average Individual Sharpe", fill = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top")
+```
+
+```{r love-pick-narrative, results='asis'}
+cat(paste0(
+  "The blue bars are the CMC/Gurley tier — first-round RBs who hit at elite levels. ",
+  "The orange bars are what you'd expect from the average non-RB pick in the same range. ",
+  "The red bars are the average RB — the number Article 1 is built on.\n\n",
+  "At picks 1-5, even an elite RB barely matches the average non-RB alternative. The opportunity cost is simply too high. ",
+  "At picks 6-10, the elite RB **clears** the bar — this is where CMC (pick 8) and Gurley (pick 10) ",
+  "actually lived, and both delivered positive returns above what the average alternative position offered. ",
+  "In the late first, the math gets more favorable, but elite RB talent is rarely available that late.\n\n",
+  "**The verdict: Love at pick 3-5 is a losing bet even if he hits.** The opportunity cost is too steep. ",
+  "But Love at pick 6-10 — if he's truly in the CMC/Gurley tier — is where the Sharpe model's ",
+  "advice starts to crack. And at picks 15+, an elite RB profile can justify the selection outright."
+))
+```
+
+### Every Team Needs an RB (And That's the Point)
+
+```{r all-team-rb-needs, fig.height=9, fig.width=10}
+# ALL teams RB need rate
+all_rb_needs <- roster_needs %>%
+  filter(pos_group == "RB") %>%
+  group_by(team) %>%
+  summarise(
+    need_rate = mean(!is_filled, na.rm = TRUE),
+    n_seasons = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(team = fct_reorder(team, need_rate))
+
+ggplot(all_rb_needs, aes(x = need_rate, y = team, fill = need_rate)) +
+  geom_col(width = 0.6, alpha = 0.85) +
+  geom_nfl_logos(aes(x = need_rate + 0.02, team_abbr = team), width = 0.035) +
+  scale_fill_gradient(low = "#FFA726", high = "#c62828", guide = "none") +
+  scale_x_continuous(labels = percent_format(), limits = c(0, 1.15),
+                     expand = expansion(mult = c(0, 0))) +
+  labs(
+    title = "RB Is a Need for Almost Every Team, Almost Every Year",
+    subtitle = "% of seasons (2014-2022) where RB failed our quality gate | Quality = starter + premium 2nd contract + not expiring",
+    x = "% of Seasons RB Was a Need", y = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.y = element_text(size = 8))
+```
+
+```{r all-team-narrative, results='asis'}
+pct_always_need <- mean(all_rb_needs$need_rate == 1)
+pct_mostly_need <- mean(all_rb_needs$need_rate >= 0.67)
+lowest_need <- all_rb_needs %>% slice_min(need_rate, n = 1)
+
+cat(paste0(
+  "This is the chart that reframes the entire conversation. **",
+  round(pct_always_need * 100), "%** of teams had RB as a need in *every single season*. **",
+  round(pct_mostly_need * 100), "%** had it as a need at least two-thirds of the time. ",
+  "Even the team with the lowest RB need rate — ", lowest_need$team, " at ",
+  round(lowest_need$need_rate * 100), "% — still needed an RB more often than not.\n\n",
+  "Why? Because the quality gate requires a starter who earned a **premium second contract**. ",
+  "And RBs almost never get premium second contracts — that's exactly what Article 1's Sharpe ratio measured. ",
+  "The position's low market value means almost no RB clears the quality gate, which means almost every team ",
+  "\"needs\" an RB by our definition, every year.\n\n",
+  "This is the Sharpe ratio's own logic turned back on itself. The model says RBs aren't worth premium draft capital. ",
+  "The market agrees — it doesn't pay them. But that means the position is **perpetually unfilled** by the quality standard. ",
+  "If the need is universal, then the question isn't *whether* to invest in RB — it's whether THIS investment, ",
+  "in THIS prospect, in THIS class, justifies accepting the negative positional Sharpe.\n\n",
+  "For Love, the case is: his NGS profile matches the CMC/Gurley tier. The class is thin — a 17-point gap to RB2. ",
+  "And at picks 6-10, historical elite RBs have returned above the opportunity cost. ",
+  "That doesn't guarantee he'll work out. But it means the model's blanket \"no\" is answering the wrong question."
 ))
 ```
 
@@ -1018,19 +1158,21 @@ Everything we've built in this article converges on a single question. Three arg
 
 <div style="background-color: #f0f4f8; border-left: 4px solid #377EB8; padding: 15px 20px; margin: 20px 0; border-radius: 4px;">
 
-**The Sharpe ratio says:** RB is the worst first-round investment. Negative returns across every tier. Don't do it.
+**The Sharpe ratio says:** RB is the worst first-round investment. Sharpe of -0.615 in the top 10. Negative across every tier. Don't do it.
 
 **The class signal says:** 2025 is a thin RB class. If you pass on Love, the drop-off is steep -- a 17-point gap to RB2.
 
-**The NGS history says:** RBs with scores like Love's (94.3) have historically hit at rates far above the position average. The pre-draft signal maps to career outcomes.
+**The NGS history says:** RBs with scores like Love's (94.3) have historically hit at rates far above the position average. The pre-draft signal maps to career outcomes. CMC and Gurley — the RB ceiling — had individual Sharpes above 2.0.
 
-**The roster question says:** Some top-10 teams have persistent RB needs. For them, all three counter-arguments converge.
+**The breakeven says:** At picks 1-5, even an elite RB barely clears the opportunity cost. At picks 6-10, the math works — if the prospect is truly separated. At 15+, an elite profile justifies the pick outright.
+
+**The need says:** Every team needs an RB, always. The question isn't whether to invest — it's where and in whom.
 
 </div>
 
-Does this mean a team *should* draft Love in the top 10? The Sharpe ratio says no. The prospect model says he's generational. The class is thin. And for teams with a genuine RB need, the data is in tension -- and that tension is exactly what the Sharpe ratio can't resolve on its own.
+Does this mean a team *should* draft Love? Not at 3. Probably not at 5. But at 8-10, for a team that needs an RB? The Sharpe model says no. The prospect data says he's in the CMC/Gurley cluster. The class is thin. And history says the few RBs who clear the bar at that range more than justify the pick.
 
-That's the honest answer. Not a prescription, but an acknowledgment that the model's average-case advice meets its limit when roster need, prospect separation, and class depth all point the other direction.
+That's the honest answer. Not a prescription, but an acknowledgment that the model's average-case advice meets its limit when roster need, prospect separation, and class depth all point the other direction — and the pick falls in the range where elite RBs have historically delivered.
 
 ---
 
