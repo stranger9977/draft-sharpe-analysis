@@ -1,6 +1,7 @@
 ---
 title: "NFL Draft Quasi-Sharpe Ratio Analysis"
 subtitle: "How much is a draft pick really worth, by position?"
+author: "Nick Gurol — [X/Twitter](https://x.com/run_the_sims) | [LinkedIn](https://www.linkedin.com/in/nick-gurol-87738a1b7/)"
 output:
   html_document:
     toc: true
@@ -87,7 +88,7 @@ player_lookup <- player_lookup %>%
 
 ## TL;DR
 
-We built a quasi-Sharpe ratio for NFL draft picks — a risk-adjusted measure of what each
+I built a quasi-Sharpe ratio for NFL draft picks — a risk-adjusted measure of what each
 position is worth at each draft slot, accounting for rookie contract surplus, second-contract
 value, and supply-controlled free agency replacement costs. The model suggests that **QB
 produces the strongest risk-adjusted returns in the top 10**, while OT and EDGE peak in the
@@ -111,7 +112,7 @@ best_late1 <- sharpe %>% filter(tier == "Late 1st", !is.na(sharpe_elite)) %>%
 wr_day2 <- sharpe %>% filter(pos_group == "WR", tier == "Round 2") %>% pull(sharpe_elite)
 
 cat(paste0(
-  "**No.** RB has a Sharpe of **", round(rb_top10$sharpe_elite, 2),
+  "**Probably not.** RB has a Sharpe of **", round(rb_top10$sharpe_elite, 2),
   "** in the top 10 — deeply negative. Here's why:\n\n",
 
   "- **Hit rate is fine** (", percent(rb_top10$hit_rate, accuracy = 0.1),
@@ -181,7 +182,7 @@ This analysis combines three frameworks:
    seasons not played as zero), so injuries and busts are properly penalized.
 
 2. **Nonlinear Upside ([Brill & Wyner 2024](https://arxiv.org/abs/2407.00730)):** Not all hits are
-   equal. We capture the right-tail with a **player return** that combines rookie-deal surplus AND
+   equal. I capture the right-tail with a **player return** that combines rookie-deal surplus AND
    second-contract value.
 
 3. **Salary data** from [OverTheCap](https://overthecap.com/contracts) via
@@ -200,20 +201,20 @@ This analysis builds directly on two key pieces of work:
 
 - **Timo Riske's hit rate methodology** ([PFF, 2022](https://www.pff.com/news/draft-what-historical-hit-rates-reveal-about-positional-success)):
   Riske defined what a draft "hit" means — a player whose snap share over their first 4 seasons
-  exceeds a fraction of the positional baseline. We tighten his original 2/3 threshold to 75%
-  to better align with our elite-probability Sharpe formulation, but use the same positional
-  baselines as the foundation for our snap ratio. His work also informs the Eric Eager
+  exceeds a fraction of the positional baseline. I tighten his original 2/3 threshold to 75%
+  to better align with the elite-probability Sharpe formulation, but use the same positional
+  baselines as the foundation for the snap ratio. His work also informs the Eric Eager
   collaboration below.
 
 - **Brill & Wyner (2024)** ([arXiv:2407.00730](https://arxiv.org/abs/2407.00730), with analysis
   popularized by **Eric Eager** at PFF): Their key insight is that draft pick value is **nonlinear** —
-  variance decays convexly across rounds, meaning earlier picks have fatter right tails. We
-  operationalize this through the elite probability component of our Sharpe ratio: P(elite)
+  variance decays convexly across rounds, meaning earlier picks have fatter right tails. I
+  operationalize this through the elite probability component of the Sharpe ratio: P(elite)
   captures the right-tail upside that a simple average would miss. Where Brill & Wyner measured
-  upside through career approximate value, we extend it with cap-normalized contract data to make
+  upside through career approximate value, I extend it with cap-normalized contract data to make
   cross-era and cross-position comparisons possible.
 
-Our contribution is combining these frameworks into a single risk-adjusted metric (the
+My contribution is combining these frameworks into a single risk-adjusted metric (the
 quasi-Sharpe ratio) and adding two new dimensions: **rookie contract surplus** (the hidden
 majority of draft value) and **supply-controlled FA replacement** (because "just sign a free
 agent" isn't equally realistic at every position).
@@ -306,7 +307,7 @@ ggplot(dumbbell_data, aes(y = pos_group)) +
 
 ## Hit Rates by Position and Tier
 
-How often does a draft pick become a starter? We classify a player as a "hit" if they play at least 75% as much as an established starter at their position over their first 4 NFL seasons. The threshold varies by position because not every position plays every snap:
+How often does a draft pick become a starter? I classify a player as a "hit" if they play at least 75% as much as an established starter at their position over their first 4 NFL seasons. The threshold varies by position because not every position plays every snap:
 
 | Position | What a starter plays | Hit threshold (75% of that) | What it means |
 |---|---|---|---|
@@ -350,7 +351,7 @@ ggplot(hit_rates, aes(x = tier, y = reorder(pos_group, hit_rate), fill = hit_rat
 
 ## Supply-Controlled Free Agency Replacement Cost
 
-The "risk-free rate" in our Sharpe ratio. Instead of drafting, a team could sign a free agent.
+The "risk-free rate" in the Sharpe ratio. Instead of drafting, a team could sign a free agent.
 But not every position has the same FA market depth.
 
 ```{r fa-supply-inline, results='asis'}
@@ -361,11 +362,11 @@ cat(paste0("Only **", ot_n, " starter-caliber OTs** and **", qb_n, " QBs** hit f
            "per year, while **", iol_n, " IOL** are available."))
 ```
 
-We define "starter-caliber" by connecting FA contracts back to the Riske hit methodology:
-first, we identify drafted players who were hits (snap share ≥ 75% positional baseline over
-4 seasons). Then we look at what those hits earned on their second contracts and take the
+I define "starter-caliber" by connecting FA contracts back to the Riske hit methodology:
+first, identify drafted players who were hits (snap share ≥ 75% positional baseline over
+4 seasons). Then look at what those hits earned on their second contracts and take the
 25th percentile as a floor — if a free agent signs for at least that much, the market is
-telling us they're starter-caliber. We count how many such contracts are signed per position
+telling us they're starter-caliber. I count how many such contracts are signed per position
 per year (the **supply**, N), and the FA replacement cost is the median contract among those
 top-N signings each year.
 
@@ -447,7 +448,7 @@ cat(paste0(
   paste(rb_top$player, collapse = " and "), "). ",
   "The WR market is roughly **double** the RB market at the top end.\n\n",
 
-  "This shows up clearly in our data. The **best top-10 RB return in our dataset** (",
+  "This shows up clearly in the data. The **best top-10 RB return in the dataset** (",
   best_rb_return$pfr_player_name, ": ", round(best_rb_return$player_return, 3),
   ") barely matches the **median Round 2 WR** (", round(med_wr_day2, 3), "). ",
   "Names like DK Metcalf (pick 64), Davante Adams (pick 53), and A.J. Brown (pick 51) ",
@@ -461,7 +462,7 @@ cat(paste0(
   percent(fa_replacement %>% filter(pos_group == "RB") %>% pull(fa_median_apy_cap_pct), accuracy = 0.1),
   " of the cap — the lowest of any position. Even when a top-10 RB starts every game, ",
   "the savings over a free agent are minimal.\n\n",
-  "2. **Low second-contract ceiling.** The best RB second contract in our dataset is ~",
+  "2. **Low second-contract ceiling.** The best RB second contract in the dataset is ~",
   round(max(df_eligible %>% filter(pos_group == "RB") %>% pull(second_apy_cap_pct)) * 100),
   "% of cap, while top WRs command ~",
   round(max(df_eligible %>% filter(pos_group == "WR") %>% pull(second_apy_cap_pct)) * 100),
@@ -745,8 +746,8 @@ cat(paste0(
 
 ## Team-Level Draft Efficiency
 
-Which teams have drafted most optimally? We score each team's Round 1 picks by comparing
-what they actually drafted to what the Sharpe data says they should have. We focus on the
+Which teams have drafted most optimally? I score each team's Round 1 picks by comparing
+what they actually drafted to what the Sharpe data says they should have, focusing on the
 last 5 eligible draft classes (2018–2022) — recent enough to reflect current front office
 philosophy, but far enough back that every player has had time for a second contract.
 
@@ -905,7 +906,7 @@ Every drafted player scored by **total surplus value** generated over their rook
 **Player Return = Rookie Surplus + Second Contract (% of cap)**
 
 Higher values mean the player delivered more total value relative to what a
-free-agent replacement would have cost. Unsurprisingly, QBs dominate the overall leaderboard — their second contracts dwarf every other position, which is exactly what makes them the highest-Sharpe pick in the top 10. We show the top 10 overall, then a separate top 10 excluding QBs.
+free-agent replacement would have cost. Unsurprisingly, QBs dominate the overall leaderboard — their second contracts dwarf every other position, which is exactly what makes them the highest-Sharpe pick in the top 10. Below is the top 10 overall, then a separate top 10 excluding QBs.
 
 ```{r gt-helper}
 make_player_gt <- function(data, title, subtitle = NULL) {
@@ -999,21 +1000,21 @@ cat("![Top 10 Non-QB Draft Picks by Total Surplus Value](charts/player_lookup_no
 
 ## Assumptions & Potential Improvements
 
-Every model makes simplifying assumptions. Here's what we're assuming and how each could be
+Every model makes simplifying assumptions. Here's what this analysis assumes and how each could be
 refined in future work.
 
 | Assumption | Why it matters |
 |---|---|
-| **Snap % = production.** We use playing time as a proxy for quality. | A player can play a lot and still be bad. |
-| **Second contract = market value.** We treat the second deal as the market's verdict. | Teams overpay and underpay. Extensions ≠ true free agency. |
-| **FA contracts include extensions.** Our replacement cost may be inflated by teams retaining their own players. | Makes some positions (OT, QB) look more expensive to replace than they really are. |
-| **4-year evaluation window.** We measure snaps over the rookie deal only. | Misses late bloomers and players who improve in year 5+. |
+| **Snap % = production.** Playing time is used as a proxy for quality. | A player can play a lot and still be bad. |
+| **Second contract = market value.** The second deal is treated as the market's verdict. | Teams overpay and underpay. Extensions ≠ true free agency. |
+| **FA contracts include extensions.** The replacement cost may be inflated by teams retaining their own players. | Makes some positions (OT, QB) look more expensive to replace than they really are. |
+| **4-year evaluation window.** Snaps are measured over the rookie deal only. | Misses late bloomers and players who improve in year 5+. |
 | **No second contract = $0.** Players who leave the league get zero return. | Some players contributed but aged out (especially RBs). |
 | **Uniform elite threshold.** The 90th percentile is global, not position-specific. | An "elite" QB return is very different from an "elite" RB return. |
-| **Supply ≈ all contracts above hit threshold.** We count extensions as FA supply. | Overstates the available market for positions where stars rarely leave. |
-| **Cap% normalization.** We assume cap% is the best cross-era comparator. | Doesn't account for structural cap changes (e.g., TV deal jumps). |
-| **Uniform talent across draft classes.** We assume each class has roughly equal talent at each position. | In reality, some classes are deep at WR and thin at OT — positional Sharpe ratios would shift year to year. |
-| **QB projection is reliable.** We treat QB like any other position, but projecting NCAA QBs to the NFL is notoriously difficult. | The Sharpe says QB is the best top-10 investment *on average* — but "on average" hides enormous bust risk. You should still take the shot, but the variance is real. |
+| **Supply ≈ all contracts above hit threshold.** Extensions are counted as FA supply. | Overstates the available market for positions where stars rarely leave. |
+| **Cap% normalization.** Cap% is assumed to be the best cross-era comparator. | Doesn't account for structural cap changes (e.g., TV deal jumps). |
+| **Uniform talent across draft classes.** Each class is assumed to have roughly equal talent at each position. | In reality, some classes are deep at WR and thin at OT — positional Sharpe ratios would shift year to year. |
+| **QB projection is reliable.** QB is treated like any other position, but projecting NCAA QBs to the NFL is notoriously difficult. | The Sharpe says QB is the best top-10 investment *on average* — but "on average" hides enormous bust risk. The math still favors taking the shot, but the variance is real. |
 
 **How each could be improved:**
 
