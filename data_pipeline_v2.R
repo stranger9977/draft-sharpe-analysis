@@ -535,6 +535,8 @@ ngs_prospects <- read_csv("data/ngs_prospect_scores_2025.csv", show_col_types = 
   select(player = playerFullName, position, college = College,
          cmbn_score = CmbnScr, athlete_score = AthleteScr, prod_score = ProdScr) |>
   mutate(
+    # Normalize names using the same strategy as Article 1 pipeline
+    name_norm = normalize_name(player),
     pos_group = case_when(
       position == "DB" ~ "CB",
       position == "OL" ~ "IOL",
@@ -545,6 +547,12 @@ ngs_prospects <- read_csv("data/ngs_prospect_scores_2025.csv", show_col_types = 
   filter(!is.na(pos_group))
 
 cat(sprintf("  %d prospects with NGS scores\n", nrow(ngs_prospects)))
+
+# Spot-check: verify Love is present and normalized
+love_check <- ngs_prospects |> filter(grepl("love", name_norm))
+cat(sprintf("  Love check: %s (cmbn_score: %s)\n",
+            love_check$player[1], love_check$cmbn_score[1]))
+
 write_csv(ngs_prospects, "output/v2/ngs_prospects_2025.csv")
 
 # --- 7. Prospective Class Depth (Draft Capital) --------------------------------
