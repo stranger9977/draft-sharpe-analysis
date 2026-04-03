@@ -296,37 +296,58 @@ cat(paste0(
 
 ### Player Example: Saquon Barkley
 
-```{r saquon-example, results='asis'}
+```{r saquon-example}
 saquon <- player_lookup %>% filter(grepl("Saquon", pfr_player_name))
 
+tibble(
+  Metric = c("Avg snap %", "Snap ratio", "Rookie deal APY", "FA median (RB)",
+             "Rookie surplus", "Second contract APY", "Player return", "Elite threshold"),
+  Value = c(
+    percent(saquon$avg_snap_pct, accuracy = 0.1),
+    paste0(round(saquon$snap_ratio, 2), "×"),
+    percent(saquon$rookie_apy_cap_pct, accuracy = 0.1),
+    percent(saquon$fa_median_apy_cap_pct, accuracy = 0.1),
+    percent(saquon$rookie_surplus, accuracy = 0.1),
+    percent(saquon$second_apy_cap_pct, accuracy = 0.1),
+    percent(saquon$player_return, accuracy = 0.1),
+    percent(elite_threshold, accuracy = 0.1)
+  ),
+  Meaning = c(
+    "Averaged over first 4 NFL seasons",
+    "Relative to RB starter baseline — he was a hit",
+    "Cost of his rookie contract as % of cap",
+    "What a starting RB costs in free agency",
+    "4 years of savings from paying a starter on a rookie deal",
+    paste0("His second deal was only ", percent(saquon$second_apy_cap_pct, accuracy = 0.1), " of cap"),
+    "Rookie surplus + second contract = total value generated",
+    "Top 10% of all player returns across all positions"
+  )
+) %>%
+  gt() %>%
+  tab_header(
+    title = "Saquon Barkley — Pick #2, 2018"
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(rows = Metric %in% c("Player return", "Elite threshold"))
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "#E8F5E9"),
+    locations = cells_body(rows = Metric == "Player return")
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "#FFEBEE"),
+    locations = cells_body(rows = Metric == "Elite threshold")
+  ) %>%
+  cols_label(Meaning = "What it means") %>%
+  tab_options(
+    table.width = pct(100),
+    table.font.size = 14
+  )
+```
+
+```{r saquon-narrative, results='asis'}
 cat(paste0(
-  "Michael asked for a specific player to run through the numbers — Saquon Barkley is perfect ",
-  "because he's one of the *best possible outcomes* for a top-10 RB, and he still doesn't crack ",
-  "the elite threshold.\n\n",
-
-  "**Saquon Barkley — Pick #2, 2018**\n\n",
-  "| Metric | Value | What it means |\n",
-  "|---|---|---|\n",
-  "| Avg snap % | ", percent(saquon$avg_snap_pct, accuracy = 0.1),
-    " | Averaged ", percent(saquon$avg_snap_pct, accuracy = 0.1),
-    " of offensive snaps over first 4 years |\n",
-  "| Snap ratio | ", round(saquon$snap_ratio, 2),
-    " | That's ", round(saquon$snap_ratio, 2),
-    "× the RB starter baseline — he was a hit |\n",
-  "| Rookie deal APY | ", percent(saquon$rookie_apy_cap_pct, accuracy = 0.1),
-    " | Cost of his rookie contract as % of cap |\n",
-  "| FA median (RB) | ", percent(saquon$fa_median_apy_cap_pct, accuracy = 0.1),
-    " | What a starting RB costs in free agency |\n",
-  "| Rookie surplus | ", percent(saquon$rookie_surplus, accuracy = 0.1),
-    " | 4 years of savings from paying a starter on a rookie deal |\n",
-  "| Second contract APY | ", percent(saquon$second_apy_cap_pct, accuracy = 0.1),
-    " | His second contract was only ", percent(saquon$second_apy_cap_pct, accuracy = 0.1),
-    " of cap |\n",
-  "| **Player return** | **", percent(saquon$player_return, accuracy = 0.1),
-    "** | Rookie surplus + second contract = total value generated |\n",
-  "| **Elite threshold** | **", percent(elite_threshold, accuracy = 0.1),
-    "** | Top 10% of all player returns across all positions |\n\n",
-
   "Saquon *was* a hit — he started, he produced, he earned a second contract. ",
   "But his total return (", percent(saquon$player_return, accuracy = 0.1),
   ") is well below the elite threshold (", percent(elite_threshold, accuracy = 0.1),
@@ -339,7 +360,7 @@ cat(paste0(
   "This is exactly why RB Top 10 has a Sharpe of **-0.62**: even when the pick *works*, ",
   "the return doesn't justify the draft capital. Zero of 7 top-10 RBs in the dataset ",
   "reached the elite threshold. The best outcome for a top-10 RB still looks mediocre ",
-  "compared to what that pick could have been.\n"
+  "compared to what that pick could have been."
 ))
 ```
 
@@ -960,11 +981,111 @@ philosophy, but far enough back that every player has had time for a second cont
 
 *Note: The Rams are absent from these charts — they made zero first-round picks between 2018 and 2022, having traded them away in deals for Jalen Ramsey and Matthew Stafford.*
 
-```{r team-efficiency, fig.height=9}
+```{r team-efficiency-data}
 # Load team info for colors/names
 teams <- load_teams()
 
-# For each R1 pick, get the Sharpe of that position x tier
+# For ALL picks, get the Sharpe of that position x tier
+team_picks_all <- df_eligible %>%
+  left_join(
+    sharpe %>% select(pos_group, tier, sharpe_elite),
+    by = c("pos_group", "tier")
+  ) %>%
+  mutate(
+    sharpe_elite = replace_na(sharpe_elite, 0),
+    draft_round = case_when(
+      pick <= 32 ~ "Round 1",
+      pick <= 64 ~ "Round 2",
+      pick <= 100 ~ "Round 3",
+      TRUE ~ "Rounds 4-7"
+    ),
+    draft_round = factor(draft_round, levels = c("Round 1", "Round 2", "Round 3", "Rounds 4-7"))
+  ) %>%
+  filter(season >= 2018)
+
+# Average Sharpe per team per round
+team_by_round <- team_picks_all %>%
+  group_by(team, draft_round) %>%
+  summarise(
+    n_picks = n(),
+    avg_sharpe = mean(sharpe_elite),
+    .groups = "drop"
+  ) %>%
+  filter(n_picks >= 2)
+
+# Overall R1 for ordering
+team_r1_order <- team_by_round %>%
+  filter(draft_round == "Round 1") %>%
+  arrange(avg_sharpe) %>%
+  pull(team)
+# Add teams that don't appear in R1
+all_teams_r <- unique(team_by_round$team)
+team_r1_order <- c(setdiff(all_teams_r, team_r1_order), team_r1_order)
+```
+
+```{r team-efficiency-faceted, fig.height=11, fig.width=14}
+team_by_round %>%
+  mutate(team = factor(team, levels = team_r1_order)) %>%
+  ggplot(aes(x = team, y = avg_sharpe)) +
+  geom_col(aes(fill = avg_sharpe > 0), width = 0.7, show.legend = FALSE) +
+  geom_nfl_wordmarks(aes(team_abbr = team), width = 0.055) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  scale_fill_manual(values = c("TRUE" = "#2196F3", "FALSE" = "#F44336")) +
+  facet_wrap(~draft_round, nrow = 2, scales = "free_x") +
+  coord_flip() +
+  labs(
+    title = "Average Sharpe Ratio by Team & Draft Round (2018–2022)",
+    subtitle = "Blue = positive Sharpe (good allocation) | Red = negative (would've been better off signing FAs) | Min 2 picks per round",
+    x = NULL, y = "Average Sharpe of Picks"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    strip.text = element_text(face = "bold", size = 13),
+    panel.spacing = unit(1, "lines")
+  )
+```
+
+```{r team-efficiency-commentary, results='asis'}
+# Find best/worst R1 teams
+r1_data <- team_by_round %>% filter(draft_round == "Round 1")
+best_r1 <- r1_data %>% slice_max(avg_sharpe, n = 3)
+worst_r1 <- r1_data %>% slice_min(avg_sharpe, n = 3)
+
+# Find teams that are good in later rounds but bad in R1 (or vice versa)
+late_round <- team_by_round %>% filter(draft_round %in% c("Round 2", "Round 3"))
+late_avg <- late_round %>% group_by(team) %>% summarise(late_sharpe = mean(avg_sharpe), .groups = "drop")
+r1_avg <- r1_data %>% select(team, r1_sharpe = avg_sharpe)
+divergent <- r1_avg %>%
+  inner_join(late_avg, by = "team") %>%
+  mutate(gap = late_sharpe - r1_sharpe)
+
+best_late_worst_r1 <- divergent %>% filter(r1_sharpe < 0) %>% slice_max(gap, n = 1)
+worst_late_best_r1 <- divergent %>% filter(r1_sharpe > 0) %>% slice_min(gap, n = 1)
+
+# Count how many teams are negative in R4-7
+r47 <- team_by_round %>% filter(draft_round == "Rounds 4-7")
+r47_neg_pct <- mean(r47$avg_sharpe < 0)
+
+cat(paste0(
+  "**Round 1 is where strategy matters most.** The spread between the best and worst teams is enormous — ",
+  best_r1$team[1], " averages +", round(best_r1$avg_sharpe[1], 2),
+  " per first-round pick while ", worst_r1$team[1], " sits at ",
+  round(worst_r1$avg_sharpe[1], 2), ". That's not luck over 5 drafts; it's positional philosophy.\n\n",
+
+  "**The later rounds converge.** By Rounds 4–7, ", percent(r47_neg_pct, accuracy = 1),
+  " of teams are in negative territory. This isn't a talent evaluation failure — it's just the math. ",
+  "Late-round picks rarely produce elite returns at *any* position, so almost every pick has negative Sharpe. ",
+  "The lesson: late-round capital is nearly fungible. The real differentiation happens in the first two rounds.\n\n",
+
+  "**Watch for the divergers.** Some teams draft well in Round 1 but struggle to find value in Rounds 2–3, ",
+  "and vice versa. ", best_late_worst_r1$team[1], " is a good example — negative in Round 1 but ",
+  "relatively better in the middle rounds, suggesting their positional targeting improves when they're not ",
+  "reaching for need at the top of the draft."
+))
+```
+
+```{r team-position-strategy-recent, fig.height=10, fig.width=10}
+# R1 position strategy (stacked bar)
 team_picks <- df_eligible %>%
   filter(tier %in% c("Top 10", "Late 1st")) %>%
   left_join(
@@ -973,37 +1094,7 @@ team_picks <- df_eligible %>%
   ) %>%
   mutate(sharpe_elite = replace_na(sharpe_elite, 0))
 
-# Average Sharpe per team — last 5 years
-team_avg <- team_picks %>%
-  filter(season >= 2018) %>%
-  group_by(team) %>%
-  summarise(
-    n_picks = n(),
-    avg_sharpe = mean(sharpe_elite),
-    n_positive = sum(sharpe_elite > 0),
-    pct_positive = n_positive / n_picks,
-    top_positions = paste(sort(unique(pos_group[sharpe_elite > 0])), collapse = ", "),
-    .groups = "drop"
-  ) %>%
-  filter(n_picks >= 2) %>%
-  arrange(desc(avg_sharpe))
-
-ggplot(team_avg, aes(x = reorder(team, avg_sharpe), y = avg_sharpe)) +
-  geom_nfl_wordmarks(aes(team_abbr = team), width = 0.07) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
-  coord_flip() +
-  labs(
-    title = "Average Round 1 Sharpe Ratio by Team (2018–2022)",
-    subtitle = "How well has each team allocated first-round capital? | Last 5 eligible draft classes",
-    x = NULL, y = "Average Sharpe of R1 Picks"
-  ) +
-  theme_minimal(base_size = 13)
-```
-
-```{r team-position-strategy-recent, fig.height=10, fig.width=10}
-# Last 5 draft classes with full evaluation window
-recent_picks <- team_picks %>%
-  filter(season >= 2018)
+recent_picks <- team_picks %>% filter(season >= 2018)
 
 team_pos_recent <- recent_picks %>%
   mutate(pos_bucket = case_when(
@@ -1060,6 +1151,125 @@ ggplot(team_pos_recent, aes(x = pct, y = team, fill = pos_bucket)) +
     axis.text.y = element_blank(),
     panel.grid.major.y = element_blank()
   )
+```
+
+## The Draft Curve: How Teams Draft vs. How They Should
+
+The team-level charts above show *which* teams get it right. But what about the league as a whole? If every GM followed the Sharpe data, how different would the draft look?
+
+```{r draft-curve-data}
+# Actual positional allocation by tier
+actual_alloc <- df_eligible %>%
+  filter(pos_group %in% key_positions) %>%
+  count(tier, pos_group) %>%
+  group_by(tier) %>%
+  mutate(actual_pct = n / sum(n)) %>%
+  ungroup()
+
+# Join Sharpe to get "should" signal
+curve_data <- actual_alloc %>%
+  left_join(
+    sharpe %>% select(pos_group, tier, sharpe_elite),
+    by = c("pos_group", "tier")
+  ) %>%
+  mutate(
+    sharpe_sign = ifelse(sharpe_elite >= 0, "Positive Sharpe", "Negative Sharpe"),
+    pos_group = factor(pos_group, levels = key_positions)
+  )
+```
+
+```{r draft-curve-actual-vs-optimal, fig.height=8, fig.width=11}
+# Build "optimal" allocation: redistribute picks proportionally to positive-Sharpe positions
+# Negative-Sharpe positions get 0%; positive ones share proportionally to their Sharpe
+optimal <- sharpe %>%
+  filter(pos_group %in% key_positions) %>%
+  mutate(
+    tier = factor(tier, levels = tier_order),
+    weight = pmax(sharpe_elite, 0)
+  ) %>%
+  group_by(tier) %>%
+  mutate(optimal_pct = weight / sum(weight)) %>%
+  ungroup() %>%
+  select(pos_group, tier, optimal_pct) %>%
+  mutate(optimal_pct = replace_na(optimal_pct, 0))
+
+comparison <- curve_data %>%
+  left_join(optimal, by = c("pos_group", "tier")) %>%
+  select(tier, pos_group, actual_pct, optimal_pct) %>%
+  pivot_longer(cols = c(actual_pct, optimal_pct), names_to = "type", values_to = "pct") %>%
+  mutate(
+    type = ifelse(type == "actual_pct", "How Teams Actually Draft", "Sharpe-Optimal Allocation"),
+    pos_group = factor(pos_group, levels = key_positions)
+  )
+
+ggplot(comparison, aes(x = pos_group, y = pct, fill = type)) +
+  geom_col(position = "dodge", width = 0.7) +
+  facet_wrap(~tier, nrow = 1) +
+  scale_y_continuous(labels = percent_format()) +
+  scale_fill_manual(values = c(
+    "How Teams Actually Draft" = "#78909C",
+    "Sharpe-Optimal Allocation" = "#2196F3"
+  )) +
+  labs(
+    title = "How the NFL Drafts vs. How Sharpe Says It Should",
+    subtitle = "Actual positional allocation vs. Sharpe-optimal allocation | Key positions, 2010–2022",
+    x = NULL, y = "% of Picks", fill = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "top",
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+    strip.text = element_text(face = "bold", size = 11)
+  )
+```
+
+```{r draft-curve-waste, fig.height=5, fig.width=8}
+# What % of picks at each tier go to negative-Sharpe positions?
+waste_by_tier <- df_eligible %>%
+  left_join(
+    sharpe %>% select(pos_group, tier, sharpe_elite),
+    by = c("pos_group", "tier")
+  ) %>%
+  group_by(tier) %>%
+  summarise(
+    total = n(),
+    neg_sharpe = sum(sharpe_elite < 0, na.rm = TRUE),
+    neg_pct = neg_sharpe / total,
+    .groups = "drop"
+  ) %>%
+  mutate(tier = factor(tier, levels = tier_order))
+
+ggplot(waste_by_tier, aes(x = tier, y = neg_pct)) +
+  geom_col(fill = "#F44336", width = 0.6, alpha = 0.85) +
+  geom_text(aes(label = percent(neg_pct, accuracy = 1)), vjust = -0.5, fontface = "bold", size = 5) +
+  scale_y_continuous(labels = percent_format(), limits = c(0, 1.08), expand = c(0, 0)) +
+  labs(
+    title = "Wasted Draft Capital: Picks Spent on Negative-Sharpe Positions",
+    subtitle = "% of picks at each tier that go to positions where Sharpe says 'just sign a free agent'",
+    x = NULL, y = "% of Picks with Negative Sharpe"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(panel.grid.major.x = element_blank())
+```
+
+```{r draft-curve-narrative, results='asis'}
+top10_waste <- waste_by_tier %>% filter(tier == "Top 10")
+r1_waste <- waste_by_tier %>% filter(tier %in% c("Top 10", "Late 1st"))
+r1_total_neg <- sum(r1_waste$neg_sharpe)
+r1_total <- sum(r1_waste$total)
+
+cat(paste0(
+  "**The gap is real.** In the top 10, ", percent(top10_waste$neg_pct, accuracy = 1),
+  " of picks go to positions where the Sharpe ratio is negative — positions where the data says ",
+  "you'd be better off signing a free agent. Across all of Round 1, that's **",
+  r1_total_neg, " of ", r1_total, " picks** (",
+  percent(r1_total_neg / r1_total, accuracy = 1),
+  ") spent on bets that historically don't pay off relative to the risk.\n\n",
+  "By Round 2, it's over 75%. By Rounds 4–7, it's essentially 100% — which makes sense. ",
+  "Late-round picks rarely produce elite returns at any position, so the Sharpe is negative ",
+  "almost everywhere. The actionable insight is in the first round: that's where teams have ",
+  "real choices, and where the data shows the most room for improvement."
+))
 ```
 
 ## Key Takeaways
