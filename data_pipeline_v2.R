@@ -246,22 +246,22 @@ best_starters <- best_starters |>
   left_join(HIT_THRESHOLDS, by = "pos_group") |>
   mutate(starter_is_hit = avg_snap_pct >= hit_threshold)
 
-# Get career value for quality gate
-player_car_av <- draft_all |>
-  select(pfr_player_id, car_av) |>
+# Quality gate: starter must have earned a second contract above FA replacement
+# This uses the market's verdict — if a player got paid like a starter, they were one.
+# A bridge deal or minimum contract doesn't count. This fixes cases like Tyrod Taylor
+# (played a lot in Buffalo but was never the long-term answer — no big extension).
+player_second_contracts <- df_eligible |>
+  filter(second_apy_cap_pct > 0) |>
+  select(pfr_player_id, second_apy_cap_pct) |>
   distinct()
 
-# Positional median car_av for quality threshold
-pos_quality_thresholds <- draft_all |>
-  filter(!is.na(car_av), car_av > 0) |>
-  group_by(pos_group) |>
-  summarise(quality_threshold = median(car_av), .groups = "drop")
-
 best_starters <- best_starters |>
-  left_join(player_car_av, by = "pfr_player_id") |>
-  left_join(pos_quality_thresholds, by = "pos_group") |>
+  left_join(player_second_contracts, by = "pfr_player_id") |>
+  left_join(fa_replacement |> select(pos_group, fa_median_apy_cap_pct), by = "pos_group") |>
   mutate(
-    starter_is_quality = !is.na(car_av) & car_av >= quality_threshold,
+    # Quality = earned a second contract above FA replacement for their position
+    starter_is_quality = !is.na(second_apy_cap_pct) &
+                         second_apy_cap_pct >= fa_median_apy_cap_pct,
     starter_is_good = starter_is_hit & starter_is_quality
   )
 
