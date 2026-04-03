@@ -294,6 +294,72 @@ cat(paste0(
 ))
 ```
 
+### Player Example: Saquon Barkley
+
+```{r saquon-example, results='asis'}
+saquon <- player_lookup %>% filter(grepl("Saquon", pfr_player_name))
+
+cat(paste0(
+  "Michael asked for a specific player to run through the numbers — Saquon Barkley is perfect ",
+  "because he's one of the *best possible outcomes* for a top-10 RB, and he still doesn't crack ",
+  "the elite threshold.\n\n",
+
+  "**Saquon Barkley — Pick #2, 2018**\n\n",
+  "| Metric | Value | What it means |\n",
+  "|---|---|---|\n",
+  "| Avg snap % | ", percent(saquon$avg_snap_pct, accuracy = 0.1),
+    " | Averaged ", percent(saquon$avg_snap_pct, accuracy = 0.1),
+    " of offensive snaps over first 4 years |\n",
+  "| Snap ratio | ", round(saquon$snap_ratio, 2),
+    " | That's ", round(saquon$snap_ratio, 2),
+    "× the RB starter baseline — he was a hit |\n",
+  "| Rookie deal APY | ", percent(saquon$rookie_apy_cap_pct, accuracy = 0.1),
+    " | Cost of his rookie contract as % of cap |\n",
+  "| FA median (RB) | ", percent(saquon$fa_median_apy_cap_pct, accuracy = 0.1),
+    " | What a starting RB costs in free agency |\n",
+  "| Rookie surplus | ", percent(saquon$rookie_surplus, accuracy = 0.1),
+    " | 4 years of savings from paying a starter on a rookie deal |\n",
+  "| Second contract APY | ", percent(saquon$second_apy_cap_pct, accuracy = 0.1),
+    " | His second contract was only ", percent(saquon$second_apy_cap_pct, accuracy = 0.1),
+    " of cap |\n",
+  "| **Player return** | **", percent(saquon$player_return, accuracy = 0.1),
+    "** | Rookie surplus + second contract = total value generated |\n",
+  "| **Elite threshold** | **", percent(elite_threshold, accuracy = 0.1),
+    "** | Top 10% of all player returns across all positions |\n\n",
+
+  "Saquon *was* a hit — he started, he produced, he earned a second contract. ",
+  "But his total return (", percent(saquon$player_return, accuracy = 0.1),
+  ") is well below the elite threshold (", percent(elite_threshold, accuracy = 0.1),
+  "). That's because RB second contracts are small — Saquon's ",
+  percent(saquon$second_apy_cap_pct, accuracy = 0.1),
+  " of cap is a fraction of what a QB or WR earns. ",
+  "His rookie surplus (", percent(saquon$rookie_surplus, accuracy = 0.1),
+  ") does the heavy lifting, but it's not enough to reach elite territory.\n\n",
+
+  "This is exactly why RB Top 10 has a Sharpe of **-0.62**: even when the pick *works*, ",
+  "the return doesn't justify the draft capital. Zero of 7 top-10 RBs in the dataset ",
+  "reached the elite threshold. The best outcome for a top-10 RB still looks mediocre ",
+  "compared to what that pick could have been.\n"
+))
+```
+
+```{r saquon-comparison, results='asis'}
+cmc <- player_lookup %>% filter(grepl("McCaffrey", pfr_player_name))
+
+cat(paste0(
+  "For comparison, **Christian McCaffrey** (Pick #8, 2017) — often cited as the best-case RB — ",
+  "returned ", percent(cmc$player_return, accuracy = 0.1),
+  " of cap. Even that is below the ", percent(elite_threshold, accuracy = 0.1),
+  " elite threshold, though it's the closest any top-10 RB got. ",
+  "His second contract (", percent(cmc$second_apy_cap_pct, accuracy = 0.1),
+  ") was larger than Saquon's, but the real difference was snap share — ",
+  "CMC averaged ", percent(cmc$avg_snap_pct, accuracy = 0.1),
+  " of snaps (ratio: ", round(cmc$snap_ratio, 2),
+  "×), generating a much larger rookie surplus of ",
+  percent(cmc$rookie_surplus, accuracy = 0.1), "."
+))
+```
+
 ### Where Each Piece Comes From
 
 This formula combines two existing frameworks with new additions:
