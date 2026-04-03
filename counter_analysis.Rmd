@@ -1,6 +1,7 @@
 ---
 title: "What the Sharpe Ratio Can't See"
-subtitle: "Stress-testing our NFL Draft model — and finding where it ends"
+subtitle: "Stress-testing our NFL Draft model — and finding where it falls short"
+author: "Nick Gurol — [X/Twitter](https://x.com/run_the_sims) | [LinkedIn](https://www.linkedin.com/in/nick-gurol-87738a1b7/)"
 output:
   html_document:
     toc: true
@@ -12,8 +13,9 @@ knit: (function(input, ...) rmarkdown::render(input, output_dir = dirname(input)
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
   echo = FALSE, warning = FALSE, message = FALSE,
-  fig.width = 10, fig.height = 7, dpi = 300,
-  fig.path = "charts/v2_"
+  fig.width = 8, fig.height = 6, dpi = 150,
+  fig.path = "charts/v2_",
+  out.width = "100%"
 )
 library(tidyverse)
 library(arrow)
@@ -59,27 +61,31 @@ blue_chip <- blue_chip %>% mutate(tier = factor(tier, levels = tier_order))
 r1_picks <- r1_picks %>% mutate(tier = factor(tier, levels = tier_order))
 ```
 
+## TL;DR
+
+In [Part 1](https://stranger9977.github.io/draft-sharpe-analysis/), we built a model that said **never draft an RB in round 1**. That was the takeaway from our initial analysis. But if we break down the key assumptions and approach this from a different angle, does it make sense to draft an RB early? We stress-test three assumptions: that roster context doesn't matter, that all draft classes are equal, and that snap-based quality tells the whole story. The answer: it depends on the team, the year, and the prospect.
+
+---
+
 ## The Model Was Right. And Incomplete.
 
 In [Part 1](https://stranger9977.github.io/draft-sharpe-analysis/), we built a quasi-Sharpe ratio for NFL draft picks. The math was clean. The conclusion was clear: **RB shows negative returns across all tiers -- never draft one in round 1.**
 
-The model is right on average. But GMs don't draft on average.
+That was the takeaway from our initial analysis. But if we break down some key assumptions and approach this from a different angle, does it make sense to draft an RB early?
 
-They draft in specific years, with specific rosters, facing specific prospects. A model that can't account for context isn't wrong -- it's incomplete. This is Part 2: an honest stress test that defines where Article 1's advice ends and judgment begins. Not to destroy the model, but to find its edges.
+GMs don't draft on average. They draft in specific years, with specific rosters, facing specific prospects. A model that can't account for context isn't wrong -- it's incomplete. This is Part 2: an honest stress test that defines where Article 1's advice falls short.
 
-The gap between the model's advice and what teams actually do isn't always inefficiency -- sometimes it's intelligence. We tested four assumptions behind Part 1:
+The gap between the model's advice and what teams actually do isn't always inefficiency -- sometimes it's intelligence. We tested three assumptions behind Part 1:
 
 ```{r assumptions-table, results='asis'}
 cat("
-| Assumption We Made | What Could Break It |
+| Assumption | What Could Break It |
 |---|---|
-| Teams should always draft the highest-Sharpe position | Roster needs make some positions irrelevant |
+| Teams should always draft the highest-Sharpe position | Roster needs make some positions irrelevant for some teams |
 | All draft classes are interchangeable | Class depth varies wildly year to year |
-| All prospects at a position are fungible | Blue-chip prospects break the averages |
+| Snaps measure quality — and all prospects are fungible | Career value tells a different story, and blue-chip prospects break the averages |
 ")
 ```
-
-All three will crack the model open.
 
 ---
 
@@ -103,23 +109,23 @@ cat(paste0(
   round(rb_top10$sharpe_elite, 2), "** in the top 10, negative across every tier.\n\n",
   "The advice was simple: if you want a running back, wait until Day 2 or sign a free agent. ",
   "The data said so.\n\n",
-  "But data without context is just math."
+  "But data without context is just math. Let's break down the assumptions and see where they fall short."
 ))
 ```
 
-### How We Measure Quality
+### How We Measure Quality (and Why It Matters)
 
-Before we dig in, a quick note on definitions. Part 1 and Part 2 measure "quality" differently, and that's deliberate.
+This section addresses the third assumption from our table: **snaps measure quality**. Part 1 and Part 2 measure "quality" differently, and that's deliberate -- it's one of the key places where the model's assumptions can be challenged.
 
-**Part 1's "hit"** is snap-based: a player who plays above the positional snap threshold (75% of baseline snaps) earns starter status. Snaps measure quality -- if you're on the field, you're contributing. This is how Article 1 builds its Sharpe ratio.
+**Part 1's "hit"** is snap-based: a player who plays above the positional snap threshold (75% of baseline snaps) earns starter status. Snaps tell you who was on the field. This is how Article 1 builds its Sharpe ratio.
 
-**Part 2's "elite outcome"** uses [career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) (AV) from Pro Football Reference -- a cumulative measure of a player's total career contribution. We define an elite outcome as finishing in the **top 10% of career AV at their position** (90th percentile). This is a much stricter bar than Article 1's snap-based hit, and it's what we use throughout this article when evaluating blue-chip prospects and their outcomes.
+**Part 2's "elite outcome"** uses [career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) (AV) from Pro Football Reference. Career AV is a cumulative, season-by-season measure of a player's total contribution -- it accounts for playing time, statistical production, and team success. A player who starts for 10 years accumulates more AV than one who starts for 3, even if both cleared the snap threshold. We define an elite outcome as finishing in the **top 10% of career AV at their position** (90th percentile). This is a much stricter bar than Part 1's snap-based hit.
 
-Why the distinction? Snaps tell you who became a starter. Career AV tells you who became *great*. When we're asking whether a generational prospect justifies breaking the model, we need the higher bar.
+Why the distinction? Snaps tell you who became a starter. Career AV tells you who became *great*. A player can clear the snap threshold and still have a mediocre career. When we're asking whether a generational prospect justifies breaking the model, we need the higher bar.
 
 ---
 
-## Argument 1: Roster Needs — "The Bills Don't Need Another QB"
+## Assumption 1: Teams Should Always Draft the Highest-Sharpe Position
 
 Article 1 implicitly assumed that every team should always draft the highest-Sharpe position available. But what if you already have a starter?
 
@@ -127,7 +133,7 @@ The Bills are the perfect test case. From 2014 through 2022, Buffalo always had 
 
 We added a quality gate: a position is only "filled" when the starter meets three criteria -- plays above the snap threshold, earned a second contract above the free-agent replacement cost for the position, and isn't on an expiring deal. A bad QB who plays a lot doesn't count. Tyrod Taylor started 46 games for the Bills and cleared every snap threshold, but he never earned a QB-level second contract -- the market's way of saying he wasn't the long-term answer.
 
-```{r bills-qb-timeline, fig.height=5, fig.width=10}
+```{r bills-qb-timeline, fig.height=4, fig.width=8}
 bills_qb <- roster_needs %>%
   filter(team == "BUF", pos_group == "QB") %>%
   mutate(
@@ -179,7 +185,7 @@ In Part 1, we ranked teams by "draft efficiency" -- the average Sharpe ratio of 
 
 The need-adjusted version gives partial credit to teams that drafted low-Sharpe positions to fill genuine roster holes, and penalizes teams that drafted high-Sharpe positions they already had covered. The chart shows every team's original rank vs their need-adjusted rank.
 
-```{r team-efficiency-slope, fig.height=9, fig.width=10}
+```{r team-efficiency-slope, fig.height=10, fig.width=8}
 te_plot <- team_efficiency %>%
   mutate(
     direction = case_when(
@@ -213,8 +219,8 @@ ggplot(te_plot, aes(y = reorder(team, -rank_adjusted))) +
 ```
 
 ```{r top-movers, results='asis'}
-biggest_up <- team_efficiency %>% slice_max(rank_change, n = 1)
-biggest_down <- team_efficiency %>% slice_min(rank_change, n = 1)
+biggest_up <- team_efficiency %>% slice_max(rank_change, n = 1) %>% slice_head(n = 1)
+biggest_down <- team_efficiency %>% slice_min(rank_change, n = 1) %>% slice_head(n = 1)
 
 cat(paste0(
   "**Biggest climber:** ", biggest_up$team, " moved up ", biggest_up$rank_change,
@@ -226,9 +232,9 @@ cat(paste0(
 
 ### Need-Based Picks vs Filled-Position Picks
 
-Do picks that address roster needs actually perform differently? Here's the raw Sharpe distribution for first-round picks that filled a need vs picks at positions the team already had covered:
+Here's the intuition: if a team drafts a position they actually need, the player steps into a real role. If they draft a position that's already filled, the player competes for scraps. Does that show up in the Sharpe numbers?
 
-```{r need-vs-filled-box, fig.height=6, fig.width=10}
+```{r need-vs-filled-box, fig.height=5, fig.width=8}
 r1_context <- r1_picks %>%
   mutate(
     context = if_else(is_need, "Addressed a Need", "Position Already Filled")
@@ -270,11 +276,11 @@ cat(paste0(
 ))
 ```
 
-**The takeaway:** The Sharpe ratio tells you which positions have the best *average* returns. But if you already have a franchise QB, that average is irrelevant to you. Roster context turns a general truth into specific advice.
+**The takeaway:** Picks that fill genuine roster needs perform better. It makes sense — a player drafted into opportunity has a clearer path to snaps, production, and a second contract. The Sharpe ratio tells you which positions have the best *average* returns. But if you already have a franchise QB, that average is irrelevant to you. Roster context turns a general truth into specific advice.
 
 ---
 
-## Argument 2: Draft Class Depth — "Not All RB Classes Are Created Equal"
+## Assumption 2: All Draft Classes Are Interchangeable
 
 The Sharpe ratio averages across 13 draft classes (2010-2022). But class quality varies wildly. If a GM could know whether this year's class is loaded or barren *before* the draft, the model's one-size-fits-all advice starts to crack.
 
@@ -286,7 +292,7 @@ NGS uses four tiers: **Below Average** (50-60), **Average** (60-70), **Good** (7
 
 We'll start with RB -- the position at the center of the Sharpe debate -- then see how the pattern plays out across every position group.
 
-```{r ngs-rb-depth-big, fig.height=6, fig.width=10}
+```{r ngs-rb-depth-big, fig.height=5, fig.width=8}
 ngs_rb_tiers <- ngs_class_tiers %>%
   filter(pos_group == "RB", season >= 2010, season <= 2025,
          ngs_tier %in% c("Elite", "Good")) %>%
@@ -315,7 +321,7 @@ The variation is striking. Some RB classes are loaded with Good+ talent; others 
 
 Now the same view across every position:
 
-```{r ngs-all-depth-small, fig.height=14, fig.width=12}
+```{r ngs-all-depth-small, fig.height=12, fig.width=8}
 ngs_other_tiers <- ngs_class_tiers %>%
   filter(pos_group %in% key_positions, season >= 2010, season <= 2025,
          ngs_tier %in% c("Elite", "Good")) %>%
@@ -379,18 +385,28 @@ class_2025 <- ngs_class_tiers %>%
 deep_2025 <- class_2025 %>% slice_head(n = 3)
 thin_2025 <- class_2025 %>% slice_tail(n = 3)
 
+rb_2025 <- class_2025 %>% filter(pos_group == "RB")
+qb_2025 <- class_2025 %>% filter(pos_group == "QB")
+
 cat(paste0(
   "### The 2025 Class at a Glance\n\n",
   "Applying the same framework to the 2025 draft class: **",
   deep_2025$pos_group[1], "** (",  deep_2025$n_good_plus[1], " Good+), **",
   deep_2025$pos_group[2], "** (", deep_2025$n_good_plus[2], "), and **",
   deep_2025$pos_group[3], "** (", deep_2025$n_good_plus[3],
-  ") are the deepest classes this year. The thinnest: **",
-  thin_2025$pos_group[nrow(thin_2025)], "** (",
-  thin_2025$n_good_plus[nrow(thin_2025)], " Good+), **",
-  thin_2025$pos_group[nrow(thin_2025)-1], "** (",
-  thin_2025$n_good_plus[nrow(thin_2025)-1],
-  "). This is exactly the kind of information the Sharpe ratio can't incorporate — ",
+  ") are the deepest classes this year. The thinnest: **RB** (",
+  if(nrow(rb_2025) > 0) rb_2025$n_good_plus else "few", " Good+) and **QB** (",
+  if(nrow(qb_2025) > 0) qb_2025$n_good_plus else "few", " Good+).\n\n",
+  "The RB class stands out as especially thin. Only ",
+  if(nrow(rb_2025) > 0) rb_2025$n_good_plus else "a handful of",
+  " RB prospects grade as Good or better — and Love is the only one in the Elite tier. ",
+  "That 17-point gap to RB2 isn't just a Love story; it's a class story. If you pass on Love, ",
+  "the next RB option is a significant downgrade.\n\n",
+  "QB is thin too, but for QB the bar is different: Good isn't good enough. ",
+  "QB is the one position where only blue-chip prospects (Elite tier) reliably return value in the top 10 — ",
+  "a Good QB prospect at pick 5 is a much bigger gamble than a Good OT or EDGE at the same spot. ",
+  "For most other positions, Good is deep enough to find value.\n\n",
+  "This is exactly the kind of information the Sharpe ratio can't incorporate — ",
   "the best position to draft depends on which classes are loaded *this year*."
 ))
 ```
@@ -399,7 +415,7 @@ cat(paste0(
 
 The NGS scores tell us what the class looked like before the draft. But did the "deep" classes actually produce more hits? Here's the RB timeline with retrospective hit rates -- bar color is the pre-draft NGS classification, bar height is what actually happened.
 
-```{r rb-class-timeline-big, fig.height=7, fig.width=11}
+```{r rb-class-timeline-big, fig.height=6, fig.width=8}
 rb_classes <- class_depth %>%
   filter(pos_group == "RB")
 
@@ -469,7 +485,7 @@ cat(paste0(
 
 The same signal-vs-reality check across other positions:
 
-```{r other-pos-timeline-small, fig.height=14, fig.width=12}
+```{r other-pos-timeline-small, fig.height=12, fig.width=8}
 other_classes <- class_depth %>%
   filter(pos_group %in% key_positions, pos_group != "RB",
          !is.na(hit_rate), !is.na(ngs_class_quality))
@@ -523,7 +539,7 @@ cat(paste0(
 
 ---
 
-## Argument 3: Blue-Chip Prospects — "When the Talent Is Undeniable"
+## Assumption 3: Snaps Measure Quality, and All Prospects Are Fungible
 
 The Sharpe ratio averages over all RB prospects. But we've already seen that not all classes are equal. The same logic applies to individual prospects: the model can't distinguish between an average back and a generational one.
 
@@ -537,7 +553,7 @@ The challenge is defining "blue chip" without hindsight. [Career Approximate Val
 
 ### NGS Scores and Career Outcomes
 
-```{r ngs-blue-chip-scatter, fig.height=7, fig.width=10}
+```{r ngs-blue-chip-scatter, fig.height=6, fig.width=8}
 ngs_with_outcomes <- blue_chip %>%
   filter(!is.na(cmbn_score), !is.na(is_hit), !is.na(car_av),
          pos_group %in% key_positions, season <= 2022)
@@ -580,7 +596,7 @@ We can define "blue chip" two ways: retrospectively (top 10% of career AV at the
 
 If high NGS scores actually predict career success, the top-scoring prospects should cluster toward the top of the career value axis. Here's every RB with an NGS score — the pre-draft blue chips (top 10% NGS) are highlighted:
 
-```{r ngs-bc-scatter-rb, fig.height=7, fig.width=10}
+```{r ngs-bc-scatter-rb, fig.height=6, fig.width=8}
 rb_scatter <- ngs_with_outcomes %>%
   filter(pos_group == "RB") %>%
   mutate(is_bc = is_ngs_blue_chip)
@@ -624,7 +640,7 @@ cat(paste0(
 
 The same view across all positions:
 
-```{r ngs-bc-scatter-all, fig.height=16, fig.width=12}
+```{r ngs-bc-scatter-all, fig.height=14, fig.width=8}
 all_scatter <- ngs_with_outcomes %>%
   filter(pos_group %in% key_positions) %>%
   mutate(
@@ -632,19 +648,28 @@ all_scatter <- ngs_with_outcomes %>%
     pos_group = factor(pos_group, levels = key_positions)
   )
 
+# Label the blue chips in each position
+bc_labels <- all_scatter %>%
+  filter(is_bc) %>%
+  group_by(pos_group) %>%
+  slice_max(car_av, n = 3) %>%
+  ungroup()
+
 ggplot(all_scatter, aes(x = cmbn_score, y = car_av)) +
   geom_point(data = all_scatter %>% filter(!is_bc), color = "gray70", alpha = 0.3, size = 1.5) +
   geom_point(data = all_scatter %>% filter(is_bc), color = "#377EB8", size = 2.5, alpha = 0.7) +
+  geom_text(data = bc_labels, aes(label = pfr_player_name),
+            vjust = -0.8, size = 2.2, color = "#377EB8", fontface = "bold") +
   geom_smooth(method = "lm", se = FALSE, color = "#377EB8", linewidth = 0.7, alpha = 0.5) +
   facet_wrap(~pos_group, scales = "free", ncol = 3) +
   labs(
     title = "Pre-Draft Score vs Career Value: All Positions",
-    subtitle = "Blue = pre-draft blue chip (top 10% NGS) | Does the signal work at every position?",
+    subtitle = "Blue = pre-draft blue chip (top 10% NGS) | Top 3 blue chips labeled per position",
     x = "NGS Combined Score", y = "Career AV"
   ) +
-  theme_minimal(base_size = 13) +
+  theme_minimal(base_size = 12) +
   theme(
-    strip.text = element_text(face = "bold", size = 12)
+    strip.text = element_text(face = "bold", size = 11)
   )
 ```
 
@@ -663,9 +688,9 @@ cat(paste0(
 
 ### The Historical NGS Elite
 
-Who were the highest-graded pre-draft prospects at each position, and did they deliver? Starting with RB:
+Who were the highest-graded pre-draft prospects at each position, and did they deliver? A reminder: **"hit"** here means Article 1's snap-based starter threshold — a player who played above 75% of baseline snaps at their position. Starting with RB:
 
-```{r ngs-elite-rb-big, fig.height=6, fig.width=10}
+```{r ngs-elite-rb-big, fig.height=5, fig.width=8}
 top_ngs_rb <- ngs_with_outcomes %>%
   filter(pos_group == "RB") %>%
   arrange(desc(cmbn_score)) %>%
@@ -704,7 +729,7 @@ cat(paste0(
 ))
 ```
 
-```{r ngs-elite-all-small, fig.height=18, fig.width=12}
+```{r ngs-elite-all-small, fig.height=14, fig.width=8}
 top_ngs_all <- ngs_with_outcomes %>%
   filter(pos_group %in% key_positions) %>%
   group_by(pos_group) %>%
@@ -777,21 +802,31 @@ The model said no. RB has a deeply negative Sharpe in the top 10. But we've now 
 
 We showed above that historical RBs with elite pre-draft NGS scores hit at dramatically higher rates than the position average. Where does Love's 2025 profile fit in that history?
 
-```{r ngs-love-bar-big, fig.height=7, fig.width=10}
+```{r ngs-love-bar-big, fig.height=7, fig.width=8}
 ngs_rb <- ngs_prospects %>%
   filter(pos_group == "RB", !is.na(cmbn_score)) %>%
   arrange(desc(cmbn_score)) %>%
   mutate(
     is_love = str_detect(player, "(?i)love"),
+    ngs_tier = case_when(
+      cmbn_score >= 90 ~ "Elite",
+      cmbn_score >= 70 ~ "Good",
+      cmbn_score >= 60 ~ "Average",
+      TRUE ~ "Below Avg"
+    ),
+    ngs_tier = factor(ngs_tier, levels = c("Elite", "Good", "Average", "Below Avg")),
     player_label = paste0(player, " (", college, ")"),
     player_label = fct_reorder(player_label, cmbn_score)
   )
 
-ggplot(ngs_rb, aes(x = cmbn_score, y = player_label, fill = is_love)) +
+ggplot(ngs_rb, aes(x = cmbn_score, y = player_label, fill = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85) +
-  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 3.5, fontface = "bold") +
-  scale_fill_manual(values = c("TRUE" = "#377EB8", "FALSE" = "gray60"), guide = "none") +
-  scale_x_continuous(limits = c(0, 105), expand = expansion(mult = c(0, 0.05))) +
+  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 3, fontface = "bold") +
+  scale_fill_manual(
+    values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
+    name = "NGS Tier"
+  ) +
+  scale_x_continuous(limits = c(50, 105), expand = expansion(mult = c(0, 0.05))) +
   labs(
     title = "2025 RB Prospects: NGS Combined Score",
     subtitle = "Love's 94.3 is tied for #1 overall (all positions) with Sonny Styles | ProdScr: 95.9 (highest of any prospect)",
@@ -814,7 +849,7 @@ cat(paste0(
 ))
 ```
 
-```{r ngs-2025-all-positions, fig.height=16, fig.width=12}
+```{r ngs-2025-all-positions, fig.height=14, fig.width=8}
 # Top 5 prospects by position in 2025 class
 top_2025_all <- ngs_prospects %>%
   filter(!is.na(cmbn_score), pos_group %in% key_positions) %>%
@@ -836,25 +871,28 @@ top_2025_all <- ngs_prospects %>%
     pos_group = factor(pos_group, levels = key_positions)
   )
 
-ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tier)) +
-  geom_col(width = 0.7, alpha = 0.85) +
-  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 2.5, fontface = "bold") +
-  scale_fill_manual(
+# Use geom_segment + geom_point (lollipop) instead of geom_col so x-axis offset works
+ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, color = ngs_tier)) +
+  geom_segment(aes(x = 55, xend = cmbn_score, yend = player_label_unique),
+               linewidth = 3, alpha = 0.7) +
+  geom_point(size = 3) +
+  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.3, size = 2.5, fontface = "bold", show.legend = FALSE) +
+  scale_color_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
   ) +
   scale_y_discrete(labels = function(x) str_remove(x, "^.*___")) +
-  scale_x_continuous(limits = c(50, NA), expand = expansion(mult = c(0, 0.1))) +
+  scale_x_continuous(limits = c(55, 100), breaks = seq(60, 100, 10)) +
   facet_wrap(~pos_group, scales = "free_y", ncol = 3) +
   labs(
-    title = "2025 Draft Class: Top 5 Prospects by NGS Combined Score, Every Position",
-    subtitle = "Elite (90+) | Good (70-90) | Average (60-70) | Below Avg (<60) | X-axis starts at 50 to show separation",
+    title = "2025 Draft Class: Top 5 Prospects by NGS Combined Score",
+    subtitle = "Elite (90+) | Good (70-90) | Average (60-70) | Below Avg (<60)",
     x = "NGS Combined Score", y = NULL
   ) +
-  theme_minimal(base_size = 13) +
+  theme_minimal(base_size = 12) +
   theme(
     legend.position = "top",
-    strip.text = element_text(face = "bold", size = 12)
+    strip.text = element_text(face = "bold", size = 11)
   )
 ```
 
@@ -892,7 +930,9 @@ cat(paste0(
 
 This is the practical question. Article 1 gave us the Sharpe ratio for RB in the top 10: **-0.615**. That's the average across all RBs drafted in the top 10 since 2010. But averages hide a massive range. Here's every first-round RB in our data, plotted against the opportunity cost of not drafting the best available non-RB at the same pick.
 
-```{r rb-breakeven, fig.height=10, fig.width=11}
+Each player's individual Sharpe is computed the same way as Article 1's positional Sharpe, but for a single player: their rookie contract surplus, second-contract value, and whether they became a starter (hit = 75% of positional snap baseline). The **circle** is the RB's individual Sharpe. The **yellow X** is the next non-RB player drafted after them — the opportunity cost of taking an RB instead. Green means the RB bet paid off; red means the alternative would have been better.
+
+```{r rb-breakeven, fig.height=9, fig.width=8}
 # All first-round picks with individual Sharpe
 all_r1 <- player_lookup %>%
   filter(pick <= 32, pos_group %in% key_positions)
@@ -1015,7 +1055,7 @@ cat(paste0(
 
 Here's the real question: at what pick does an RB with Love's profile start to justify the cost? We can compute this by comparing the CMC/Gurley outcome (the realistic ceiling for an elite RB) against the average non-RB return at each pick range.
 
-```{r love-pick-range, fig.height=6, fig.width=10}
+```{r love-pick-range, fig.height=5, fig.width=8}
 # Compare CMC/Gurley-level return vs opportunity cost across the first round
 pick_ranges <- player_lookup %>%
   filter(pick <= 32) %>%
@@ -1084,34 +1124,73 @@ cat(paste0(
 ))
 ```
 
-### Every Team Needs an RB (And That's the Point)
+### Which Teams Actually Need an RB?
 
-```{r all-team-narrative, results='asis'}
-all_rb_needs <- roster_needs %>%
+Our quality gate for most positions requires a premium second contract. But that's circular for RB — the Sharpe model already told us RBs don't get paid, so of course they never clear the gate. We need a different definition of "need" for running back.
+
+For RB specifically, we define "filled" using **snap-based production only**: does the team have a back who played above the starter snap threshold (75% of positional baseline) in the prior season? No contract requirement. If the team had a productive back on the field, the position is filled regardless of what the market pays him.
+
+```{r rb-need-snap-based, results='asis'}
+# Redefine RB need as snap-based only (no contract gate)
+rb_snap_needs <- roster_needs %>%
   filter(pos_group == "RB") %>%
-  group_by(team) %>%
-  summarise(need_rate = mean(!is_filled, na.rm = TRUE), .groups = "drop")
+  mutate(
+    snap_filled = starter_is_hit  # just snap threshold, no contract requirement
+  )
 
-pct_always_need <- mean(all_rb_needs$need_rate == 1)
-pct_mostly_need <- mean(all_rb_needs$need_rate >= 0.67)
-lowest_need <- all_rb_needs %>% slice_min(need_rate, n = 1)
+rb_snap_by_team <- rb_snap_needs %>%
+  group_by(team) %>%
+  summarise(
+    need_rate = mean(!snap_filled, na.rm = TRUE),
+    n_seasons = n(),
+    .groups = "drop"
+  )
+
+pct_always_need <- mean(rb_snap_by_team$need_rate == 1)
+pct_mostly_need <- mean(rb_snap_by_team$need_rate >= 0.5)
+avg_need <- mean(rb_snap_by_team$need_rate)
+teams_with_need <- rb_snap_by_team %>% filter(need_rate >= 0.5) %>% nrow()
 
 cat(paste0(
-  "Here's the twist that reframes the entire conversation: when we apply our quality gate to RB across all 32 teams, ",
-  "**", round(pct_always_need * 100), "%** of teams had RB as a need in *every single season* from 2014-2022. ",
-  "**", round(pct_mostly_need * 100), "%** had it as a need at least two-thirds of the time. ",
-  "Even the team with the lowest RB need rate — ", lowest_need$team, " at ",
-  round(lowest_need$need_rate * 100), "% — still needed an RB more often than not.\n\n",
-  "Why is RB *always* a need? Because our quality gate requires a starter who earned a **premium second contract**. ",
-  "And RBs almost never get premium second contracts — that's exactly what Article 1's Sharpe ratio measured. ",
-  "The position's low market value means almost no RB clears the quality gate.\n\n",
-  "This is the Sharpe ratio's own logic turned back on itself. The model says RBs aren't worth premium draft capital. ",
-  "The market agrees — it doesn't pay them. But that means the position is **perpetually unfilled** by the quality standard. ",
-  "The question isn't *whether* to invest in RB — every team needs one. It's whether THIS investment, ",
-  "in THIS prospect, in THIS class, justifies accepting the negative positional Sharpe.\n\n",
-  "For Love, the case is: his NGS profile matches the CMC/Gurley tier. The class is thin — a 17-point gap to RB2. ",
-  "And at picks 6-10, historical elite RBs have returned above the opportunity cost. ",
-  "That doesn't guarantee he'll work out. But it means the model's blanket \"no\" is answering the wrong question."
+  "Based on this definition, what teams \"need\" an RB? Using snap-based production (no contract gate), ",
+  "**", round(avg_need * 100), "%** of team-seasons show RB as a need — meaning the team didn't have a ",
+  "starter-level back the prior year. **", teams_with_need, " of 32** teams needed an RB at least half the time.\n\n",
+  "That's still a lot, which tells us something real: RB is a high-turnover position. ",
+  "Backs get hurt, decline fast, and cycle through rosters more than QBs or OTs. ",
+  "The need is genuine — it's not an artifact of our quality gate.\n\n",
+  "The question isn't *whether* to invest in RB — most teams need one in most years. ",
+  "It's whether THIS investment, in THIS prospect, in THIS class, justifies accepting the negative positional Sharpe."
+))
+```
+
+### Who Should Draft Love? The Roster Piece
+
+The breakeven analysis tells us *where* in the first round Love makes sense (picks 6-10). The class depth tells us *why* this year is different (thin RB class, huge separation). But we haven't answered *which teams* should actually consider it. That requires the roster analysis from Argument 1.
+
+```{r love-roster-fit, results='asis'}
+# Which teams picking in the top 10 of 2025 need an RB (snap-based)?
+# Use the most recent season in our data as proxy for 2025 needs
+latest_season <- max(roster_needs$draft_season)
+recent_rb_needs <- roster_needs %>%
+  filter(pos_group == "RB", draft_season == latest_season) %>%
+  mutate(snap_filled = starter_is_hit)
+
+teams_needing_rb <- recent_rb_needs %>%
+  filter(!snap_filled) %>%
+  pull(team)
+
+n_needing <- length(teams_needing_rb)
+n_total <- nrow(recent_rb_needs)
+
+cat(paste0(
+  "In the most recent season of our data, **", n_needing, " of ", n_total,
+  "** teams lacked a starter-level RB by snap production. ",
+  "That's ", paste(teams_needing_rb, collapse = ", "), ".\n\n",
+  "The case for Love is strongest when all three factors align: a team that genuinely needs ",
+  "an RB, picking in the 6-10 range, where Love's elite profile and the thin class ",
+  "justify accepting the negative positional Sharpe. Teams picking in the top 5 face too steep ",
+  "an opportunity cost — even CMC-level outcomes barely break even there. Teams with a productive ",
+  "back already on the roster should follow the model's advice and draft a premium position."
 ))
 ```
 
@@ -1129,11 +1208,11 @@ Everything we've built in this article converges on a single question. Three arg
 
 **The breakeven says:** At picks 1-5, even an elite RB barely clears the opportunity cost. At picks 6-10, the math works — if the prospect is truly separated. At 15+, an elite profile justifies the pick outright.
 
-**The need says:** Every team needs an RB, always. The question isn't whether to invest — it's where and in whom.
+**The need says:** Most teams need an RB in most years. It's a high-turnover position. The question isn't whether to invest — it's where and in whom.
 
 </div>
 
-Does this mean a team *should* draft Love? Not at 3. Probably not at 5. But at 8-10, for a team that needs an RB? The Sharpe model says no. The prospect data says he's in the CMC/Gurley cluster. The class is thin. And history says the few RBs who clear the bar at that range more than justify the pick.
+Does this mean a team *should* draft Love? Not at 3. Probably not at 5. But at 8-10, for a team that genuinely needs an RB? The Sharpe model says no. The prospect data says he's in the CMC/Gurley cluster. The class is thin. And history says the few RBs who clear the bar at that range more than justify the pick.
 
 That's the honest answer. Not a prescription, but an acknowledgment that the model's average-case advice meets its limit when roster need, prospect separation, and class depth all point the other direction — and the pick falls in the range where elite RBs have historically delivered.
 
