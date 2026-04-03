@@ -76,11 +76,10 @@ cat("
 | Teams should always draft the highest-Sharpe position | Roster needs make some positions irrelevant |
 | All draft classes are interchangeable | Class depth varies wildly year to year |
 | All prospects at a position are fungible | Blue-chip prospects break the averages |
-| Second contracts measure real value | Market inefficiency could distort the signal |
 ")
 ```
 
-Three of these will crack the model open. One will surprise us.
+All three will crack the model open.
 
 ---
 
@@ -534,17 +533,14 @@ The challenge is defining "blue chip" without hindsight. [Career Approximate Val
 
 - **Pre-draft blue chip:** Top 10% of NGS Combined Score at the position (knowable before the draft)
 - **Career blue chip:** Top 10% of [career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) at the position (only knowable in hindsight)
-- **Elite outcome:** Top 25% of career AV at the position (75th percentile) -- a stricter bar than Article 1's snap-based "hit," which measures whether a player became a starter. Snaps tell you who played; career AV tells you who was *great*. We use top 25% rather than top 10% to avoid circularity with the career blue-chip definition.
+- **Hit (outcome measure):** Article 1's snap-based starter threshold — a player who plays above 75% of baseline snaps at their position. This is our outcome metric for comparing blue-chip categories because it's independent of career AV (which defines the career blue-chip group).
 
 ### NGS Scores and Career Outcomes
 
 ```{r ngs-blue-chip-scatter, fig.height=7, fig.width=10}
 ngs_with_outcomes <- blue_chip %>%
   filter(!is.na(cmbn_score), !is.na(is_hit), !is.na(car_av),
-         pos_group %in% key_positions, season <= 2022) %>%
-  group_by(pos_group) %>%
-  mutate(is_elite_outcome = car_av_pctl >= 0.75) %>%
-  ungroup()
+         pos_group %in% key_positions, season <= 2022)
 
 ggplot(ngs_with_outcomes, aes(x = cmbn_score, y = car_av, color = pos_group)) +
   geom_point(alpha = 0.4, size = 2) +
@@ -600,7 +596,7 @@ bc_by_pos <- bc_overlap %>%
   group_by(pos_group, bc_type) %>%
   summarise(
     n = n(),
-    elite_rate = mean(is_elite_outcome, na.rm = TRUE),
+    hit_rate = mean(is_hit, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   mutate(
@@ -610,9 +606,9 @@ bc_by_pos <- bc_overlap %>%
 
 bc_rb <- bc_by_pos %>% filter(pos_group == "RB")
 
-ggplot(bc_rb, aes(x = elite_rate, y = bc_type, fill = bc_type)) +
+ggplot(bc_rb, aes(x = hit_rate, y = bc_type, fill = bc_type)) +
   geom_col(width = 0.6, alpha = 0.85) +
-  geom_text(aes(label = paste0(round(elite_rate * 100), "% (n=", n, ")")),
+  geom_text(aes(label = paste0(round(hit_rate * 100), "% (n=", n, ")")),
             hjust = -0.05, size = 4, fontface = "bold") +
   scale_fill_manual(values = c(
     "Both" = "#2e7d32",
@@ -622,9 +618,9 @@ ggplot(bc_rb, aes(x = elite_rate, y = bc_type, fill = bc_type)) +
   scale_x_continuous(labels = percent_format(), limits = c(0, 1.15),
                      expand = expansion(mult = c(0, 0))) +
   labs(
-    title = "RB: Elite Outcome Rate by Blue-Chip Definition",
-    subtitle = "Elite = top 25% career AV | Pre-draft BC = top 10% NGS | Career BC = top 10% career AV",
-    x = "Elite Outcome Rate (top 25% career AV)", y = NULL
+    title = "RB: Hit Rate by Blue-Chip Definition",
+    subtitle = "Hit = Article 1's snap-based starter threshold | Pre-draft BC = top 10% NGS | Career BC = top 10% career AV",
+    x = "Hit Rate (snap-based starter)", y = NULL
   ) +
   theme_minimal(base_size = 14)
 ```
@@ -633,13 +629,13 @@ ggplot(bc_rb, aes(x = elite_rate, y = bc_type, fill = bc_type)) +
 rb_both <- bc_overlap %>% filter(bc_type == "Both", pos_group == "RB")
 rb_ngs_only <- bc_overlap %>% filter(bc_type == "Pre-Draft Only", pos_group == "RB")
 rb_baseline <- ngs_with_outcomes %>% filter(pos_group == "RB") %>%
-  summarise(rate = mean(is_elite_outcome, na.rm = TRUE)) %>% pull(rate)
+  summarise(rate = mean(is_hit, na.rm = TRUE)) %>% pull(rate)
 
 cat(paste0(
-  "For RBs identified as blue chips by **both** pre-draft and career metrics, the elite outcome rate is **",
-  round(mean(rb_both$is_elite_outcome, na.rm = TRUE) * 100, 1),
-  "%**. Pre-draft-only blue chips (high NGS but didn't reach top 25% career AV) still achieve elite outcomes at **",
-  round(mean(rb_ngs_only$is_elite_outcome, na.rm = TRUE) * 100, 1),
+  "For RBs identified as blue chips by **both** pre-draft and career metrics, the hit rate is **",
+  round(mean(rb_both$is_hit, na.rm = TRUE) * 100, 1),
+  "%**. Pre-draft-only blue chips (high NGS but didn't reach top 10% career AV) still hit at **",
+  round(mean(rb_ngs_only$is_hit, na.rm = TRUE) * 100, 1),
   "%** — compared to a baseline of **", round(rb_baseline * 100, 1),
   "%** for all RBs with NGS scores. The pre-draft signal is meaningful.\n\n",
   "How does this compare across positions?"
@@ -649,9 +645,9 @@ cat(paste0(
 ```{r ngs-vs-career-bc-all-small, fig.height=14, fig.width=12}
 bc_other <- bc_by_pos %>% filter(pos_group != "RB")
 
-ggplot(bc_other, aes(x = elite_rate, y = bc_type, fill = bc_type)) +
+ggplot(bc_other, aes(x = hit_rate, y = bc_type, fill = bc_type)) +
   geom_col(width = 0.6, alpha = 0.85) +
-  geom_text(aes(label = paste0(round(elite_rate * 100), "% (n=", n, ")")),
+  geom_text(aes(label = paste0(round(hit_rate * 100), "% (n=", n, ")")),
             hjust = -0.05, size = 2.8, fontface = "bold") +
   scale_fill_manual(values = c(
     "Both" = "#2e7d32",
@@ -662,9 +658,9 @@ ggplot(bc_other, aes(x = elite_rate, y = bc_type, fill = bc_type)) +
                      expand = expansion(mult = c(0, 0))) +
   facet_wrap(~pos_group, ncol = 2) +
   labs(
-    title = "Elite Outcome Rate by Blue-Chip Definition: All Positions",
-    subtitle = "Elite = top 25% career AV | Pre-draft BC = top 10% NGS | Career BC = top 10% career AV",
-    x = "Elite Outcome Rate (top 25% career AV)", y = NULL
+    title = "Hit Rate by Blue-Chip Definition: All Positions",
+    subtitle = "Hit = Article 1's snap-based starter | Pre-draft BC = top 10% NGS | Career BC = top 10% career AV",
+    x = "Hit Rate (snap-based starter)", y = NULL
   ) +
   theme_minimal(base_size = 13) +
   theme(strip.text = element_text(face = "bold", size = 12))
@@ -673,13 +669,13 @@ ggplot(bc_other, aes(x = elite_rate, y = bc_type, fill = bc_type)) +
 ```{r ngs-bc-all-narrative, results='asis'}
 both_all <- bc_overlap %>% filter(bc_type == "Both")
 ngs_only_all <- bc_overlap %>% filter(bc_type == "Pre-Draft Only")
-baseline_all <- mean(ngs_with_outcomes$is_elite_outcome, na.rm = TRUE)
+baseline_all <- mean(ngs_with_outcomes$is_hit, na.rm = TRUE)
 
 cat(paste0(
-  "Across all positions, players who were blue chips by **both** definitions achieved elite outcomes at **",
-  round(mean(both_all$is_elite_outcome, na.rm = TRUE) * 100, 1),
-  "%**. Pre-draft-only blue chips still hit at **",
-  round(mean(ngs_only_all$is_elite_outcome, na.rm = TRUE) * 100, 1),
+  "Across all positions, players who were blue chips by **both** definitions became starters at **",
+  round(mean(both_all$is_hit, na.rm = TRUE) * 100, 1),
+  "%**. Pre-draft-only blue chips hit at **",
+  round(mean(ngs_only_all$is_hit, na.rm = TRUE) * 100, 1),
   "%** — compared to a baseline of **", round(baseline_all * 100, 1),
   "%** across all players with NGS scores.\n\n",
   "The pre-draft signal isn't equally useful everywhere — it's strongest at positions ",
@@ -1153,109 +1149,9 @@ That's the honest answer. Not a prescription, but an acknowledgment that the mod
 
 ---
 
-## Argument 4: Market Inefficiency — "Actually, the Market Is Mostly Right"
-
-This was supposed to be our strongest critique. Article 1 used second-contract value as a key component of the Sharpe ratio. If the market overvalues some positions and undervalues others, the whole framework falls apart -- maybe RBs just get underpaid relative to their production.
-
-We tested this by comparing second-contract APY to post-contract performance (average snap percentage after the second deal). If the market is efficient, players who got paid more should perform better afterward. If it's not, we'd see weak correlations.
-
-The data surprised us.
-
-```{r market-scatter, fig.height=9, fig.width=10}
-market_plot <- market_efficiency %>%
-  filter(!is.na(post_contract_avg_snap), !is.na(second_apy_cap_pct),
-         pos_group %in% key_positions) %>%
-  mutate(pos_group = factor(pos_group, levels = key_positions))
-
-cors <- market_plot %>%
-  group_by(pos_group) %>%
-  summarise(
-    cor = cor(second_apy_cap_pct, post_contract_avg_snap),
-    n = n(),
-    .groups = "drop"
-  ) %>%
-  mutate(label = paste0("r = ", round(cor, 2), " (n=", n, ")"))
-
-ggplot(market_plot, aes(x = second_apy_cap_pct, y = post_contract_avg_snap)) +
-  geom_point(alpha = 0.3, size = 1.5, color = "gray40") +
-  geom_smooth(method = "lm", se = TRUE, color = "#377EB8", linewidth = 1) +
-  geom_text(
-    data = cors,
-    aes(x = Inf, y = Inf, label = label),
-    hjust = 1.1, vjust = 1.5, size = 3.5, fontface = "bold", color = "#377EB8",
-    inherit.aes = FALSE
-  ) +
-  facet_wrap(~pos_group, scales = "free", ncol = 3) +
-  scale_x_continuous(labels = percent_format()) +
-  scale_y_continuous(labels = percent_format()) +
-  labs(
-    title = "Second Contract Value vs Post-Contract Performance",
-    subtitle = "Does the market price players correctly? Higher correlation = more efficient market",
-    x = "Second Contract APY (% of Cap)", y = "Post-Contract Avg Snap %"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(strip.text = element_text(face = "bold", size = 12))
-```
-
-The correlations range from moderate to strong across all positions. The market isn't perfect, but it's not randomly pricing players either.
-
-### Market Efficiency by Position
-
-```{r market-correlation-bar, fig.height=6, fig.width=10}
-all_cors <- market_efficiency %>%
-  filter(!is.na(post_contract_avg_snap), !is.na(second_apy_cap_pct)) %>%
-  group_by(pos_group) %>%
-  summarise(
-    cor = cor(second_apy_cap_pct, post_contract_avg_snap),
-    n = n(),
-    .groups = "drop"
-  ) %>%
-  mutate(pos_group = fct_reorder(pos_group, cor))
-
-ggplot(all_cors, aes(x = cor, y = pos_group, fill = pos_group)) +
-  geom_col(width = 0.6, alpha = 0.85) +
-  geom_text(aes(label = round(cor, 3)), hjust = -0.15, size = 3.8, fontface = "bold") +
-  scale_fill_manual(values = pos_colors) +
-  scale_x_continuous(limits = c(0, 1), expand = expansion(mult = c(0, 0.1))) +
-  labs(
-    title = "Market Efficiency: Correlation Between Contract Value and Performance",
-    subtitle = "Higher = market prices the position more accurately | Second contract APY vs post-contract snap %",
-    x = "Correlation (r)", y = NULL
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "none")
-```
-
-```{r market-narrative, results='asis'}
-qb_cor <- all_cors %>% filter(pos_group == "QB") %>% pull(cor)
-dl_cor <- all_cors %>% filter(pos_group == "DL") %>% pull(cor)
-rb_cor <- all_cors %>% filter(pos_group == "RB") %>% pull(cor)
-
-cat(paste0(
-  "**QB has the weakest market signal** (r = ", round(qb_cor, 3),
-  ") — the market struggles most to price quarterbacks, which makes sense given the ",
-  "position's boom-or-bust nature. **DL is the most efficiently priced** (r = ",
-  round(dl_cor, 3), "). RB sits at **", round(rb_cor, 3),
-  "** — one of the strongest correlations.\n\n",
-  "We came in hoping to argue that RBs are ",
-  "undervalued by the market — that the low Sharpe was an artifact of underpayment, not ",
-  "real low value. But the data says the opposite: **the market prices RBs accurately.** ",
-  "The low RB Sharpe isn't market noise -- it's real. The market agrees that the position, ",
-  "on average, produces less value per draft dollar. That actually **validates** Article 1 ",
-  "rather than undermining it.\n\n",
-  "But it also makes the blue-chip exception more meaningful. If the market is efficient, then ",
-  "the low Sharpe reflects the true average value of the position. The key word is *average*. ",
-  "When a blue-chip RB breaks through, the efficient market will pay them -- which means the ",
-  "blue chips who *do* get paid earned it. The market isn't broken. The model just can't see ",
-  "the difference between the average case and the exceptional one."
-))
-```
-
----
-
 ## What We Learned
 
-We set out to stress-test the Sharpe ratio, not to destroy it. Four arguments, three counter-arguments, one validation. Here's what we found.
+We set out to stress-test the Sharpe ratio, not to destroy it. Three arguments, three perspectives. Here's what we found.
 
 The Sharpe ratio is a powerful tool for general draft strategy. But it operates at the level of averages, and GMs operate at the level of specifics. The model can't account for three things: **roster context** (do you actually need this position?), **class variance** (is this a good year to draft it?), and **prospect separation** (is this prospect different from the rest?).
 
@@ -1279,7 +1175,7 @@ The counter-arguments don't destroy the model -- they define its edges. Here's w
 
 - **The aggregate advice is right; context determines the exceptions.** The Sharpe ratio is a compass, not a GPS. It points you in the right direction. But the last mile requires scouting, roster analysis, and class evaluation that no single metric can capture.
 
-- **The market is mostly efficient.** This validates the Sharpe framework rather than undermining it. Second-contract value reflects real performance, not market noise. When the model says a position has low returns, believe it — then check whether you're looking at the average or the exception.
+- **RBs produce immediately on rookie contracts.** This actually reinforces the Sharpe framework in a subtle way: RBs deliver their best production during their cheapest years. The rookie contract surplus is real — but it also means teams get the most value from an RB *before* the second contract the model measures. The model captures this: it's not that RBs are bad, it's that the position's value is front-loaded into the years where every pick is cheap.
 
 ---
 
@@ -1289,7 +1185,7 @@ The counter-arguments don't destroy the model -- they define its edges. Here's w
 
 **Hit definition (Article 1):** Snap-based quality measure. A "hit" is a player who plays above the positional snap threshold (75% of baseline snaps for their position). This measures whether a player became a starter.
 
-**Elite outcome (Article 2):** [Career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) (AV) from Pro Football Reference — a cumulative measure of total career contribution. An elite outcome is the top 25% (75th percentile) of career AV within a position group. This is a stricter bar than the snap-based hit: it measures who became *great*, not just who played. We use top 25% rather than top 10% to avoid circularity with the career blue-chip definition (top 10% career AV).
+**Blue-chip outcome measure:** For comparing blue-chip categories, we use Article 1's snap-based hit rate as the outcome (independent of career AV, which defines the career blue-chip group). [Career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) (AV) from Pro Football Reference is used for defining career blue chips (top 10% at position) but not as the outcome measure, to avoid circularity.
 
 **Blue-chip classification:** Two definitions used. Retrospective: top 10% of career AV within each position group. Prospective: top 10% of NGS Combined Score within each position group. Players meeting both criteria had the highest elite outcome rates.
 
@@ -1298,8 +1194,6 @@ The counter-arguments don't destroy the model -- they define its edges. Here's w
 **Class depth:** A class is "deep" if its count of Good+ prospects (NGS Combined Score >= 70) exceeds the position's median Good+ count across all years. "Thin" if below the median.
 
 **Roster needs:** A position is "filled" if the team had a starter who played above the hit threshold, earned a second contract above the free-agent replacement cost for the position, and was not on an expiring deal. A position is a "need" if it wasn't filled.
-
-**Market efficiency:** Correlation between second-contract APY (% of cap) and post-contract average snap percentage. Higher correlation indicates the market accurately prices player value.
 
 **Part 1:** Full methodology and interactive charts at [stranger9977.github.io/draft-sharpe-analysis](https://stranger9977.github.io/draft-sharpe-analysis/)
 
