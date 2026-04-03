@@ -246,6 +246,25 @@ best_starters <- best_starters |>
   left_join(HIT_THRESHOLDS, by = "pos_group") |>
   mutate(starter_is_hit = avg_snap_pct >= hit_threshold)
 
+# Get career value for quality gate
+player_car_av <- draft_all |>
+  select(pfr_player_id, car_av) |>
+  distinct()
+
+# Positional median car_av for quality threshold
+pos_quality_thresholds <- draft_all |>
+  filter(!is.na(car_av), car_av > 0) |>
+  group_by(pos_group) |>
+  summarise(quality_threshold = median(car_av), .groups = "drop")
+
+best_starters <- best_starters |>
+  left_join(player_car_av, by = "pfr_player_id") |>
+  left_join(pos_quality_thresholds, by = "pos_group") |>
+  mutate(
+    starter_is_quality = !is.na(car_av) & car_av >= quality_threshold,
+    starter_is_good = starter_is_hit & starter_is_quality
+  )
+
 # Normalize contract names for matching
 contracts_norm <- contracts |>
   mutate(player_norm = normalize_name(player)) |>
@@ -304,15 +323,15 @@ roster_needs <- roster_grid |>
   left_join(
     best_starters_with_contracts |>
       select(team, season, pos_group, pfr_player_id, avg_snap_pct,
-             starter_is_hit, contract_expiring),
+             starter_is_hit, starter_is_good, contract_expiring),
     by = c("team", "prior_season" = "season", "pos_group")
   ) |>
   mutate(
-    is_filled = !is.na(starter_is_hit) & starter_is_hit & !contract_expiring,
+    is_filled = !is.na(starter_is_good) & starter_is_good & !contract_expiring,
     is_need = !is_filled
   ) |>
   select(team, draft_season, pos_group, pfr_player_id, avg_snap_pct,
-         starter_is_hit, contract_expiring, is_filled, is_need)
+         starter_is_hit, starter_is_good, contract_expiring, is_filled, is_need)
 
 cat(sprintf("  Roster needs computed: %d team-season-position combos\n", nrow(roster_needs)))
 cat(sprintf("  Filled: %d (%.1f%%)  Needs: %d (%.1f%%)\n",
@@ -502,6 +521,47 @@ print(market_by_pos, n = Inf)
 
 write_csv(market_efficiency, "output/v2/market_efficiency.csv")
 cat("  Saved output/v2/market_efficiency.csv\n")
+
+# --- 6. NGS Prospect Scores (2025) -------------------------------------------
+
+cat("Loading NGS prospect scores...\n")
+ngs_prospects <- read_csv("data/ngs_prospect_scores_2025.csv", show_col_types = FALSE) |>
+  filter(CmbnScr != "-") |>
+  mutate(
+    CmbnScr = as.numeric(CmbnScr),
+    AthleteScr = as.numeric(AthleteScr),
+    ProdScr = as.numeric(ProdScr)
+  ) |>
+  select(player = playerFullName, position, college = College,
+         cmbn_score = CmbnScr, athlete_score = AthleteScr, prod_score = ProdScr) |>
+  mutate(
+    pos_group = case_when(
+      position == "DB" ~ "CB",
+      position == "OL" ~ "IOL",
+      position %in% names(POSITION_MAP) ~ POSITION_MAP[position],
+      TRUE ~ NA_character_
+    )
+  ) |>
+  filter(!is.na(pos_group))
+
+cat(sprintf("  %d prospects with NGS scores\n", nrow(ngs_prospects)))
+write_csv(ngs_prospects, "output/v2/ngs_prospects_2025.csv")
+
+# --- 7. Prospective Class Depth (Draft Capital) --------------------------------
+
+cat("Computing prospective class depth signals...\n")
+
+draft_capital_density <- draft_all |>
+  filter(season <= MAX_DRAFT_SEASON, round <= 3) |>
+  group_by(season, pos_group) |>
+  summarise(early_picks = n(), .groups = "drop")
+
+class_depth <- class_depth |>
+  left_join(draft_capital_density, by = c("season", "pos_group")) |>
+  mutate(early_picks = replace_na(early_picks, 0))
+
+write_csv(class_depth, "output/v2/class_depth.csv")
+cat("  Updated class_depth with draft capital density\n")
 
 cat("\n===================================\n")
 cat("V2 pipeline complete!\n")

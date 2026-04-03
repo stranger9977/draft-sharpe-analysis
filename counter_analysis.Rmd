@@ -1,6 +1,6 @@
 ---
-title: "When to Ignore the Sharpe Ratio"
-subtitle: "Stress-testing our NFL Draft model — and finding when it's wrong"
+title: "What the Sharpe Ratio Can't See"
+subtitle: "Stress-testing our NFL Draft model — and finding where it ends"
 output:
   html_document:
     toc: true
@@ -50,32 +50,31 @@ roster_needs <- read_csv("output/v2/roster_needs.csv", show_col_types = FALSE)
 team_efficiency <- read_csv("output/v2/team_efficiency_adjusted.csv", show_col_types = FALSE)
 r1_picks <- read_csv("output/v2/r1_picks_need_adjusted.csv", show_col_types = FALSE)
 market_efficiency <- read_csv("output/v2/market_efficiency.csv", show_col_types = FALSE)
+ngs_prospects <- read_csv("output/v2/ngs_prospects_2025.csv", show_col_types = FALSE)
 
 # Factor levels
 blue_chip <- blue_chip %>% mutate(tier = factor(tier, levels = tier_order))
 r1_picks <- r1_picks %>% mutate(tier = factor(tier, levels = tier_order))
 ```
 
-## The Model Was Right. And Useless.
+## The Model Was Right. And Incomplete.
 
 In [Part 1](https://stranger9977.github.io/draft-sharpe-analysis/), we built a quasi-Sharpe ratio for NFL draft picks. The math was clean. The conclusion was clear: **RB shows negative returns across all tiers -- never draft one in round 1.**
 
-We were wrong. Not about the math -- the averages hold. But averages hide the signal.
+The model is right on average. But GMs don't draft on average.
 
-This is Part 2: finding when the model's advice should be ignored.
+They draft in specific years, with specific rosters, facing specific prospects. A model that can't account for context isn't wrong -- it's incomplete. This is Part 2: an honest stress test that defines where Article 1's advice ends and judgment begins. Not to destroy the model, but to find its edges.
 
-The Sharpe ratio tells you what to do *in general*. GMs don't draft in general. They draft in specific years, with specific rosters, facing specific prospects. A model that can't account for context isn't wrong -- it's incomplete.
-
-We're going to stress-test Part 1 through four arguments:
+The gap between the model's advice and what teams actually do isn't always inefficiency -- sometimes it's intelligence. We tested four assumptions behind Part 1:
 
 ```{r assumptions-table, results='asis'}
 cat("
-| # | Assumption We Made | What Could Break It |
-|---|---|---|
-| 1 | Teams should always draft the highest-Sharpe position | Roster needs make some positions irrelevant |
-| 2 | All draft classes are interchangeable | Class depth varies wildly year to year |
-| 3 | All prospects at a position are fungible | Blue-chip prospects break the averages |
-| 4 | Second contracts measure real value | Market inefficiency could distort the signal |
+| Assumption We Made | What Could Break It |
+|---|---|
+| Teams should always draft the highest-Sharpe position | Roster needs make some positions irrelevant |
+| All draft classes are interchangeable | Class depth varies wildly year to year |
+| All prospects at a position are fungible | Blue-chip prospects break the averages |
+| Second contracts measure real value | Market inefficiency could distort the signal |
 ")
 ```
 
@@ -111,11 +110,11 @@ cat(paste0(
 
 ## Argument 1: Roster Needs — "The Bills Don't Need Another QB"
 
-Article 1 implicitly assumed that every team should always draft the highest-Sharpe position available. But the Bills had a quarterback. From 2014 through 2022, Buffalo's QB room was filled every single year -- EJ Manuel, Kyle Orton, Tyrod Taylor, Matt Barkley, then Josh Allen for three straight seasons.
+Article 1 implicitly assumed that every team should always draft the highest-Sharpe position available. But what if you already have a starter?
 
-Telling the Bills to draft a QB because "QB has the best top-10 Sharpe" is like telling a homeowner to buy another house because real estate has good returns. Context matters.
+The Bills are the perfect test case. From 2014 through 2022, Buffalo always had someone playing quarterback -- EJ Manuel, Kyle Orton, Tyrod Taylor, Matt Barkley, then Josh Allen. A snap-only model would say "QB is filled every year." But having a warm body at quarterback isn't the same as having a good one.
 
-We built a roster-need adjustment: if a team already has a starter at a position (is_filled = TRUE), drafting that position again gets penalized. If the position is a genuine need, the pick gets a bonus. Here's what the Bills' QB situation looked like:
+We added a quality gate: a position is only "filled" when the starter both plays above the snap threshold AND has above-median career value for the position. A bad QB who plays a lot doesn't count.
 
 ```{r bills-qb-timeline, fig.height=5, fig.width=10}
 bills_qb <- roster_needs %>%
@@ -129,7 +128,12 @@ bills_qb <- roster_needs %>%
       pfr_player_id == "AlleJo02" ~ "Josh Allen",
       TRUE ~ pfr_player_id
     ),
-    fill_label = if_else(is_filled, "Filled", "Need")
+    fill_label = if_else(is_filled, "Filled", "Need"),
+    quality_label = case_when(
+      starter_is_good ~ "Quality Starter",
+      starter_is_hit & !starter_is_good ~ "Playing, Not Good Enough",
+      TRUE ~ "No Starter"
+    )
   )
 
 ggplot(bills_qb, aes(x = draft_season, y = 1)) +
@@ -142,8 +146,8 @@ ggplot(bills_qb, aes(x = draft_season, y = 1)) +
   scale_x_continuous(breaks = 2014:2022) +
   coord_cartesian(ylim = c(0.3, 1.7)) +
   labs(
-    title = "Buffalo Bills: QB Was Filled Every Year (2014-2022)",
-    subtitle = "Our model would have told the Bills to draft QB every year — even with Josh Allen on the roster",
+    title = "Buffalo Bills: QB Need vs Filled (2014-2022, Quality Gate)",
+    subtitle = "Red = starter lacked quality despite playing | Green = quality starter in place",
     x = NULL, y = NULL, color = NULL
   ) +
   theme_minimal(base_size = 14) +
@@ -156,7 +160,7 @@ ggplot(bills_qb, aes(x = draft_season, y = 1)) +
   )
 ```
 
-QB was filled all nine years. The model's "always draft QB" advice would have been actively harmful for Buffalo.
+This is the interesting part. The model says QB has the best top-10 Sharpe. The Bills had a QB on the roster every year. But the quality gate reveals the truth: the model would have been **right** to tell them to draft QB in years where EJ Manuel or Matt Barkley were the answer -- and right to leave the position alone once Josh Allen arrived. The model's general advice ("draft QB") was correct in spirit, even when the roster looked superficially filled.
 
 ### How Need-Adjustment Changes the Rankings
 
@@ -293,6 +297,10 @@ ggplot(heatmap_data, aes(x = factor(season), y = pos_group, fill = hit_rate)) +
 
 The variance is the story. Some position-year combinations are bright green (loaded classes), others deep red (barren). A model that averages across all of them misses the point entirely.
 
+One honest caveat: this heatmap is retrospective. We can only know a class was "deep" after careers have played out. At draft time, nobody knew the 2017 RB class would produce six hits. So how useful is this in practice?
+
+More useful than you'd think -- but not because we can predict hit rates. Draft capital offers a real-time proxy: when the league spends more early picks on a position, the class tends to be deeper. It's not a crystal ball, but it's a signal GMs actually have on draft day.
+
 ### Deep vs Thin Classes: Same Position, Different Returns
 
 ```{r deep-vs-thin-bar, fig.height=6, fig.width=10}
@@ -397,7 +405,11 @@ cat(paste0(
   "Contrast that with 2010 (**0%**) or 2016 and 2018 -- thin classes where Ezekiel Elliott ",
   "and Saquon Barkley were drafted in the top 5. Zeke and Saquon were high picks *because* ",
   "they were the only standout RBs in weak classes, not because the position was a good bet that year.\n\n",
-  "The model says \"never draft RB.\" The data says \"it depends on the year.\""
+  "The model says \"never draft RB.\" The class data says \"it depends on the year.\" ",
+  "But we should be honest about the limitation: we can only label a class as deep or thin ",
+  "after the fact. Draft capital -- how many players the league takes early at a position -- ",
+  "is a real-time signal that correlates with class depth. When more RBs go in rounds 1-3, ",
+  "the class tends to be deeper. It's not proof, but it's the closest thing a GM has on draft night."
 ))
 ```
 
@@ -406,6 +418,8 @@ cat(paste0(
 ## Argument 3: Blue-Chip Prospects — "When the Talent Is Undeniable"
 
 The Sharpe ratio averages over all RB prospects. But not all prospects are created equal. Blue-chip prospects -- defined here as players who end up in the top 10% of career value at their position -- are a different animal entirely.
+
+A limitation we should acknowledge upfront: we defined "blue chip" using career approximate value, which means we can only identify these players in hindsight. This is a real problem for prescriptive advice. But it tells us something important about the model's blind spot: when an RB turns out to be elite, the position's low average Sharpe didn't matter. The question is whether we can spot these players prospectively -- and we'll return to that with the NGS data.
 
 ```{r blue-chip-rates, results='asis'}
 bc_summary <- blue_chip %>%
@@ -555,21 +569,82 @@ The upper-left quadrant is where the model is most likely wrong: blue-chip prosp
 
 In Part 1, we asked: *Should you draft Jeremiah Love at 10?*
 
-The model said no. RB has a deeply negative Sharpe in the top 10. But we've now shown that the answer depends on three things the model ignores:
+The model said no. RB has a deeply negative Sharpe in the top 10. But we've now shown that the answer depends on things the model can't see. And for the first time, we have a prospective signal to work with.
+
+### A Prospective Signal: NGS Prospect Scores
+
+We argued above that blue-chip status is only visible in hindsight. But NFL Next Gen Stats publishes composite prospect scores before the draft -- combining athletic testing, college production, and size metrics. This is the closest thing to a prospective blue-chip identifier that exists.
+
+```{r ngs-love-bar, fig.height=6, fig.width=10}
+ngs_rb <- ngs_prospects %>%
+  filter(pos_group == "RB", !is.na(cmbn_score)) %>%
+  arrange(desc(cmbn_score)) %>%
+  mutate(
+    is_love = str_detect(player, "(?i)love"),
+    player_label = paste0(player, " (", college, ")"),
+    player_label = fct_reorder(player_label, cmbn_score)
+  )
+
+ggplot(ngs_rb, aes(x = cmbn_score, y = player_label, fill = is_love)) +
+  geom_col(width = 0.7, alpha = 0.85) +
+  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 3.5, fontface = "bold") +
+  scale_fill_manual(values = c("TRUE" = "#377EB8", "FALSE" = "gray60"), guide = "none") +
+  scale_x_continuous(limits = c(0, 105), expand = expansion(mult = c(0, 0.05))) +
+  labs(
+    title = "2025 RB Prospects: NGS Combined Score",
+    subtitle = "Love's 94.3 is tied for #1 overall (all positions) with Sonny Styles | ProdScr: 95.9 (highest of any prospect)",
+    x = "NGS Combined Score", y = NULL
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+```{r ngs-love-narrative, results='asis'}
+love_row <- ngs_rb %>% filter(is_love) %>% slice(1)
+rb2_row <- ngs_rb %>% filter(!is_love) %>% slice_max(cmbn_score, n = 1)
+gap <- love_row$cmbn_score - rb2_row$cmbn_score
+
+cat(paste0(
+  "Love's NGS Combined Score of **", round(love_row$cmbn_score, 1),
+  "** is tied for #1 overall across all positions. His Production Score of **95.9** is the highest ",
+  "of any prospect in the 2025 class. The gap to RB2 (", rb2_row$player, " at ",
+  round(rb2_row$cmbn_score, 1), ") is **", round(gap, 1), " points** -- a chasm by NGS standards.\n\n",
+  "This is the prospective signal that the career-value analysis couldn't give us. We can't know ",
+  "if Love will be a blue chip. But the pre-draft data says he's separated from his class in a way ",
+  "that historically maps to elite outcomes."
+))
+```
+
+### The Data in Tension
+
+```{r love-bc-summary, results='asis'}
+bc_summary <- blue_chip %>%
+  filter(!is.na(is_hit)) %>%
+  group_by(pos_group) %>%
+  summarise(
+    all_hit = mean(is_hit),
+    blue_hit = mean(is_hit[is_blue_chip == TRUE]),
+    n_blue = sum(is_blue_chip == TRUE),
+    gap = mean(is_hit[is_blue_chip == TRUE]) - mean(is_hit),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(gap))
+```
 
 <div style="background-color: #f0f4f8; border-left: 4px solid #377EB8; padding: 15px 20px; margin: 20px 0; border-radius: 4px;">
 
-**1. Does your team need an RB?** If you already have a starter, the Sharpe ratio's general advice applies -- don't draft for surplus. But if you're running out James Conner on a one-year deal, the calculus changes.
+**The Sharpe ratio says:** RB is the worst first-round investment. Negative returns across every tier. Don't do it.
 
-**2. Is Love a blue chip?** Early 2025 scouting consensus has Love as the clear RB1 with significant separation from RB2. If he's truly a top-decile talent, his expected hit rate is closer to `r round(bc_summary %>% filter(pos_group == "RB") %>% pull(blue_hit) * 100, 1)`% than the `r round(bc_summary %>% filter(pos_group == "RB") %>% pull(all_hit) * 100, 1)`% the model uses.
+**The prospect model says:** Love is generational. Tied for the top NGS score in the class. A 17-point gap over RB2. Production score higher than any other prospect at any position.
 
-**3. Is the 2025 class thin?** If Love is the only blue-chip RB and the drop-off to RB2 is steep, waiting for Day 2 means accepting a non-blue-chip prospect -- and those hit at the base rate the model correctly identifies as poor.
+**The class signal says:** This is a thin RB class. If you pass on Love, the drop-off is steep.
+
+**The roster question says:** Does your team actually need an RB? If not, none of this matters.
 
 </div>
 
-If all three answers are yes -- and the early signals suggest they are -- then the Sharpe ratio's advice to avoid RB **doesn't apply**. The model is averaging over situations that don't look like this one.
+Does this mean you *should* draft Love at 10? The Sharpe ratio says no. The prospect model says he's generational. The class is thin. If your team needs an RB, the data is in tension -- and that tension is exactly what the Sharpe ratio can't resolve on its own.
 
-The irony: Article 1's math is what *proves* Article 1's conclusion is too simple. The same framework that shows RB is bad *on average* also shows that blue-chip RBs in thin classes are the exception.
+That's the honest answer. Not a prescription, but an acknowledgment that the model's average-case advice meets its limit when roster need, prospect separation, and class depth all point the other direction.
 
 ---
 
@@ -662,51 +737,36 @@ cat(paste0(
   "undervalued by the market — that the low Sharpe was an artifact of underpayment, not ",
   "real low value. But the data says the opposite: **the market prices RBs accurately.** ",
   "The low Sharpe ratio for RBs isn't a market distortion. It's real.\n\n",
-  "But here's why this *strengthens* arguments 2 and 3: if the market is efficient, then ",
+  "Here's the plot twist: this actually **validates** Article 1. The low RB Sharpe isn't market noise -- ",
+  "it's real. The market agrees that the position, on average, produces less value per draft dollar. ",
+  "That makes the original finding *stronger*, not weaker.\n\n",
+  "But it also makes the blue-chip exception more meaningful. If the market is efficient, then ",
   "the low Sharpe reflects the true average value of the position. The key word is *average*. ",
-  "Blue-chip RBs in thin classes are the exceptions to the average — and because the market ",
-  "is efficient, we can trust that the blue chips who *do* get paid earned it."
+  "When a blue-chip RB breaks through, the efficient market will pay them -- which means the ",
+  "blue chips who *do* get paid earned it. The market isn't broken. The model just can't see ",
+  "the difference between the average case and the exceptional one."
 ))
 ```
 
 ---
 
-## When to Follow vs Override the Sharpe Ratio
+## What We Learned
 
-We've tested four arguments against the model. Three cracked it open; one reinforced it. Here's the decision framework that emerges:
+We tested four arguments against the model. Three cracked it open; one reinforced it. Here's what emerged.
 
-<div style="background-color: #f0f4f8; border: 2px solid #377EB8; padding: 20px 25px; margin: 20px 0; border-radius: 8px; font-family: monospace; font-size: 14px; line-height: 2;">
+The Sharpe ratio is a powerful tool for general draft strategy, but it can't account for three things: **roster context**, **class variance**, and **prospect separation**. When those factors are extreme -- a genuine need, a thin class, a generational prospect -- the model's average-case advice may not apply.
 
-<span style="font-family: sans-serif; font-weight: bold; font-size: 16px; color: #377EB8;">The Override Decision Tree</span>
+But we should be honest about the limitation of our own counter-arguments. Roster needs require a quality gate that uses career value (retrospective). Class depth can only be measured after careers play out (retrospective). Blue-chip status is defined by career approximate value (retrospective). Even the NGS scores, our most prospective signal, have limited historical track record.
 
-**Is this position a real team need?**
-&nbsp;&nbsp;&nbsp;&nbsp;No &rarr; **Follow the Sharpe ratio.** Draft the highest-value position available.
+We can't prove prospectively that any specific pick will be the exception. That's the honest limitation. What we *can* say is that the model's blind spots are real and systematic, that teams responding to information the model doesn't have aren't always being irrational, and that the gap between optimal-on-average and optimal-in-context is where draft evaluation actually lives.
 
-&nbsp;&nbsp;&nbsp;&nbsp;Yes &darr;
-
-**Is this a blue-chip prospect (top 10% talent)?**
-&nbsp;&nbsp;&nbsp;&nbsp;No &rarr; **Follow the Sharpe ratio.** Average prospects regress to average outcomes.
-
-&nbsp;&nbsp;&nbsp;&nbsp;Yes &darr;
-
-**Is the class thin at this position?**
-&nbsp;&nbsp;&nbsp;&nbsp;No &rarr; **Follow the Sharpe ratio.** Comparable talent will be available later.
-
-&nbsp;&nbsp;&nbsp;&nbsp;Yes &darr;
-
-**OVERRIDE the Sharpe ratio. Take the blue chip.**
-
-</div>
-
-The framework is deliberately conservative. You need *all three* conditions to override: a real need, a blue-chip prospect, and a thin class. Miss any one, and the model's general advice holds.
-
-Most of the time, the Sharpe ratio is right. The exceptions are narrow — but when they occur, they're the picks that define drafts.
+Most of the time, the Sharpe ratio is right. The exceptions are narrow. But when they occur, they're the picks that define drafts.
 
 ---
 
-## What We Still Believe
+## What Survived the Stress Test
 
-Not everything from Part 1 fell apart. Here's what survived the stress test:
+The counter-arguments don't destroy the model -- they define its edges. Here's what held up:
 
 - **QB is still the best top-10 investment on average.** Nothing we found changes the overall positional hierarchy. If you need a QB and there's a blue-chip one available, take him without hesitation.
 
@@ -728,7 +788,7 @@ Not everything from Part 1 fell apart. Here's what survived the stress test:
 
 **Class depth:** A class is "deep" if its hit rate exceeds the position's median hit rate across all years in the sample. "Thin" otherwise.
 
-**Roster needs:** A position is "filled" if the team had a starter playing above the hit threshold at that position in the draft year. A position is a "need" if it wasn't filled.
+**Roster needs:** A position is "filled" if the team had a starter who both played above the hit threshold AND had above-median career value for the position (quality gate). A position is a "need" if it wasn't filled or if the starter's contract was expiring.
 
 **Market efficiency:** Correlation between second-contract APY (% of cap) and post-contract average snap percentage. Higher correlation indicates the market accurately prices player value.
 
