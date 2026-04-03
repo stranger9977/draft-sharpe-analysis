@@ -29,7 +29,7 @@ pos_colors <- c(
   "LB" = "#999999", "CB" = "#66C2A5", "S" = "#FC8D62"
 )
 
-tier_order <- c("Top 10", "Late 1st", "Day 2", "Day 3 Early", "Day 3 Late")
+tier_order <- c("Top 10", "Late 1st", "Round 2", "Round 3", "Rounds 4-7")
 key_positions <- c("QB", "RB", "WR", "TE", "EDGE", "OT")
 ```
 
@@ -91,7 +91,7 @@ We built a quasi-Sharpe ratio for NFL draft picks — a risk-adjusted measure of
 position is worth at each draft slot, accounting for rookie contract surplus, second-contract
 value, and supply-controlled free agency replacement costs. The model suggests that **QB
 produces the strongest risk-adjusted returns in the top 10**, while OT and EDGE peak in the
-late first round and WR offers the best value on Day 2. RB shows negative returns across
+late first round and WR offers the best value in Round 2. RB shows negative returns across
 all tiers in this framework — driven by cheap FA alternatives and a low contract ceiling.
 A large share of the total return from any draft pick comes from rookie contract surplus —
 getting starter production at a fraction of free agency cost for 4 years — rather than the
@@ -108,7 +108,7 @@ rb_fa <- fa_replacement %>% filter(pos_group == "RB")
 qb_top10 <- sharpe %>% filter(pos_group == "QB", tier == "Top 10") %>% pull(sharpe_elite)
 best_late1 <- sharpe %>% filter(tier == "Late 1st", !is.na(sharpe_elite)) %>%
   slice_max(sharpe_elite, n = 1)
-wr_day2 <- sharpe %>% filter(pos_group == "WR", tier == "Day 2") %>% pull(sharpe_elite)
+wr_day2 <- sharpe %>% filter(pos_group == "WR", tier == "Round 2") %>% pull(sharpe_elite)
 
 cat(paste0(
   "**No.** RB has a Sharpe of **", round(rb_top10$sharpe_elite, 2),
@@ -127,12 +127,12 @@ cat(paste0(
   "- **The opportunity cost is real.** QB leads all positions in top-10 Sharpe (",
   round(qb_top10, 2), "), and the best risk-adjusted slot in the draft is ",
   best_late1$pos_group, " in the late first (Sharpe: ",
-  round(best_late1$sharpe_elite, 2), "). Even a Day 2 WR (Sharpe: ",
+  round(best_late1$sharpe_elite, 2), "). Even a Round 2 WR (Sharpe: ",
   round(wr_day2, 2), ") shows stronger risk-adjusted returns than a top-10 RB. ",
   "Using a top-10 pick on RB means passing on positions where the model sees much ",
   "stronger returns.\n\n",
 
-  "If you need a running back, Day 2 or Day 3 Early gets you nearly equivalent production ",
+  "If you need a running back, Round 2 or Round 3 gets you nearly equivalent production ",
   "at a fraction of the draft capital cost.\n"
 ))
 ```
@@ -160,7 +160,7 @@ ggplot(sharpe, aes(x = tier, y = reorder(pos_group, sharpe_elite), fill = sharpe
 ```
 
 This is the whole story in one chart. Green cells are where the draft beats free agency;
-red cells are where it doesn't. Most of the green is in the late first and Day 2 — not the
+red cells are where it doesn't. Most of the green is in the late first and Round 2 — not the
 top 10. The rest of this analysis explains why.
 
 ---
@@ -274,7 +274,7 @@ surplus_data <- df_eligible %>%
     surplus_pct = median(rookie_surplus / player_return) * 100,
     .groups = "drop"
   ) %>%
-  filter(tier %in% c("Top 10", "Late 1st", "Day 2"))
+  filter(tier %in% c("Top 10", "Late 1st", "Round 2"))
 
 # Dumbbell chart — shows the gap between rookie surplus and second contract
 dumbbell_data <- surplus_data %>%
@@ -420,11 +420,11 @@ rb_top <- contracts %>%
 
 rb_sharpe <- sharpe %>% filter(pos_group == "RB")
 rb_top10 <- rb_sharpe %>% filter(tier == "Top 10")
-wr_day2 <- sharpe %>% filter(pos_group == "WR", tier == "Day 2")
+wr_day2 <- sharpe %>% filter(pos_group == "WR", tier == "Round 2")
 
 best_rb_return <- df_eligible %>% filter(pos_group == "RB", tier == "Top 10") %>%
   slice_max(player_return, n = 1)
-med_wr_day2 <- df_eligible %>% filter(pos_group == "WR", tier == "Day 2") %>%
+med_wr_day2 <- df_eligible %>% filter(pos_group == "WR", tier == "Round 2") %>%
   summarise(med = median(player_return)) %>% pull(med)
 
 cat(paste0(
@@ -435,12 +435,12 @@ cat(paste0(
 
   "This shows up clearly in our data. The **best top-10 RB return in our dataset** (",
   best_rb_return$pfr_player_name, ": ", round(best_rb_return$player_return, 3),
-  ") barely matches the **median Day 2 WR** (", round(med_wr_day2, 3), "). ",
+  ") barely matches the **median Round 2 WR** (", round(med_wr_day2, 3), "). ",
   "Names like DK Metcalf (pick 64), Davante Adams (pick 53), and A.J. Brown (pick 51) ",
   "all returned more than any top-10 RB since 2009.\n\n",
 
   "**RB Top 10 Sharpe: ", round(rb_top10$sharpe_elite, 2), "** vs ",
-  "**WR Day 2 Sharpe: ", round(wr_day2$sharpe_elite, 2), "**\n\n",
+  "**WR Round 2 Sharpe: ", round(wr_day2$sharpe_elite, 2), "**\n\n",
 
   "Why? Two reasons:\n\n",
   "1. **Tiny rookie surplus.** FA RBs cost just ",
@@ -452,7 +452,7 @@ cat(paste0(
   "% of cap, while top WRs command ~",
   round(max(df_eligible %>% filter(pos_group == "WR") %>% pull(second_apy_cap_pct)) * 100),
   "%. The upside is structurally capped.\n\n",
-  "In this framework, a Day 2 WR looks like a substantially better risk-adjusted investment ",
+  "In this framework, a Round 2 WR looks like a substantially better risk-adjusted investment ",
   "than a top-10 RB — though this model measures contract value, not on-field impact, a ",
   "distinction that matters most for running backs.\n"
 ))
@@ -462,7 +462,7 @@ cat(paste0(
 compare_data <- df_eligible %>%
   filter(
     (pos_group == "RB" & tier == "Top 10") |
-    (pos_group == "WR" & tier == "Day 2")
+    (pos_group == "WR" & tier == "Round 2")
   ) %>%
   mutate(label = paste(pos_group, tier)) %>%
   arrange(label, player_return) %>%
@@ -473,10 +473,10 @@ compare_data <- df_eligible %>%
 ggplot(compare_data, aes(x = player_return, y = label, color = label)) +
   geom_jitter(height = 0.15, size = 3, alpha = 0.7) +
   geom_boxplot(alpha = 0.2, outlier.shape = NA, width = 0.4) +
-  scale_color_manual(values = c("RB Top 10" = "#377EB8", "WR Day 2" = "#4DAF4A")) +
+  scale_color_manual(values = c("RB Top 10" = "#377EB8", "WR Round 2" = "#4DAF4A")) +
   scale_x_continuous(labels = percent_format()) +
   labs(
-    title = "Top-10 RB vs Day 2 WR: Every Player's Return",
+    title = "Top-10 RB vs Round 2 WR: Every Player's Return",
     subtitle = "Each dot is a drafted player | Box = median and IQR",
     x = "Player Return (Cap %)", y = NULL, color = NULL
   ) +
@@ -495,7 +495,7 @@ scarcity and prospect quality can justify going early.
 ```{r draft-capital-chart, fig.height=6}
 dc_plot <- sharpe %>%
   filter(pos_group %in% c("QB", "OT", "EDGE", "CB", "WR"),
-         tier %in% c("Top 10", "Late 1st", "Day 2")) %>%
+         tier %in% c("Top 10", "Late 1st", "Round 2")) %>%
   mutate(pos_group = factor(pos_group, levels = c("QB", "OT", "EDGE", "CB", "WR")))
 
 ggplot(dc_plot, aes(x = tier, y = sharpe_elite, color = pos_group, group = pos_group)) +
@@ -515,14 +515,14 @@ ggplot(dc_plot, aes(x = tier, y = sharpe_elite, color = pos_group, group = pos_g
 ```{r draft-capital, results='asis'}
 tiers <- sharpe %>%
   select(pos_group, tier, sharpe_elite) %>%
-  filter(tier %in% c("Top 10", "Late 1st", "Day 2")) %>%
+  filter(tier %in% c("Top 10", "Late 1st", "Round 2")) %>%
   pivot_wider(names_from = tier, values_from = sharpe_elite) %>%
   filter(!is.na(`Top 10`)) %>%
   mutate(
     category = case_when(
       `Top 10` > 0 & `Late 1st` > `Top 10` ~ "Good early, better late",
       `Top 10` > 0 ~ "Premium pick justified",
-      `Top 10` < 0 & (`Late 1st` > 0 | `Day 2` > 0) ~ "Wait — value is later",
+      `Top 10` < 0 & (`Late 1st` > 0 | `Round 2` > 0) ~ "Wait — value is later",
       TRUE ~ "Negative everywhere"
     )
   ) %>%
@@ -576,8 +576,8 @@ if (nrow(for_better_late) > 0) {
           "established supporting casts, and the hit rate stays strong enough to produce ",
           "elite outcomes.")
     } else if (row$pos_group == "WR") {
-      cat(" — WR talent is deep enough that Day 2 picks (Sharpe: ",
-          round(row$`Day 2`, 2), ") are competitive with the late first. ",
+      cat(" — WR talent is deep enough that Round 2 picks (Sharpe: ",
+          round(row$`Round 2`, 2), ") are competitive with the late first. ",
           "Names like DK Metcalf and Davante Adams came from this range.")
     }
     cat("\n")
@@ -593,12 +593,12 @@ if (nrow(for_wait) > 0) {
       "quality and team-specific needs can override this signal.\n\n")
   for (i in seq_len(nrow(for_wait))) {
     row <- for_wait[i, ]
-    best_later <- max(row$`Late 1st`, row$`Day 2`, na.rm = TRUE)
-    best_tier <- if_else(row$`Late 1st` >= row$`Day 2`, "Late 1st", "Day 2")
+    best_later <- max(row$`Late 1st`, row$`Round 2`, na.rm = TRUE)
+    best_tier <- if_else(row$`Late 1st` >= row$`Round 2`, "Late 1st", "Round 2")
     cat(paste0("- **", row$pos_group, "**: Top 10 = ", round(row$`Top 10`, 2),
                " → ", best_tier, " = ", round(best_later, 2)))
     if (row$pos_group == "CB") {
-      cat(" — CB is a boom-or-bust position in the top 10, but the late first and Day 2 ",
+      cat(" — CB is a boom-or-bust position in the top 10, but the late first and Round 2 ",
           "produce strong starters at a fraction of the capital cost.")
     } else if (row$pos_group == "DL") {
       cat(" — Interior defensive linemen develop well outside the top 10, and the FA market ",
@@ -616,7 +616,7 @@ if (nrow(neg_all) > 0) {
              " — these positions show negative Sharpe in every first-round slot. ",
              "The combination of low second-contract ceilings, cheap FA alternatives, or both ",
              "means this model doesn't see enough surplus to justify Round 1 capital. ",
-             "The data suggests Day 2, Day 3, or free agency as more efficient paths — though ",
+             "The data suggests Round 2, Round 3, or free agency as more efficient paths — though ",
              "elite individual prospects can always be exceptions.\n"))
 }
 ```
@@ -706,9 +706,9 @@ ggplot(eff_plot, aes(x = pos_group, y = pct, fill = type)) +
 # Top-10 picks where waiting was better
 wasted_top10 <- sharpe %>%
   select(pos_group, tier, sharpe_elite) %>%
-  filter(tier %in% c("Top 10", "Late 1st", "Day 2")) %>%
+  filter(tier %in% c("Top 10", "Late 1st", "Round 2")) %>%
   pivot_wider(names_from = tier, values_from = sharpe_elite) %>%
-  mutate(top10_is_best = `Top 10` >= pmax(`Late 1st`, `Day 2`, na.rm = TRUE)) %>%
+  mutate(top10_is_best = `Top 10` >= pmax(`Late 1st`, `Round 2`, na.rm = TRUE)) %>%
   filter(!top10_is_best | is.na(top10_is_best))
 
 top10_total <- df_eligible %>% filter(tier == "Top 10") %>% nrow()
@@ -847,7 +847,7 @@ best_top10 <- sharpe %>% filter(tier == "Top 10", !is.na(sharpe_elite)) %>%
   slice_max(sharpe_elite, n = 1)
 best_late1 <- sharpe %>% filter(tier == "Late 1st", !is.na(sharpe_elite)) %>%
   slice_max(sharpe_elite, n = 1)
-best_day2 <- sharpe %>% filter(tier == "Day 2", !is.na(sharpe_elite)) %>%
+best_day2 <- sharpe %>% filter(tier == "Round 2", !is.na(sharpe_elite)) %>%
   slice_max(sharpe_elite, n = 1)
 
 cat(paste0(
@@ -864,10 +864,10 @@ cat(paste0(
   "NFL-ready players, or simply cheaper draft capital — the model can't distinguish between ",
   "these explanations.\n\n",
 
-  "3. **WR value appears concentrated on Day 2.** The best WR Sharpe (",
-  round(best_day2$sharpe_elite, 2), " on Day 2) suggests that comparable WR production is ",
+  "3. **WR value appears concentrated in Round 2.** The best WR Sharpe (",
+  round(best_day2$sharpe_elite, 2), " in Round 2) suggests that comparable WR production is ",
   "available later in the draft. Players like DK Metcalf (pick 64) and Davante Adams (pick 53) ",
-  "illustrate this, though Day 2 WRs also bust at higher rates.\n\n",
+  "illustrate this, though Round 2 WRs also bust at higher rates.\n\n",
 
   "4. **RB shows negative Sharpe across all tiers** in this framework. The combination of ",
   "cheap FA alternatives and a low second-contract ceiling drives this. ",

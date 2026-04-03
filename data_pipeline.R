@@ -58,7 +58,7 @@ POSITION_MAP <- c(
 )
 
 TIER_BREAKS <- c(0, 10, 32, 64, 100, Inf)
-TIER_LABELS <- c("Top 10", "Late 1st", "Day 2", "Day 3 Early", "Day 3 Late")
+TIER_LABELS <- c("Top 10", "Late 1st", "Round 2", "Round 3", "Rounds 4-7")
 
 # Hit thresholds: 75% of positional baseline snap % (tightened from Riske's
 # 2/3 to better align with elite-probability Sharpe formulation)
