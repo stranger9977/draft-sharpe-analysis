@@ -10,6 +10,32 @@ output:
 knit: (function(input, ...) rmarkdown::render(input, output_dir = dirname(input), ...))
 ---
 
+```{css mobile-styles, echo=FALSE}
+img {
+  max-width: 100%;
+  height: auto;
+}
+@media (max-width: 768px) {
+  .main-container {
+    max-width: 100% !important;
+    padding: 10px !important;
+  }
+  img {
+    width: 100% !important;
+    height: auto !important;
+  }
+  table {
+    font-size: 12px;
+  }
+  h1 { font-size: 1.6em; }
+  h2 { font-size: 1.3em; }
+  h3 { font-size: 1.1em; }
+  .gt_table {
+    font-size: 12px !important;
+  }
+}
+```
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
   echo = FALSE, warning = FALSE, message = FALSE,
@@ -183,14 +209,16 @@ top10_rb %>%
 
 ```{r rb-top10-commentary, results='asis'}
 top10_rb_data <- player_lookup %>% filter(pos_group == "RB", pick <= 10, season <= 2022)
+best_rb <- top10_rb_data %>% slice_max(player_return, n = 1)
+second_rb <- top10_rb_data %>% arrange(desc(player_return)) %>% slice(2)
 
 cat(paste0(
   "Five of seven became starters — the hit rate (",
   percent(mean(top10_rb_data$is_hit), accuracy = 1),
-  ") is solid. But **zero produced an elite return**. Even Christian McCaffrey — ",
-  "arguably the best-case RB outcome in a generation — returned ",
-  percent(max(top10_rb_data$player_return), accuracy = 0.1),
-  ", still short of the ", percent(elite_threshold, accuracy = 0.1), " elite threshold.\n\n",
+  ") is solid. But **zero produced an elite return**. The highest return belongs to ",
+  best_rb$pfr_player_name, " at ", percent(best_rb$player_return, accuracy = 0.1),
+  ", followed by ", second_rb$pfr_player_name, " at ", percent(second_rb$player_return, accuracy = 0.1),
+  " — both short of the ", percent(elite_threshold, accuracy = 0.1), " elite threshold.\n\n",
 
   "At pick #3, the positions that *do* produce elite returns are QB, EDGE, and OT — ",
   "the positions where top-10 Sharpe is positive. If you need a running back, ",
