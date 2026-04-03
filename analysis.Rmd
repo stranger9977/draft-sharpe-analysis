@@ -1037,10 +1037,8 @@ team_avg <- team_picks %>%
   arrange(desc(avg_sharpe))
 
 ggplot(team_avg, aes(x = reorder(team, avg_sharpe), y = avg_sharpe)) +
-  geom_col(aes(fill = avg_sharpe > 0), width = 0.7, show.legend = FALSE) +
   geom_nfl_wordmarks(aes(team_abbr = team), width = 0.065) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
-  scale_fill_manual(values = c("TRUE" = "#2196F3", "FALSE" = "#F44336")) +
   coord_flip() +
   labs(
     title = "Average Round 1 Sharpe Ratio by Team (2018–2022)",
