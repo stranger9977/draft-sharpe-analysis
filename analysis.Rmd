@@ -138,52 +138,73 @@ cat(paste0(
 ))
 ```
 
-### What About RB in the Top 5?
+### What About RB in the Top 10?
 
-```{r rb-top5, results='asis'}
-# All top-5 RBs in our dataset
-top5_rb <- player_lookup %>% filter(pos_group == "RB", pick >= 2, pick <= 5, season <= 2022)
-
-# All picks 2-5
-picks_2_5 <- player_lookup %>% filter(pick >= 2, pick <= 5, season <= 2022)
-picks_2_5_elite <- picks_2_5 %>% filter(player_return > elite_threshold)
-
+```{r rb-top10-table, results='asis'}
 cat(paste0(
   "Mock drafts have an RB going as high as **#3 overall** this year. Pick #3 falls in the ",
   "top-10 tier, where the Sharpe ratio for RB is **", round(rb_top10$sharpe_elite, 2),
   "** — the worst of any offensive position.\n\n",
-
-  "What does -0.62 mean in practice? Here are the ", nrow(top5_rb),
-  " RBs drafted at picks 2–5 since 2010:\n\n",
-
-  "| Player | Pick | Year | Hit? | Player Return |\n",
-  "|---|---|---|---|---|\n"
+  "What does that look like in practice? Here are all ", nrow(player_lookup %>% filter(pos_group == "RB", pick <= 10, season <= 2022)),
+  " RBs drafted in the top 10 since 2010:"
 ))
+```
 
-for (i in seq_len(nrow(top5_rb))) {
-  cat(paste0(
-    "| ", top5_rb$pfr_player_name[i],
-    " | #", top5_rb$pick[i],
-    " | ", top5_rb$season[i],
-    " | ", ifelse(top5_rb$is_hit[i], "Yes", "No"),
-    " | ", percent(top5_rb$player_return[i], accuracy = 0.1),
-    " |\n"
-  ))
-}
+```{r rb-top10-gt}
+top10_rb <- player_lookup %>%
+  filter(pos_group == "RB", pick <= 10, season <= 2022) %>%
+  arrange(desc(player_return)) %>%
+  mutate(
+    elite = player_return >= elite_threshold
+  ) %>%
+  select(pfr_player_name, pick, season, is_hit, player_return)
+
+top10_rb %>%
+  gt() %>%
+  cols_label(
+    pfr_player_name = "Player",
+    pick = "Pick",
+    season = "Year",
+    is_hit = "Hit?",
+    player_return = "Player Return"
+  ) %>%
+  fmt_percent(columns = player_return, decimals = 1) %>%
+  text_transform(
+    locations = cells_body(columns = is_hit),
+    fn = function(x) ifelse(x == "TRUE", "Yes", "No")
+  ) %>%
+  text_transform(
+    locations = cells_body(columns = pick),
+    fn = function(x) paste0("#", x)
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(rows = player_return == max(player_return))
+  ) %>%
+  tab_footnote(
+    footnote = paste0("Elite threshold: ", percent(elite_threshold, accuracy = 0.1),
+                      " | None of these players reached it."),
+    locations = cells_column_labels(columns = player_return)
+  ) %>%
+  tab_options(
+    table.width = pct(100),
+    table.font.size = 14
+  )
+```
+
+```{r rb-top10-commentary, results='asis'}
+top10_rb_data <- player_lookup %>% filter(pos_group == "RB", pick <= 10, season <= 2022)
 
 cat(paste0(
-  "\nThree of four became starters — the hit rate (",
-  percent(mean(top5_rb$is_hit), accuracy = 1),
-  ") is strong. But **none cracked the elite threshold** of ",
-  percent(elite_threshold, accuracy = 0.1),
-  ". The average return was just ", percent(mean(top5_rb$player_return), accuracy = 0.1),
-  " — roughly a third of what a top-5 QB produces.\n\n",
+  "Five of seven became starters — the hit rate (",
+  percent(mean(top10_rb_data$is_hit), accuracy = 1),
+  ") is solid. But **zero produced an elite return**. Even Christian McCaffrey — ",
+  "arguably the best-case RB outcome in a generation — returned ",
+  percent(max(top10_rb_data$player_return), accuracy = 0.1),
+  ", still short of the ", percent(elite_threshold, accuracy = 0.1), " elite threshold.\n\n",
 
-  "For context, across *all* positions drafted at picks 2–5 since 2010, the selections that produced ",
-  "elite returns were: ",
-  paste(picks_2_5_elite$pfr_player_name, paste0("(", picks_2_5_elite$pos_group, ", ", picks_2_5_elite$season, ")"), collapse = ", "),
-  ". Every one is a QB, EDGE, or OT — the positions where top-10 Sharpe is positive. ",
-  "The opportunity cost of using a top-5 pick on RB is not hypothetical; it's structural."
+  "The opportunity cost is real. At these same pick slots, the positions that *do* produce ",
+  "elite returns are QB, EDGE, and OT — the positions where top-10 Sharpe is positive."
 ))
 ```
 
