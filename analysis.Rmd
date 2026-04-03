@@ -430,6 +430,53 @@ ggplot(fa_plot, aes(x = reorder(pos_group, fa_median_apy_cap_pct),
   theme(legend.position = "none")
 ```
 
+For context, the chart above uses all available contract years to get stable estimates. But the FA market has shifted recently — here's what the same numbers look like using only 2020+ contracts:
+
+```{r fa-replacement-recent, fig.height=7}
+# Recompute FA replacement using only 2020+ contracts
+pos_map <- c(
+  "QB" = "QB", "RB" = "RB", "FB" = "RB", "WR" = "WR", "TE" = "TE",
+  "LT" = "OT", "RT" = "OT",
+  "LG" = "IOL", "RG" = "IOL", "C" = "IOL",
+  "ED" = "EDGE", "IDL" = "DL", "LB" = "LB", "CB" = "CB", "S" = "S"
+)
+
+contracts_all <- load_contracts() %>%
+  mutate(pos_group = pos_map[position]) %>%
+  filter(!is.na(pos_group), !is.na(apy_cap_pct), apy_cap_pct > 0.001)
+
+fa_recent <- fa_replacement %>%
+  pmap_dfr(function(pos_group, fa_median_apy_cap_pct, fa_mean_apy_cap_pct, fa_n, fa_top_n) {
+    contracts_all %>%
+      filter(pos_group == !!pos_group, year_signed >= 2020) %>%
+      group_by(year_signed) %>%
+      slice_max(apy_cap_pct, n = fa_top_n, with_ties = FALSE) %>%
+      ungroup() %>%
+      summarise(
+        pos_group = !!pos_group,
+        fa_median_recent = median(apy_cap_pct, na.rm = TRUE),
+        fa_top_n = fa_top_n
+      )
+  })
+
+ggplot(fa_recent, aes(x = reorder(pos_group, fa_median_recent),
+                      y = fa_median_recent, fill = pos_group)) +
+  geom_col(width = 0.7) +
+  geom_text(aes(label = paste0(percent(fa_median_recent, accuracy = 0.1),
+                                "\n(top ", fa_top_n, "/yr)")),
+            hjust = -0.1, size = 3.2) +
+  scale_fill_manual(values = pos_colors) +
+  scale_y_continuous(labels = percent_format(), expand = expansion(mult = c(0, 0.25))) +
+  coord_flip() +
+  labs(
+    title = "Free Agency Replacement Cost by Position (2020+)",
+    subtitle = "Same methodology, recent contracts only — WR replacement has jumped from 7.9% to 10.1%",
+    x = NULL, y = "Median APY (% of Cap)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "none")
+```
+
 ## Sharpe Ratio Curves
 
 How does the Sharpe ratio decay as you move to later tiers? QB separates immediately.
