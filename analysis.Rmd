@@ -1005,22 +1005,72 @@ team_avg <- team_picks %>%
   filter(n_picks >= 2) %>%
   arrange(desc(avg_sharpe))
 
-# Join team colors
-team_avg <- team_avg %>%
-  left_join(teams %>% select(team_abbr, team_color), by = c("team" = "team_abbr"))
-
 ggplot(team_avg, aes(x = reorder(team, avg_sharpe), y = avg_sharpe)) +
-  geom_col(aes(fill = team_color), width = 0.7, show.legend = FALSE) +
+  geom_col(aes(fill = avg_sharpe > 0), width = 0.7, show.legend = FALSE) +
+  geom_nfl_wordmarks(aes(team_abbr = team), width = 0.065) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
-  scale_fill_identity() +
+  scale_fill_manual(values = c("TRUE" = "#2196F3", "FALSE" = "#F44336")) +
   coord_flip() +
   labs(
     title = "Average Round 1 Sharpe Ratio by Team (2018–2022)",
-    subtitle = "How well has each team allocated first-round capital? | Min 2 R1 picks",
+    subtitle = "How well has each team allocated first-round capital? | Last 5 eligible draft classes",
     x = NULL, y = "Average Sharpe of R1 Picks"
   ) +
-  theme_minimal(base_size = 13) +
-  theme(axis.text.y = element_text(face = "bold", size = 10))
+  theme_minimal(base_size = 13)
+```
+
+```{r team-efficiency-later-rounds, fig.height=7, fig.width=12}
+# For rounds 2-7, use RELATIVE Sharpe (above/below round average)
+# so the bars have meaningful blue/red spread instead of all red
+team_picks_all <- df_eligible %>%
+  filter(season >= 2018) %>%
+  left_join(
+    sharpe %>% select(pos_group, tier, sharpe_elite),
+    by = c("pos_group", "tier")
+  ) %>%
+  mutate(sharpe_elite = replace_na(sharpe_elite, 0)) %>%
+  # Compute relative Sharpe within each tier
+  group_by(tier) %>%
+  mutate(tier_mean = mean(sharpe_elite), relative_sharpe = sharpe_elite - tier_mean) %>%
+  ungroup() %>%
+  mutate(
+    draft_round = case_when(
+      pick <= 32 ~ "Round 1",
+      pick <= 64 ~ "Round 2",
+      pick <= 100 ~ "Round 3",
+      TRUE ~ "Rounds 4-7"
+    ),
+    draft_round = factor(draft_round, levels = c("Round 1", "Round 2", "Round 3", "Rounds 4-7"))
+  )
+
+# For R2/R3/R4-7, compute average relative Sharpe per team
+team_later <- team_picks_all %>%
+  filter(draft_round != "Round 1") %>%
+  group_by(team, draft_round) %>%
+  summarise(
+    n_picks = n(),
+    avg_relative = mean(relative_sharpe),
+    .groups = "drop"
+  ) %>%
+  filter(n_picks >= 3)
+
+ggplot(team_later, aes(x = reorder(team, avg_relative), y = avg_relative)) +
+  geom_col(aes(fill = avg_relative > 0), width = 0.7, show.legend = FALSE) +
+  geom_nfl_wordmarks(aes(team_abbr = team), width = 0.055) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  scale_fill_manual(values = c("TRUE" = "#2196F3", "FALSE" = "#F44336")) +
+  facet_wrap(~draft_round, scales = "free_y") +
+  coord_flip() +
+  labs(
+    title = "Positional Allocation vs. Round Average (2018–2022)",
+    subtitle = "Blue = drafting above-average Sharpe positions for that round | Red = below | Min 3 picks per round",
+    x = NULL, y = "Avg Relative Sharpe (vs. Round Mean)"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    strip.text = element_text(face = "bold", size = 12),
+    panel.spacing = unit(0.8, "lines")
+  )
 ```
 
 ```{r team-efficiency-commentary, results='asis'}
@@ -1034,13 +1084,18 @@ cat(paste0(
   ". Over 5 draft classes, that's not randomness — it's positional philosophy. ",
   "Teams at the top are investing Round 1 capital in QB, EDGE, and OT — the positions ",
   "where the Sharpe ratio is actually positive. Teams at the bottom are spending premium picks ",
-  "on positions where the data says free agency is a better path."
+  "on positions where the data says free agency is a better path.\n\n",
+  "**In the later rounds**, the chart shifts to *relative* Sharpe — how well each team targets ",
+  "the best-available positions for that round. Since almost every position has negative absolute Sharpe ",
+  "after Round 1, what matters is whether you're picking the positions that are above or below the ",
+  "round average. A team in blue isn't necessarily finding elite talent — they're making the best ",
+  "of the capital they have."
 ))
 ```
 
-## The Draft Curve: Best Positional Bets by Round
+## Best Positional Bets by Round
 
-The team chart shows *who* gets it right in Round 1. But teams draft in every round — and they have to make the pick. The question isn't "should you draft at all in Round 3?" — it's "**given that you're picking in Round 3, which positions give you the best relative return?**"
+The team charts show *who* gets it right. But teams draft in every round — and they have to make the pick. The question isn't "should you draft at all in Round 3?" — it's "**given that you're picking in Round 3, which positions give you the best relative return?**"
 
 To answer that, I measure each position's Sharpe *relative to the round average*. This controls for the fact that later rounds naturally have lower absolute Sharpe, and surfaces which positions are the best and worst bets at each stage of the draft.
 
@@ -1077,37 +1132,6 @@ ggplot(relative_sharpe, aes(x = tier, y = fct_reorder(pos_group, relative, .fun 
   )
 ```
 
-```{r draft-curve-lines, fig.height=7, fig.width=10}
-# Line chart: each position's relative Sharpe across rounds — the actual "curve"
-curve_lines <- relative_sharpe %>%
-  filter(pos_group %in% key_positions) %>%
-  mutate(
-    tier_num = as.numeric(tier),
-    pos_group = factor(pos_group, levels = key_positions)
-  )
-
-ggplot(curve_lines, aes(x = tier, y = relative, color = pos_group, group = pos_group)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
-  geom_line(linewidth = 1.2) +
-  geom_point(size = 3.5) +
-  geom_text(
-    data = curve_lines %>% filter(tier == "Rounds 4-7"),
-    aes(label = pos_group), hjust = -0.3, fontface = "bold", size = 4, show.legend = FALSE
-  ) +
-  scale_color_manual(values = pos_colors[key_positions]) +
-  scale_x_discrete(expand = expansion(mult = c(0.05, 0.15))) +
-  labs(
-    title = "The Draft Curve: How Positional Value Shifts Across Rounds",
-    subtitle = "Sharpe relative to round average | Above the line = better bet than average for that round",
-    x = NULL, y = "Relative Sharpe (vs. Round Avg)", color = NULL
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(
-    legend.position = "none",
-    panel.grid.minor = element_blank()
-  )
-```
-
 ```{r draft-curve-narrative, results='asis'}
 # Biggest misallocations in R1
 r1_relative <- relative_sharpe %>% filter(tier %in% c("Top 10", "Late 1st"))
@@ -1118,7 +1142,7 @@ most_underdrafted <- r1_relative %>% filter(relative > 0) %>% arrange(desc(relat
 r3_best <- relative_sharpe %>% filter(tier == "Round 3") %>% slice_max(relative, n = 1)
 
 cat(paste0(
-  "**The heatmap tells the real story.** In Round 1, QB, EDGE, and OT are significantly above the round ",
+  "**In Round 1**, QB, EDGE, and OT are significantly above the round ",
   "average — these are the positions where early draft capital pays off. Meanwhile, positions like ",
   most_overdrafted$pos_group[1], " and ", most_overdrafted$pos_group[2],
   " are the worst relative bets in the first round.\n\n",
@@ -1131,7 +1155,7 @@ cat(paste0(
 
   "**The takeaway for GMs:** it's not just about which positions to draft — it's about *when*. ",
   "The same position can be a great bet in one round and a terrible one in another. ",
-  "The draft curve shows that teams systematically overdraft certain positions early and underdraft ",
+  "Teams systematically overdraft certain positions early and underdraft ",
   "others late, relative to what the returns actually justify."
 ))
 ```
