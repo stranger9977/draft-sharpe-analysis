@@ -7,6 +7,10 @@ output:
     toc: true
     toc_float: true
     self_contained: true
+    includes:
+      in_header: null
+header-includes:
+  - '<meta name="viewport" content="width=device-width, initial-scale=1">'
 knit: (function(input, ...) rmarkdown::render(input, output_dir = dirname(input), ...))
 ---
 
@@ -15,31 +19,38 @@ img {
   max-width: 100%;
   height: auto;
 }
+.main-container {
+  max-width: 960px;
+}
+table {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
 @media (max-width: 768px) {
   .main-container {
     max-width: 100% !important;
-    padding: 10px !important;
+    padding: 8px !important;
   }
   img {
     width: 100% !important;
     height: auto !important;
   }
-  table {
-    font-size: 12px;
+  table, .gt_table {
+    font-size: 11px !important;
   }
-  h1 { font-size: 1.6em; }
-  h2 { font-size: 1.3em; }
+  h1 { font-size: 1.5em; }
+  h2 { font-size: 1.25em; }
   h3 { font-size: 1.1em; }
-  .gt_table {
-    font-size: 12px !important;
-  }
+  p, li { font-size: 14px; }
 }
 ```
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
   echo = FALSE, warning = FALSE, message = FALSE,
-  fig.width = 10, fig.height = 7, dpi = 300,
+  fig.width = 12, fig.height = 7, dpi = 150,
+  fig.retina = 2,
   fig.path = "charts/"
 )
 library(tidyverse)
