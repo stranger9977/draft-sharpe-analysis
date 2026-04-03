@@ -306,8 +306,22 @@ ggplot(dumbbell_data, aes(y = pos_group)) +
 
 ## Hit Rates by Position and Tier
 
-How often does a draft pick become a starter? This heatmap shows hit rates
-by position group and draft tier.
+How often does a draft pick become a starter? A "hit" means the player's average snap percentage over their first 4 NFL seasons reaches at least 75% of the positional baseline — the typical snap share for an established starter at that position. The baseline varies because positions share the field differently:
+
+| Position | Starter Baseline | 75% = Hit Threshold |
+|---|---|---|
+| IOL | 99.6% | 74.7% |
+| OT | 97.3% | 73.0% |
+| S | 95.2% | 71.4% |
+| LB / CB | 92.3% | 69.2% |
+| WR | 85.3% | 64.0% |
+| QB | 82.9% | 62.2% |
+| EDGE | 81.2% | 60.9% |
+| DL | 71.7% | 53.8% |
+| TE | 71.2% | 53.4% |
+| RB | 56.4% | 42.3% |
+
+RBs have the lowest bar because even a bellcow RB1 shares snaps on passing downs and in rotation — 56% is what a starter looks like. IOL starters almost never come off the field, so their bar is the highest. Snap % is averaged over **all expected games** across 4 seasons, so missed games due to injury count as zeros — availability matters.
 
 ```{r hit-rate-heatmap, fig.height=8}
 hit_rates <- sharpe %>%
