@@ -1131,29 +1131,34 @@ For RB specifically, we define "filled" using **snap-based production only**: do
 
 ```{r rb-need-snap-based, results='asis'}
 # Redefine RB need as snap-based only (no contract gate)
+# starter_is_hit can be NA (no starter found), treat NA as not filled
 rb_snap_needs <- roster_needs %>%
   filter(pos_group == "RB") %>%
   mutate(
-    snap_filled = starter_is_hit  # just snap threshold, no contract requirement
+    snap_filled = coalesce(starter_is_hit, FALSE)
   )
 
 rb_snap_by_team <- rb_snap_needs %>%
   group_by(team) %>%
   summarise(
-    need_rate = mean(!snap_filled, na.rm = TRUE),
+    need_rate = mean(!snap_filled),
     n_seasons = n(),
     .groups = "drop"
   )
 
-pct_always_need <- mean(rb_snap_by_team$need_rate == 1)
-pct_mostly_need <- mean(rb_snap_by_team$need_rate >= 0.5)
 avg_need <- mean(rb_snap_by_team$need_rate)
 teams_with_need <- rb_snap_by_team %>% filter(need_rate >= 0.5) %>% nrow()
+total_teams <- nrow(rb_snap_by_team)
+
+# Total team-seasons
+total_ts <- nrow(rb_snap_needs)
+need_ts <- sum(!rb_snap_needs$snap_filled)
 
 cat(paste0(
   "Based on this definition, what teams \"need\" an RB? Using snap-based production (no contract gate), ",
-  "**", round(avg_need * 100), "%** of team-seasons show RB as a need — meaning the team didn't have a ",
-  "starter-level back the prior year. **", teams_with_need, " of 32** teams needed an RB at least half the time.\n\n",
+  "**", round(need_ts / total_ts * 100), "%** of team-seasons show RB as a need — meaning the team didn't have a ",
+  "starter-level back the prior year. **", teams_with_need, " of ", total_teams,
+  "** teams needed an RB at least half the time.\n\n",
   "That's still a lot, which tells us something real: RB is a high-turnover position. ",
   "Backs get hurt, decline fast, and cycle through rosters more than QBs or OTs. ",
   "The need is genuine — it's not an artifact of our quality gate.\n\n",
@@ -1172,7 +1177,7 @@ The breakeven analysis tells us *where* in the first round Love makes sense (pic
 latest_season <- max(roster_needs$draft_season)
 recent_rb_needs <- roster_needs %>%
   filter(pos_group == "RB", draft_season == latest_season) %>%
-  mutate(snap_filled = starter_is_hit)
+  mutate(snap_filled = coalesce(starter_is_hit, FALSE))
 
 teams_needing_rb <- recent_rb_needs %>%
   filter(!snap_filled) %>%
@@ -1182,9 +1187,9 @@ n_needing <- length(teams_needing_rb)
 n_total <- nrow(recent_rb_needs)
 
 cat(paste0(
-  "In the most recent season of our data, **", n_needing, " of ", n_total,
-  "** teams lacked a starter-level RB by snap production. ",
-  "That's ", paste(teams_needing_rb, collapse = ", "), ".\n\n",
+  "In the most recent season of our data (", latest_season, "), **", n_needing, " of ", n_total,
+  "** teams lacked a starter-level RB by snap production",
+  if(n_needing > 0 & n_needing <= 15) paste0(": ", paste(teams_needing_rb, collapse = ", ")) else "", ".\n\n",
   "The case for Love is strongest when all three factors align: a team that genuinely needs ",
   "an RB, picking in the 6-10 range, where Love's elite profile and the thin class ",
   "justify accepting the negative positional Sharpe. Teams picking in the top 5 face too steep ",
