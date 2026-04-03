@@ -357,6 +357,33 @@ ggplot(round_hits, aes(x = round, y = hit_rate)) +
   theme_minimal(base_size = 14)
 ```
 
+Breaking this down by position and tier reveals where the hits are concentrated:
+
+```{r hit-rate-heatmap, fig.height=8}
+hit_rates <- sharpe %>%
+  select(pos_group, tier, hit_rate, n)
+
+ggplot(hit_rates, aes(x = tier, y = reorder(pos_group, hit_rate), fill = hit_rate)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(aes(label = paste0(round(hit_rate * 100), "%\n(n=", n, ")")),
+            size = 3.2, color = "white", fontface = "bold") +
+  scale_fill_gradient2(
+    low = "#c62828", mid = "#f9a825", high = "#2e7d32",
+    midpoint = 0.5, limits = c(0, 1),
+    labels = percent_format()
+  ) +
+  labs(
+    title = "Draft Hit Rates by Position Group and Tier",
+    subtitle = "Hit = average snap % over 4 seasons exceeds 75% positional baseline",
+    x = NULL, y = NULL, fill = "Hit Rate"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    panel.grid = element_blank()
+  )
+```
+
 ## Supply-Controlled Free Agency Replacement Cost
 
 The "risk-free rate" in the Sharpe ratio. Instead of drafting, a team could sign a free agent.
@@ -1042,35 +1069,6 @@ refined in future work.
 - **QB projection → bust-rate discount.** Explicitly modeling the NCAA-to-NFL translation failure rate for QBs could produce a more honest expected value, even though the math still favors taking the shot.
 
 ---
-
-## Appendix: Hit Rates by Position and Tier
-
-The detailed view — hit rates broken out by position group and draft tier (Top 10, Late 1st, Round 2, Round 3, Rounds 4-7).
-
-```{r hit-rate-heatmap, fig.height=8}
-hit_rates <- sharpe %>%
-  select(pos_group, tier, hit_rate, n)
-
-ggplot(hit_rates, aes(x = tier, y = reorder(pos_group, hit_rate), fill = hit_rate)) +
-  geom_tile(color = "white", linewidth = 0.5) +
-  geom_text(aes(label = paste0(round(hit_rate * 100), "%\n(n=", n, ")")),
-            size = 3.2, color = "white", fontface = "bold") +
-  scale_fill_gradient2(
-    low = "#c62828", mid = "#f9a825", high = "#2e7d32",
-    midpoint = 0.5, limits = c(0, 1),
-    labels = percent_format()
-  ) +
-  labs(
-    title = "Draft Hit Rates by Position Group and Tier",
-    subtitle = "Hit = average snap % over 4 seasons exceeds 75% positional baseline",
-    x = NULL, y = NULL, fill = "Hit Rate"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(
-    axis.text.x = element_text(angle = 30, hjust = 1),
-    panel.grid = element_blank()
-  )
-```
 
 ## Appendix: Round 1 Surplus Leaderboard
 
