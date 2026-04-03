@@ -1019,9 +1019,8 @@ ggplot(team_avg, aes(x = reorder(team, avg_sharpe), y = avg_sharpe)) +
   theme_minimal(base_size = 13)
 ```
 
-```{r team-efficiency-later-rounds, fig.height=7, fig.width=12}
+```{r team-efficiency-data-later}
 # For rounds 2-7, use RELATIVE Sharpe (above/below round average)
-# so the bars have meaningful blue/red spread instead of all red
 team_picks_all <- df_eligible %>%
   filter(season >= 2018) %>%
   left_join(
@@ -1029,7 +1028,6 @@ team_picks_all <- df_eligible %>%
     by = c("pos_group", "tier")
   ) %>%
   mutate(sharpe_elite = replace_na(sharpe_elite, 0)) %>%
-  # Compute relative Sharpe within each tier
   group_by(tier) %>%
   mutate(tier_mean = mean(sharpe_elite), relative_sharpe = sharpe_elite - tier_mean) %>%
   ungroup() %>%
@@ -1039,11 +1037,9 @@ team_picks_all <- df_eligible %>%
       pick <= 64 ~ "Round 2",
       pick <= 100 ~ "Round 3",
       TRUE ~ "Rounds 4-7"
-    ),
-    draft_round = factor(draft_round, levels = c("Round 1", "Round 2", "Round 3", "Rounds 4-7"))
+    )
   )
 
-# For R2/R3/R4-7, compute average relative Sharpe per team
 team_later <- team_picks_all %>%
   filter(draft_round != "Round 1") %>%
   group_by(team, draft_round) %>%
@@ -1054,23 +1050,33 @@ team_later <- team_picks_all %>%
   ) %>%
   filter(n_picks >= 3)
 
-ggplot(team_later, aes(x = reorder(team, avg_relative), y = avg_relative)) +
-  geom_col(aes(fill = avg_relative > 0), width = 0.7, show.legend = FALSE) +
-  geom_nfl_wordmarks(aes(team_abbr = team), width = 0.055) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
-  scale_fill_manual(values = c("TRUE" = "#2196F3", "FALSE" = "#F44336")) +
-  facet_wrap(~draft_round, scales = "free_y") +
-  coord_flip() +
-  labs(
-    title = "Positional Allocation vs. Round Average (2018–2022)",
-    subtitle = "Blue = drafting above-average Sharpe positions for that round | Red = below | Min 3 picks per round",
-    x = NULL, y = "Avg Relative Sharpe (vs. Round Mean)"
-  ) +
-  theme_minimal(base_size = 11) +
-  theme(
-    strip.text = element_text(face = "bold", size = 12),
-    panel.spacing = unit(0.8, "lines")
-  )
+make_round_chart <- function(data, round_label) {
+  d <- data %>% filter(draft_round == round_label)
+  ggplot(d, aes(x = reorder(team, avg_relative), y = avg_relative)) +
+    geom_col(aes(fill = avg_relative > 0), width = 0.7, show.legend = FALSE) +
+    geom_nfl_wordmarks(aes(team_abbr = team), width = 0.065) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+    scale_fill_manual(values = c("TRUE" = "#2196F3", "FALSE" = "#F44336")) +
+    coord_flip() +
+    labs(
+      title = paste0(round_label, ": Positional Allocation vs. Round Average (2018–2022)"),
+      subtitle = "Blue = above-average Sharpe positions for that round | Red = below | Min 3 picks",
+      x = NULL, y = "Avg Relative Sharpe (vs. Round Mean)"
+    ) +
+    theme_minimal(base_size = 13)
+}
+```
+
+```{r team-efficiency-r2, fig.height=9}
+make_round_chart(team_later, "Round 2")
+```
+
+```{r team-efficiency-r3, fig.height=9}
+make_round_chart(team_later, "Round 3")
+```
+
+```{r team-efficiency-r47, fig.height=9}
+make_round_chart(team_later, "Rounds 4-7")
 ```
 
 ```{r team-efficiency-commentary, results='asis'}
