@@ -814,7 +814,7 @@ cat(paste0(
 ))
 ```
 
-```{r ngs-2025-all-positions, fig.height=14, fig.width=12}
+```{r ngs-2025-all-positions, fig.height=16, fig.width=12}
 # Top 5 prospects by position in 2025 class
 top_2025_all <- ngs_prospects %>%
   filter(!is.na(cmbn_score), pos_group %in% key_positions) %>%
@@ -823,32 +823,37 @@ top_2025_all <- ngs_prospects %>%
   slice_head(n = 5) %>%
   ungroup() %>%
   mutate(
+    ngs_tier = case_when(
+      cmbn_score >= 90 ~ "Elite",
+      cmbn_score >= 70 ~ "Good",
+      cmbn_score >= 60 ~ "Average",
+      TRUE ~ "Below Avg"
+    ),
+    ngs_tier = factor(ngs_tier, levels = c("Elite", "Good", "Average", "Below Avg")),
     player_label = paste0(player, " (", college, ")"),
     player_label_unique = paste0(pos_group, "___", player_label),
     player_label_unique = fct_reorder(player_label_unique, cmbn_score),
-    is_top = row_number() <= 1,
     pos_group = factor(pos_group, levels = key_positions)
-  ) %>%
-  # Re-compute is_top within each position
-  group_by(pos_group) %>%
-  mutate(is_top = cmbn_score == max(cmbn_score)) %>%
-  ungroup()
+  )
 
-ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = is_top)) +
+ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85) +
   geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 2.5, fontface = "bold") +
-  scale_fill_manual(values = c("TRUE" = "#1565C0", "FALSE" = "gray60"), guide = "none") +
+  scale_fill_manual(
+    values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
+    name = "NGS Tier"
+  ) +
   scale_y_discrete(labels = function(x) str_remove(x, "^.*___")) +
-  scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
-  facet_wrap(~pos_group, scales = "free", ncol = 3) +
+  scale_x_continuous(limits = c(50, NA), expand = expansion(mult = c(0, 0.1))) +
+  facet_wrap(~pos_group, scales = "free_y", ncol = 3) +
   labs(
     title = "2025 Draft Class: Top 5 Prospects by NGS Combined Score, Every Position",
-    subtitle = "Blue = top prospect at position | How separated is #1 from the rest?",
+    subtitle = "Elite (90+) | Good (70-90) | Average (60-70) | Below Avg (<60) | X-axis starts at 50 to show separation",
     x = "NGS Combined Score", y = NULL
   ) +
   theme_minimal(base_size = 13) +
   theme(
-    legend.position = "none",
+    legend.position = "top",
     strip.text = element_text(face = "bold", size = 12)
   )
 ```
