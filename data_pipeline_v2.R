@@ -426,5 +426,82 @@ top_hurt <- team_eff_adjusted |>
          rank_original, rank_adjusted, rank_change)
 print(top_hurt, n = Inf)
 
+# --- 5. Market Efficiency -----------------------------------------------------
+
+cat("Computing market efficiency (post-contract performance)...\n")
+
+# Find second contract signing year for each player
+player_second_years <- df_eligible |>
+  filter(second_apy_cap_pct > 0) |>
+  mutate(name_norm = normalize_name(pfr_player_name)) |>
+  inner_join(
+    contracts |>
+      mutate(name_norm = normalize_name(player)) |>
+      select(name_norm, pos_group, year_signed, apy_cap_pct, years),
+    by = c("name_norm", "pos_group"),
+    relationship = "many-to-many"
+  ) |>
+  filter(
+    year_signed >= season + 2,
+    year_signed <= season + 6,
+    abs(apy_cap_pct - second_apy_cap_pct) < 0.005
+  ) |>
+  group_by(pfr_player_id) |>
+  slice_max(apy_cap_pct, n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  select(pfr_player_id, pfr_player_name, pos_group, draft_season = season,
+         second_apy_cap_pct, second_contract_year = year_signed,
+         contract_years = years)
+
+cat(sprintf("  Matched %d second contract signing years\n", nrow(player_second_years)))
+
+# Post-contract snap performance (2 seasons after signing)
+post_contract_snaps <- snaps_raw |>
+  select(season, week, pfr_player_id, offense_pct, defense_pct) |>
+  inner_join(
+    player_second_years |>
+      select(pfr_player_id, pos_group, second_contract_year),
+    by = "pfr_player_id"
+  ) |>
+  filter(
+    season >= second_contract_year,
+    season <= second_contract_year + 1
+  ) |>
+  mutate(
+    snap_pct = if_else(pos_group %in% offensive_groups, offense_pct, defense_pct)
+  ) |>
+  group_by(pfr_player_id) |>
+  summarise(
+    post_contract_games = n(),
+    post_contract_avg_snap = mean(snap_pct, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+market_efficiency <- player_second_years |>
+  left_join(post_contract_snaps, by = "pfr_player_id") |>
+  filter(!is.na(post_contract_avg_snap), post_contract_games >= 10) |>
+  left_join(HIT_THRESHOLDS, by = "pos_group") |>
+  mutate(
+    post_contract_snap_ratio = post_contract_avg_snap / hit_threshold
+  )
+
+# Position-level summary
+market_by_pos <- market_efficiency |>
+  group_by(pos_group) |>
+  summarise(
+    n = n(),
+    mean_second_contract = mean(second_apy_cap_pct),
+    mean_post_snap_ratio = mean(post_contract_snap_ratio),
+    cor_contract_snaps = cor(second_apy_cap_pct, post_contract_avg_snap, use = "complete.obs"),
+    .groups = "drop"
+  ) |>
+  arrange(cor_contract_snaps)
+
+cat("  Market efficiency by position:\n")
+print(market_by_pos, n = Inf)
+
+write_csv(market_efficiency, "output/v2/market_efficiency.csv")
+cat("  Saved output/v2/market_efficiency.csv\n")
+
 cat("\n===================================\n")
 cat("V2 pipeline complete!\n")
