@@ -714,7 +714,7 @@ OT and EDGE peak in the late first round — not the top 10.
 
 ```{r sharpe-curves, fig.height=7}
 sharpe_curves <- sharpe %>%
-  filter(pos_group %in% key_positions, !is.na(sharpe_elite))
+  filter(!is.na(sharpe_elite))
 
 ggplot(sharpe_curves, aes(x = tier, y = sharpe_elite, color = pos_group, group = pos_group)) +
   geom_line(linewidth = 1.3) +
