@@ -534,7 +534,7 @@ The challenge is defining "blue chip" without hindsight. [Career Approximate Val
 
 - **Pre-draft blue chip:** Top 10% of NGS Combined Score at the position (knowable before the draft)
 - **Career blue chip:** Top 10% of [career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) at the position (only knowable in hindsight)
-- **Elite outcome:** Top 10% of career AV at the position (90th percentile) -- a much stricter bar than Article 1's snap-based "hit," which measures whether a player became a starter. Snaps tell you who played; career AV tells you who was *great*.
+- **Elite outcome:** Top 25% of career AV at the position (75th percentile) -- a stricter bar than Article 1's snap-based "hit," which measures whether a player became a starter. Snaps tell you who played; career AV tells you who was *great*. We use top 25% rather than top 10% to avoid circularity with the career blue-chip definition.
 
 ### NGS Scores and Career Outcomes
 
@@ -543,7 +543,7 @@ ngs_with_outcomes <- blue_chip %>%
   filter(!is.na(cmbn_score), !is.na(is_hit), !is.na(car_av),
          pos_group %in% key_positions, season <= 2022) %>%
   group_by(pos_group) %>%
-  mutate(is_elite_outcome = car_av_pctl >= 0.90) %>%
+  mutate(is_elite_outcome = car_av_pctl >= 0.75) %>%
   ungroup()
 
 ggplot(ngs_with_outcomes, aes(x = cmbn_score, y = car_av, color = pos_group)) +
@@ -623,8 +623,8 @@ ggplot(bc_rb, aes(x = elite_rate, y = bc_type, fill = bc_type)) +
                      expand = expansion(mult = c(0, 0))) +
   labs(
     title = "RB: Elite Outcome Rate by Blue-Chip Definition",
-    subtitle = "Elite = top 10% career AV | Pre-draft BC = top 10% NGS | Career BC = top 10% career AV",
-    x = "Elite Outcome Rate (top 10% career AV)", y = NULL
+    subtitle = "Elite = top 25% career AV | Pre-draft BC = top 10% NGS | Career BC = top 10% career AV",
+    x = "Elite Outcome Rate (top 25% career AV)", y = NULL
   ) +
   theme_minimal(base_size = 14)
 ```
@@ -638,7 +638,7 @@ rb_baseline <- ngs_with_outcomes %>% filter(pos_group == "RB") %>%
 cat(paste0(
   "For RBs identified as blue chips by **both** pre-draft and career metrics, the elite outcome rate is **",
   round(mean(rb_both$is_elite_outcome, na.rm = TRUE) * 100, 1),
-  "%**. Pre-draft-only blue chips (high NGS but didn't reach top 10% career AV) still achieve elite outcomes at **",
+  "%**. Pre-draft-only blue chips (high NGS but didn't reach top 25% career AV) still achieve elite outcomes at **",
   round(mean(rb_ngs_only$is_elite_outcome, na.rm = TRUE) * 100, 1),
   "%** — compared to a baseline of **", round(rb_baseline * 100, 1),
   "%** for all RBs with NGS scores. The pre-draft signal is meaningful.\n\n",
@@ -663,8 +663,8 @@ ggplot(bc_other, aes(x = elite_rate, y = bc_type, fill = bc_type)) +
   facet_wrap(~pos_group, ncol = 2) +
   labs(
     title = "Elite Outcome Rate by Blue-Chip Definition: All Positions",
-    subtitle = "Elite = top 10% career AV | Pre-draft BC = top 10% NGS | Career BC = top 10% career AV",
-    x = "Elite Outcome Rate (top 10% career AV)", y = NULL
+    subtitle = "Elite = top 25% career AV | Pre-draft BC = top 10% NGS | Career BC = top 10% career AV",
+    x = "Elite Outcome Rate (top 25% career AV)", y = NULL
   ) +
   theme_minimal(base_size = 13) +
   theme(strip.text = element_text(face = "bold", size = 12))
@@ -1100,51 +1100,28 @@ cat(paste0(
 
 ### Every Team Needs an RB (And That's the Point)
 
-```{r all-team-rb-needs, fig.height=9, fig.width=10}
-# ALL teams RB need rate
+```{r all-team-narrative, results='asis'}
 all_rb_needs <- roster_needs %>%
   filter(pos_group == "RB") %>%
   group_by(team) %>%
-  summarise(
-    need_rate = mean(!is_filled, na.rm = TRUE),
-    n_seasons = n(),
-    .groups = "drop"
-  ) %>%
-  mutate(team = fct_reorder(team, need_rate))
+  summarise(need_rate = mean(!is_filled, na.rm = TRUE), .groups = "drop")
 
-ggplot(all_rb_needs, aes(x = need_rate, y = team, fill = need_rate)) +
-  geom_col(width = 0.6, alpha = 0.85) +
-  geom_nfl_logos(aes(x = need_rate + 0.02, team_abbr = team), width = 0.035) +
-  scale_fill_gradient(low = "#FFA726", high = "#c62828", guide = "none") +
-  scale_x_continuous(labels = percent_format(), limits = c(0, 1.15),
-                     expand = expansion(mult = c(0, 0))) +
-  labs(
-    title = "RB Is a Need for Almost Every Team, Almost Every Year",
-    subtitle = "% of seasons (2014-2022) where RB failed our quality gate | Quality = starter + premium 2nd contract + not expiring",
-    x = "% of Seasons RB Was a Need", y = NULL
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(axis.text.y = element_text(size = 8))
-```
-
-```{r all-team-narrative, results='asis'}
 pct_always_need <- mean(all_rb_needs$need_rate == 1)
 pct_mostly_need <- mean(all_rb_needs$need_rate >= 0.67)
 lowest_need <- all_rb_needs %>% slice_min(need_rate, n = 1)
 
 cat(paste0(
-  "This is the chart that reframes the entire conversation. **",
-  round(pct_always_need * 100), "%** of teams had RB as a need in *every single season*. **",
-  round(pct_mostly_need * 100), "%** had it as a need at least two-thirds of the time. ",
+  "Here's the twist that reframes the entire conversation: when we apply our quality gate to RB across all 32 teams, ",
+  "**", round(pct_always_need * 100), "%** of teams had RB as a need in *every single season* from 2014-2022. ",
+  "**", round(pct_mostly_need * 100), "%** had it as a need at least two-thirds of the time. ",
   "Even the team with the lowest RB need rate — ", lowest_need$team, " at ",
   round(lowest_need$need_rate * 100), "% — still needed an RB more often than not.\n\n",
-  "Why? Because the quality gate requires a starter who earned a **premium second contract**. ",
+  "Why is RB *always* a need? Because our quality gate requires a starter who earned a **premium second contract**. ",
   "And RBs almost never get premium second contracts — that's exactly what Article 1's Sharpe ratio measured. ",
-  "The position's low market value means almost no RB clears the quality gate, which means almost every team ",
-  "\"needs\" an RB by our definition, every year.\n\n",
+  "The position's low market value means almost no RB clears the quality gate.\n\n",
   "This is the Sharpe ratio's own logic turned back on itself. The model says RBs aren't worth premium draft capital. ",
   "The market agrees — it doesn't pay them. But that means the position is **perpetually unfilled** by the quality standard. ",
-  "If the need is universal, then the question isn't *whether* to invest in RB — it's whether THIS investment, ",
+  "The question isn't *whether* to invest in RB — every team needs one. It's whether THIS investment, ",
   "in THIS prospect, in THIS class, justifies accepting the negative positional Sharpe.\n\n",
   "For Love, the case is: his NGS profile matches the CMC/Gurley tier. The class is thin — a 17-point gap to RB2. ",
   "And at picks 6-10, historical elite RBs have returned above the opportunity cost. ",
@@ -1312,7 +1289,7 @@ The counter-arguments don't destroy the model -- they define its edges. Here's w
 
 **Hit definition (Article 1):** Snap-based quality measure. A "hit" is a player who plays above the positional snap threshold (75% of baseline snaps for their position). This measures whether a player became a starter.
 
-**Elite outcome (Article 2):** [Career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) (AV) from Pro Football Reference — a cumulative measure of total career contribution. An elite outcome is the top 10% (90th percentile) of career AV within a position group. This is a much stricter bar than the snap-based hit: it measures who became *great*, not just who played.
+**Elite outcome (Article 2):** [Career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) (AV) from Pro Football Reference — a cumulative measure of total career contribution. An elite outcome is the top 25% (75th percentile) of career AV within a position group. This is a stricter bar than the snap-based hit: it measures who became *great*, not just who played. We use top 25% rather than top 10% to avoid circularity with the career blue-chip definition (top 10% career AV).
 
 **Blue-chip classification:** Two definitions used. Retrospective: top 10% of career AV within each position group. Prospective: top 10% of NGS Combined Score within each position group. Players meeting both criteria had the highest elite outcome rates.
 
