@@ -100,7 +100,7 @@ second contract itself. These findings come with important caveats (see Assumpti
 end): snap share is an imperfect proxy for production, the model doesn't capture positional
 scarcity or team-specific needs, and some sample sizes are small.
 
-## So Should You Draft Jeremiah Love at 10?
+## What About Love at 3?
 
 ```{r love-hook, results='asis'}
 rb_top10 <- sharpe %>% filter(pos_group == "RB", tier == "Top 10")
@@ -111,9 +111,12 @@ best_late1 <- sharpe %>% filter(tier == "Late 1st", !is.na(sharpe_elite)) %>%
   slice_max(sharpe_elite, n = 1)
 wr_day2 <- sharpe %>% filter(pos_group == "WR", tier == "Round 2") %>% pull(sharpe_elite)
 
+n_top10_rb <- nrow(player_lookup %>% filter(pos_group == "RB", pick <= 10, season <= 2022))
+
 cat(paste0(
-  "**Probably not.** RB has a Sharpe of **", round(rb_top10$sharpe_elite, 2),
-  "** in the top 10 — deeply negative. Here's why:\n\n",
+  "Mock drafts have Jeremiah Love going as high as **#3 overall**. Pick #3 falls in the top-10 tier, ",
+  "where the Sharpe ratio for RB is **", round(rb_top10$sharpe_elite, 2),
+  "** — the worst of any offensive position. Here's why:\n\n",
 
   "- **Hit rate is fine** (", percent(rb_top10$hit_rate, accuracy = 0.1),
   ") — top-10 RBs usually become starters.\n",
@@ -129,23 +132,9 @@ cat(paste0(
   round(qb_top10, 2), "), and the best risk-adjusted slot in the draft is ",
   best_late1$pos_group, " in the late first (Sharpe: ",
   round(best_late1$sharpe_elite, 2), "). Even a Round 2 WR (Sharpe: ",
-  round(wr_day2, 2), ") shows stronger risk-adjusted returns than a top-10 RB. ",
-  "Using a top-10 pick on RB means passing on positions where the model sees much ",
-  "stronger returns.\n\n",
+  round(wr_day2, 2), ") shows stronger risk-adjusted returns than a top-10 RB.\n\n",
 
-  "If you need a running back, Round 2 or Round 3 gets you nearly equivalent production ",
-  "at a fraction of the draft capital cost.\n"
-))
-```
-
-### What About RB in the Top 10?
-
-```{r rb-top10-table, results='asis'}
-cat(paste0(
-  "Mock drafts have an RB going as high as **#3 overall** this year. Pick #3 falls in the ",
-  "top-10 tier, where the Sharpe ratio for RB is **", round(rb_top10$sharpe_elite, 2),
-  "** — the worst of any offensive position.\n\n",
-  "What does that look like in practice? Here are all ", nrow(player_lookup %>% filter(pos_group == "RB", pick <= 10, season <= 2022)),
+  "What does -0.62 look like in practice? Here are all ", n_top10_rb,
   " RBs drafted in the top 10 since 2010:"
 ))
 ```
@@ -203,8 +192,9 @@ cat(paste0(
   percent(max(top10_rb_data$player_return), accuracy = 0.1),
   ", still short of the ", percent(elite_threshold, accuracy = 0.1), " elite threshold.\n\n",
 
-  "The opportunity cost is real. At these same pick slots, the positions that *do* produce ",
-  "elite returns are QB, EDGE, and OT — the positions where top-10 Sharpe is positive."
+  "At pick #3, the positions that *do* produce elite returns are QB, EDGE, and OT — ",
+  "the positions where top-10 Sharpe is positive. If you need a running back, ",
+  "Round 2 or Round 3 gets you nearly equivalent production at a fraction of the draft capital cost."
 ))
 ```
 
