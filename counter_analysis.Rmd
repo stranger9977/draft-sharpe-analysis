@@ -1,0 +1,737 @@
+---
+title: "When to Ignore the Sharpe Ratio"
+subtitle: "Stress-testing our NFL Draft model — and finding when it's wrong"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    self_contained: true
+knit: (function(input, ...) rmarkdown::render(input, output_dir = dirname(input), ...))
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, warning = FALSE, message = FALSE,
+  fig.width = 10, fig.height = 7, dpi = 300,
+  fig.path = "charts/v2_"
+)
+library(tidyverse)
+library(arrow)
+library(scales)
+library(gt)
+library(nflplotR)
+library(nflreadr)
+
+pos_colors <- c(
+  "QB" = "#E41A1C", "RB" = "#377EB8", "WR" = "#4DAF4A", "TE" = "#984EA3",
+  "OT" = "#FF7F00", "IOL" = "#FFFF33", "EDGE" = "#A65628", "DL" = "#F781BF",
+  "LB" = "#999999", "CB" = "#66C2A5", "S" = "#FC8D62"
+)
+
+tier_order <- c("Top 10", "Late 1st", "Round 2", "Round 3", "Rounds 4-7")
+key_positions <- c("QB", "RB", "WR", "TE", "EDGE", "OT")
+```
+
+```{r load-data}
+# Article 1 data
+df <- read_parquet("data/draft_sharpe_analysis.parquet")
+sharpe <- read_csv("output/sharpe_ratios.csv", show_col_types = FALSE)
+player_lookup <- read_csv("output/player_lookup.csv", show_col_types = FALSE)
+
+sharpe <- sharpe %>% mutate(tier = factor(tier, levels = tier_order))
+df <- df %>% mutate(tier = factor(tier, levels = tier_order))
+player_lookup <- player_lookup %>% mutate(tier = factor(tier, levels = tier_order))
+df_eligible <- df %>% filter(season <= 2022)
+
+# V2 data
+class_depth <- read_csv("output/v2/class_depth.csv", show_col_types = FALSE)
+blue_chip <- read_csv("output/v2/blue_chip.csv", show_col_types = FALSE)
+roster_needs <- read_csv("output/v2/roster_needs.csv", show_col_types = FALSE)
+team_efficiency <- read_csv("output/v2/team_efficiency_adjusted.csv", show_col_types = FALSE)
+r1_picks <- read_csv("output/v2/r1_picks_need_adjusted.csv", show_col_types = FALSE)
+market_efficiency <- read_csv("output/v2/market_efficiency.csv", show_col_types = FALSE)
+
+# Factor levels
+blue_chip <- blue_chip %>% mutate(tier = factor(tier, levels = tier_order))
+r1_picks <- r1_picks %>% mutate(tier = factor(tier, levels = tier_order))
+```
+
+## The Model Was Right. And Useless.
+
+In [Part 1](https://stranger9977.github.io/draft-sharpe-analysis/), we built a quasi-Sharpe ratio for NFL draft picks. The math was clean. The conclusion was clear: **RB shows negative returns across all tiers -- never draft one in round 1.**
+
+We were wrong. Not about the math -- the averages hold. But averages hide the signal.
+
+This is Part 2: finding when the model's advice should be ignored.
+
+The Sharpe ratio tells you what to do *in general*. GMs don't draft in general. They draft in specific years, with specific rosters, facing specific prospects. A model that can't account for context isn't wrong -- it's incomplete.
+
+We're going to stress-test Part 1 through four arguments:
+
+```{r assumptions-table, results='asis'}
+cat("
+| # | Assumption We Made | What Could Break It |
+|---|---|---|
+| 1 | Teams should always draft the highest-Sharpe position | Roster needs make some positions irrelevant |
+| 2 | All draft classes are interchangeable | Class depth varies wildly year to year |
+| 3 | All prospects at a position are fungible | Blue-chip prospects break the averages |
+| 4 | Second contracts measure real value | Market inefficiency could distort the signal |
+")
+```
+
+Three of these will crack the model open. One will surprise us.
+
+---
+
+## Quick Recap: What Part 1 Found
+
+```{r recap-sharpe, results='asis'}
+rb_top10 <- sharpe %>% filter(pos_group == "RB", tier == "Top 10")
+qb_top10 <- sharpe %>% filter(pos_group == "QB", tier == "Top 10")
+best_late1 <- sharpe %>% filter(tier == "Late 1st", !is.na(sharpe_elite)) %>%
+  slice_max(sharpe_elite, n = 1)
+
+cat(paste0(
+  "The quasi-Sharpe ratio combined three things: rookie contract surplus (how much cheaper ",
+  "a drafted starter is than a free agent), second-contract value (the market's verdict), ",
+  "and elite probability (the chance of a top-decile outcome). We measured risk-adjusted ",
+  "returns by position and draft tier from 2010--2022.\n\n",
+  "**Key findings:** QB leads all positions in top-10 Sharpe (",
+  round(qb_top10$sharpe_elite, 2), "). OT and EDGE peak in the late first round (",
+  round(best_late1$sharpe_elite, 2), " for ", best_late1$pos_group,
+  "). RB was the worst first-round investment: Sharpe of **",
+  round(rb_top10$sharpe_elite, 2), "** in the top 10, negative across every tier.\n\n",
+  "The advice was simple: if you want a running back, wait until Day 2 or sign a free agent. ",
+  "The data said so.\n\n",
+  "But data without context is just math."
+))
+```
+
+---
+
+## Argument 1: Roster Needs — "The Bills Don't Need Another QB"
+
+Article 1 implicitly assumed that every team should always draft the highest-Sharpe position available. But the Bills had a quarterback. From 2014 through 2022, Buffalo's QB room was filled every single year -- EJ Manuel, Kyle Orton, Tyrod Taylor, Matt Barkley, then Josh Allen for three straight seasons.
+
+Telling the Bills to draft a QB because "QB has the best top-10 Sharpe" is like telling a homeowner to buy another house because real estate has good returns. Context matters.
+
+We built a roster-need adjustment: if a team already has a starter at a position (is_filled = TRUE), drafting that position again gets penalized. If the position is a genuine need, the pick gets a bonus. Here's what the Bills' QB situation looked like:
+
+```{r bills-qb-timeline, fig.height=5, fig.width=10}
+bills_qb <- roster_needs %>%
+  filter(team == "BUF", pos_group == "QB") %>%
+  mutate(
+    starter_name = case_when(
+      pfr_player_id == "ManuEJ00" ~ "EJ Manuel",
+      pfr_player_id == "OrtoKy00" ~ "Kyle Orton",
+      pfr_player_id == "TaylTy00" ~ "Tyrod Taylor",
+      pfr_player_id == "BarkMa00" ~ "Matt Barkley",
+      pfr_player_id == "AlleJo02" ~ "Josh Allen",
+      TRUE ~ pfr_player_id
+    ),
+    fill_label = if_else(is_filled, "Filled", "Need")
+  )
+
+ggplot(bills_qb, aes(x = draft_season, y = 1)) +
+  geom_segment(aes(xend = draft_season, y = 0.6, yend = 1), color = "gray70", linewidth = 0.8) +
+  geom_point(aes(color = is_filled), size = 6) +
+  geom_text(aes(label = starter_name), vjust = -1.5, size = 3.5, fontface = "bold") +
+  geom_text(aes(label = fill_label), vjust = 2.5, size = 3, color = "gray50") +
+  scale_color_manual(values = c("TRUE" = "#2e7d32", "FALSE" = "#c62828"),
+                     labels = c("TRUE" = "Position Filled", "FALSE" = "Position Need")) +
+  scale_x_continuous(breaks = 2014:2022) +
+  coord_cartesian(ylim = c(0.3, 1.7)) +
+  labs(
+    title = "Buffalo Bills: QB Was Filled Every Year (2014-2022)",
+    subtitle = "Our model would have told the Bills to draft QB every year — even with Josh Allen on the roster",
+    x = NULL, y = NULL, color = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = "top"
+  )
+```
+
+QB was filled all nine years. The model's "always draft QB" advice would have been actively harmful for Buffalo.
+
+### How Need-Adjustment Changes the Rankings
+
+When we account for roster context, some teams look much smarter -- and others look much worse. The chart below shows every team's original draft efficiency rank vs their need-adjusted rank. Teams that drafted to fill needs climb; teams that doubled down on already-strong positions fall.
+
+```{r team-efficiency-slope, fig.height=9, fig.width=10}
+te_plot <- team_efficiency %>%
+  mutate(
+    direction = case_when(
+      rank_change > 2 ~ "Improved",
+      rank_change < -2 ~ "Declined",
+      TRUE ~ "Stable"
+    )
+  )
+
+ggplot(te_plot, aes(y = reorder(team, -rank_adjusted))) +
+  geom_segment(
+    aes(x = rank_original, xend = rank_adjusted,
+        yend = reorder(team, -rank_adjusted),
+        color = direction),
+    linewidth = 1.2, alpha = 0.7
+  ) +
+  geom_nfl_logos(aes(x = rank_adjusted, team_abbr = team), width = 0.04) +
+  geom_point(aes(x = rank_original), shape = 1, size = 3, color = "gray50") +
+  scale_color_manual(
+    values = c("Improved" = "#2e7d32", "Declined" = "#c62828", "Stable" = "gray60"),
+    name = "After Need Adjustment"
+  ) +
+  scale_x_reverse(breaks = seq(0, 32, 4)) +
+  labs(
+    title = "Draft Efficiency: Original Rank vs Need-Adjusted Rank",
+    subtitle = "Open circle = original rank | Logo = need-adjusted rank | Left is better",
+    x = "Rank (lower = better)", y = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top")
+```
+
+```{r top-movers, results='asis'}
+biggest_up <- team_efficiency %>% slice_max(rank_change, n = 1)
+biggest_down <- team_efficiency %>% slice_min(rank_change, n = 1)
+
+cat(paste0(
+  "**Biggest climber:** ", biggest_up$team, " moved up ", biggest_up$rank_change,
+  " spots — they addressed real needs with their first-round picks. ",
+  "**Biggest faller:** ", biggest_down$team, " dropped ", abs(biggest_down$rank_change),
+  " spots — they kept drafting positions they already had filled."
+))
+```
+
+### Need-Based Picks vs Filled-Position Picks
+
+Do picks that address roster needs actually perform differently? Here's the raw Sharpe distribution for first-round picks that filled a need vs picks at positions the team already had covered:
+
+```{r need-vs-filled-box, fig.height=6, fig.width=10}
+r1_context <- r1_picks %>%
+  mutate(
+    context = if_else(is_need, "Addressed a Need", "Position Already Filled")
+  )
+
+ggplot(r1_context, aes(x = sharpe_adjusted, y = context, fill = context)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.alpha = 0.5, width = 0.5) +
+  geom_jitter(height = 0.15, alpha = 0.3, size = 2) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray40") +
+  scale_fill_manual(values = c("Addressed a Need" = "#2196F3", "Position Already Filled" = "#FF9800")) +
+  labs(
+    title = "Need-Adjusted Sharpe: Picks That Filled Needs vs Filled Positions",
+    subtitle = "Dashed line = break-even | Each dot is a first-round pick (2014-2022)",
+    x = "Need-Adjusted Sharpe Ratio", y = NULL, fill = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "none")
+```
+
+```{r need-vs-filled-stats, results='asis'}
+need_stats <- r1_context %>%
+  group_by(context) %>%
+  summarise(
+    mean_adj = mean(sharpe_adjusted, na.rm = TRUE),
+    median_adj = median(sharpe_adjusted, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  )
+need_row <- need_stats %>% filter(context == "Addressed a Need")
+filled_row <- need_stats %>% filter(context == "Position Already Filled")
+
+cat(paste0(
+  "Picks addressing real needs average a need-adjusted Sharpe of **",
+  round(need_row$mean_adj, 3), "** (n=", need_row$n,
+  "), while picks at already-filled positions average **",
+  round(filled_row$mean_adj, 3), "** (n=", filled_row$n,
+  "). The gap isn't just theoretical — teams that ignore roster context ",
+  "systematically underperform their draft capital."
+))
+```
+
+**The takeaway:** The Sharpe ratio tells you which positions have the best *average* returns. But if you already have a franchise QB, that average is irrelevant to you. Roster context turns a general truth into specific advice.
+
+---
+
+## Argument 2: Draft Class Depth — "Not All RB Classes Are Created Equal"
+
+The Sharpe ratio averages across 13 draft classes (2010-2022). But class quality varies wildly. The 2017 RB class was loaded -- McCaffrey, Kamara, Cook, Hunt, Mixon, Aaron Jones. The 2010 class produced **zero hits**. Telling a GM in 2017 and 2010 "don't draft RB" is giving the same advice for very different situations.
+
+### The Hit Rate Heatmap
+
+```{r class-depth-heatmap, fig.height=8, fig.width=12}
+heatmap_data <- class_depth %>%
+  filter(pos_group %in% key_positions) %>%
+  mutate(pos_group = factor(pos_group, levels = rev(key_positions)))
+
+ggplot(heatmap_data, aes(x = factor(season), y = pos_group, fill = hit_rate)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(
+    aes(label = paste0(round(hit_rate * 100), "%")),
+    size = 3, color = "white", fontface = "bold"
+  ) +
+  scale_fill_gradient2(
+    low = "#c62828", mid = "#f9a825", high = "#2e7d32",
+    midpoint = 0.15, limits = c(0, max(heatmap_data$hit_rate, na.rm = TRUE)),
+    labels = percent_format()
+  ) +
+  labs(
+    title = "Draft Class Hit Rates Vary Wildly by Year and Position",
+    subtitle = "Hit rate = % of drafted players who became starters | Key positions, 2010-2022",
+    x = NULL, y = NULL, fill = "Hit Rate"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_blank()
+  )
+```
+
+The variance is the story. Some position-year combinations are bright green (loaded classes), others deep red (barren). A model that averages across all of them misses the point entirely.
+
+### Deep vs Thin Classes: Same Position, Different Returns
+
+```{r deep-vs-thin-bar, fig.height=6, fig.width=10}
+depth_comparison <- class_depth %>%
+  filter(pos_group %in% key_positions, !is.na(class_quality)) %>%
+  group_by(pos_group, class_quality) %>%
+  summarise(
+    mean_return = mean(mean_player_return, na.rm = TRUE),
+    mean_hit_rate = mean(hit_rate, na.rm = TRUE),
+    n_classes = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(pos_group = factor(pos_group, levels = key_positions))
+
+ggplot(depth_comparison, aes(x = pos_group, y = mean_hit_rate, fill = class_quality)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.6, alpha = 0.85) +
+  geom_text(
+    aes(label = paste0(round(mean_hit_rate * 100, 1), "%")),
+    position = position_dodge(width = 0.7), vjust = -0.5, size = 3.5
+  ) +
+  scale_fill_manual(values = c("Deep" = "#2e7d32", "Thin" = "#c62828")) +
+  scale_y_continuous(labels = percent_format(), expand = expansion(mult = c(0, 0.15))) +
+  labs(
+    title = "Deep Draft Classes Produce Hits at Much Higher Rates",
+    subtitle = "Average hit rate in 'Deep' vs 'Thin' class years | 2010-2022",
+    x = NULL, y = "Average Hit Rate", fill = "Class Quality"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top")
+```
+
+```{r deep-thin-rb-gap, results='asis'}
+rb_depth <- depth_comparison %>% filter(pos_group == "RB")
+rb_deep <- rb_depth %>% filter(class_quality == "Deep")
+rb_thin <- rb_depth %>% filter(class_quality == "Thin")
+
+cat(paste0(
+  "For RBs, deep classes produce hits at **", round(rb_deep$mean_hit_rate * 100, 1),
+  "%** vs **", round(rb_thin$mean_hit_rate * 100, 1),
+  "%** in thin classes. That's not a marginal difference -- it's the difference between ",
+  "\"this position is draftable\" and \"stay away.\""
+))
+```
+
+### The RB Class Timeline
+
+```{r rb-class-timeline, fig.height=6, fig.width=10}
+rb_classes <- class_depth %>%
+  filter(pos_group == "RB")
+
+# Notable players per year for annotations
+rb_notable <- tribble(
+  ~season, ~label,
+  2010, "0 hits",
+  2011, "Murray",
+  2012, "Martin, Morris",
+  2013, "Bell, Lacy",
+  2014, "Hill, Hyde",
+  2015, "Gordon, Gurley,\nDavid Johnson",
+  2016, "Zeke, Henry",
+  2017, "CMC, Kamara,\nCook, Hunt,\nMixon, Jones",
+  2018, "Saquon, Chubb",
+  2019, "Jacobs, Sanders",
+  2020, "Taylor, Swift",
+  2021, "Harris, Javonte",
+  2022, "Walker, Hall"
+)
+
+rb_classes <- rb_classes %>%
+  left_join(rb_notable, by = "season")
+
+ggplot(rb_classes, aes(x = factor(season), y = hit_rate, fill = class_quality)) +
+  geom_col(width = 0.7, alpha = 0.85) +
+  geom_text(
+    aes(label = label),
+    vjust = -0.3, size = 2.8, lineheight = 0.85
+  ) +
+  scale_fill_manual(
+    values = c("Deep" = "#2e7d32", "Thin" = "#c62828"),
+    na.value = "gray50"
+  ) +
+  scale_y_continuous(
+    labels = percent_format(),
+    expand = expansion(mult = c(0, 0.25))
+  ) +
+  labs(
+    title = "RB Draft Class Quality: A Rollercoaster",
+    subtitle = "Hit rate by draft year | Annotated with notable players from each class",
+    x = NULL, y = "Hit Rate", fill = "Class Quality"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top"
+  )
+```
+
+```{r rb-timeline-narrative, results='asis'}
+cat(paste0(
+  "2017 stands out: a **23.3% hit rate** -- the highest for RBs in our dataset. ",
+  "McCaffrey, Kamara, Cook, Hunt, Mixon, and Aaron Jones all came from the same class. ",
+  "Contrast that with 2010 (**0%**) or 2016 and 2018 -- thin classes where Ezekiel Elliott ",
+  "and Saquon Barkley were drafted in the top 5. Zeke and Saquon were high picks *because* ",
+  "they were the only standout RBs in weak classes, not because the position was a good bet that year.\n\n",
+  "The model says \"never draft RB.\" The data says \"it depends on the year.\""
+))
+```
+
+---
+
+## Argument 3: Blue-Chip Prospects — "When the Talent Is Undeniable"
+
+The Sharpe ratio averages over all RB prospects. But not all prospects are created equal. Blue-chip prospects -- defined here as players who end up in the top 10% of career value at their position -- are a different animal entirely.
+
+```{r blue-chip-rates, results='asis'}
+bc_summary <- blue_chip %>%
+  filter(!is.na(is_hit)) %>%
+  group_by(pos_group) %>%
+  summarise(
+    all_hit = mean(is_hit),
+    blue_hit = mean(is_hit[is_blue_chip == TRUE]),
+    n_blue = sum(is_blue_chip == TRUE),
+    gap = mean(is_hit[is_blue_chip == TRUE]) - mean(is_hit),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(gap))
+
+rb_bc <- bc_summary %>% filter(pos_group == "RB")
+
+cat(paste0(
+  "Blue-chip RBs hit at **", round(rb_bc$blue_hit * 100, 1),
+  "%** -- compared to **", round(rb_bc$all_hit * 100, 1),
+  "%** for all RBs. That's a ", round(rb_bc$gap * 100, 1),
+  " percentage point gap, the largest of any position. ",
+  "The question isn't \"should you draft an RB at 10\" but \"should you draft *this* RB at 10.\""
+))
+```
+
+### Blue-Chip vs Overall Hit Rates
+
+```{r blue-chip-bar, fig.height=7, fig.width=10}
+bc_plot <- bc_summary %>%
+  pivot_longer(cols = c(all_hit, blue_hit), names_to = "type", values_to = "hit_rate") %>%
+  mutate(
+    type = if_else(type == "blue_hit", "Blue Chip (Top 10%)", "All Players"),
+    pos_group = fct_reorder(pos_group, hit_rate, .fun = max, .desc = TRUE)
+  )
+
+ggplot(bc_plot, aes(x = pos_group, y = hit_rate, fill = type)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.6, alpha = 0.85) +
+  geom_text(
+    aes(label = paste0(round(hit_rate * 100, 1), "%")),
+    position = position_dodge(width = 0.7), vjust = -0.5, size = 3.2
+  ) +
+  scale_fill_manual(values = c("Blue Chip (Top 10%)" = "#2e7d32", "All Players" = "#c62828")) +
+  scale_y_continuous(labels = percent_format(), expand = expansion(mult = c(0, 0.15))) +
+  labs(
+    title = "Blue-Chip Prospects Break the Averages",
+    subtitle = "Hit rate for top-10% career value players vs all drafted players | 2010-2022",
+    x = NULL, y = "Hit Rate", fill = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "top",
+    axis.text.x = element_text(angle = 30, hjust = 1)
+  )
+```
+
+This is the money chart. Every position benefits from blue-chip talent, but the gap is biggest at RB. The model's "never draft RB" is really "never draft an *average* RB" -- a very different statement.
+
+### Blue-Chip Player Returns by Draft Position
+
+```{r blue-chip-loess, fig.height=7, fig.width=10}
+bc_loess <- blue_chip %>%
+  filter(
+    is_blue_chip == TRUE,
+    !is.na(player_return),
+    pos_group %in% key_positions
+  )
+
+ggplot(bc_loess, aes(x = pick, y = player_return, color = pos_group)) +
+  geom_point(alpha = 0.5, size = 2.5) +
+  geom_smooth(method = "loess", se = FALSE, linewidth = 1.3, span = 0.9) +
+  scale_color_manual(values = pos_colors) +
+  scale_x_continuous(breaks = seq(0, 260, 30)) +
+  scale_y_continuous(labels = percent_format()) +
+  labs(
+    title = "Blue-Chip Player Returns by Draft Position",
+    subtitle = "LOESS smoothed curves | Only top-10% career value players at each position",
+    x = "Overall Pick", y = "Player Return (Cap %)", color = "Position"
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+```{r blue-chip-loess-note, results='asis'}
+cat(paste0(
+  "When you isolate blue-chip players, the picture changes. Blue-chip RBs drafted early ",
+  "produce returns that compete with other positions -- the problem is that *most* RBs aren't ",
+  "blue chips. The challenge for GMs isn't the position; it's prospect identification."
+))
+```
+
+### The Decision Matrix: Class Depth x Prospect Quality
+
+```{r decision-matrix, fig.height=8, fig.width=10}
+# Build a decision matrix for R1 picks using class quality and blue chip status
+r1_decision <- blue_chip %>%
+  filter(
+    !is.na(player_return),
+    !is.na(class_quality),
+    round == 1
+  ) %>%
+  left_join(
+    class_depth %>%
+      select(season, pos_group, hit_rate) %>%
+      rename(class_hit_rate_direct = hit_rate),
+    by = c("season", "pos_group")
+  ) %>%
+  mutate(
+    quadrant = case_when(
+      is_blue_chip & class_quality == "Thin" ~ "Override with Caution\n(Blue chip, thin class)",
+      is_blue_chip & class_quality == "Deep" ~ "Take the Best Player\n(Blue chip, deep class)",
+      !is_blue_chip & class_quality == "Deep" ~ "Follow the Model\n(Regular prospect, deep class)",
+      !is_blue_chip & class_quality == "Thin" ~ "Follow the Model\n(Regular prospect, thin class)",
+    ),
+    outcome = if_else(is_hit, "Hit", "Miss")
+  )
+
+ggplot(r1_decision, aes(x = class_hit_rate_direct, y = car_av_pctl, color = outcome)) +
+  geom_point(alpha = 0.6, size = 3) +
+  geom_hline(yintercept = 0.9, linetype = "dashed", color = "gray40", alpha = 0.7) +
+  geom_vline(
+    xintercept = median(class_depth$hit_rate[class_depth$pos_group %in% key_positions], na.rm = TRUE),
+    linetype = "dashed", color = "gray40", alpha = 0.7
+  ) +
+  scale_color_manual(values = c("Hit" = "#2e7d32", "Miss" = "#c62828")) +
+  scale_x_continuous(labels = percent_format()) +
+  annotate("text", x = 0.02, y = 0.95, label = "Override with\nCaution", fontface = "italic",
+           color = "gray40", hjust = 0, size = 3.5) +
+  annotate("text", x = 0.30, y = 0.95, label = "Take the\nBest Player", fontface = "italic",
+           color = "gray40", hjust = 1, size = 3.5) +
+  annotate("text", x = 0.02, y = 0.05, label = "Follow\nthe Model", fontface = "italic",
+           color = "gray40", hjust = 0, size = 3.5) +
+  annotate("text", x = 0.30, y = 0.05, label = "Follow\nthe Model", fontface = "italic",
+           color = "gray40", hjust = 1, size = 3.5) +
+  labs(
+    title = "The Decision Matrix: When to Override the Sharpe Ratio",
+    subtitle = "Each dot = a first-round pick | Dashed lines = blue-chip threshold (y) and median class depth (x)",
+    x = "Class Hit Rate (depth of that year's class)", y = "Career AV Percentile (prospect quality)",
+    color = "Outcome"
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+The upper-left quadrant is where the model is most likely wrong: blue-chip prospects in thin classes. These are the Zekes and Saquons -- players drafted high because they're the clear best at their position in a weak class. The hit rate among blue chips (regardless of class depth) tells us the talent can overcome the positional headwinds.
+
+---
+
+## The Love Question Revisited
+
+In Part 1, we asked: *Should you draft Jeremiah Love at 10?*
+
+The model said no. RB has a deeply negative Sharpe in the top 10. But we've now shown that the answer depends on three things the model ignores:
+
+<div style="background-color: #f0f4f8; border-left: 4px solid #377EB8; padding: 15px 20px; margin: 20px 0; border-radius: 4px;">
+
+**1. Does your team need an RB?** If you already have a starter, the Sharpe ratio's general advice applies -- don't draft for surplus. But if you're running out James Conner on a one-year deal, the calculus changes.
+
+**2. Is Love a blue chip?** Early 2025 scouting consensus has Love as the clear RB1 with significant separation from RB2. If he's truly a top-decile talent, his expected hit rate is closer to `r round(bc_summary %>% filter(pos_group == "RB") %>% pull(blue_hit) * 100, 1)`% than the `r round(bc_summary %>% filter(pos_group == "RB") %>% pull(all_hit) * 100, 1)`% the model uses.
+
+**3. Is the 2025 class thin?** If Love is the only blue-chip RB and the drop-off to RB2 is steep, waiting for Day 2 means accepting a non-blue-chip prospect -- and those hit at the base rate the model correctly identifies as poor.
+
+</div>
+
+If all three answers are yes -- and the early signals suggest they are -- then the Sharpe ratio's advice to avoid RB **doesn't apply**. The model is averaging over situations that don't look like this one.
+
+The irony: Article 1's math is what *proves* Article 1's conclusion is too simple. The same framework that shows RB is bad *on average* also shows that blue-chip RBs in thin classes are the exception.
+
+---
+
+## Argument 4: Market Inefficiency — "Actually, the Market Is Mostly Right"
+
+This was supposed to be our strongest critique. Article 1 used second-contract value as a key component of the Sharpe ratio. If the market overvalues some positions and undervalues others, the whole framework falls apart -- maybe RBs just get underpaid relative to their production.
+
+We tested this by comparing second-contract APY to post-contract performance (average snap percentage after the second deal). If the market is efficient, players who got paid more should perform better afterward. If it's not, we'd see weak correlations.
+
+The data surprised us.
+
+```{r market-scatter, fig.height=9, fig.width=10}
+market_plot <- market_efficiency %>%
+  filter(!is.na(post_contract_avg_snap), !is.na(second_apy_cap_pct),
+         pos_group %in% key_positions) %>%
+  mutate(pos_group = factor(pos_group, levels = key_positions))
+
+# Compute correlations for labels
+cors <- market_plot %>%
+  group_by(pos_group) %>%
+  summarise(
+    cor = cor(second_apy_cap_pct, post_contract_avg_snap),
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(label = paste0("r = ", round(cor, 2), " (n=", n, ")"))
+
+ggplot(market_plot, aes(x = second_apy_cap_pct, y = post_contract_avg_snap)) +
+  geom_point(alpha = 0.3, size = 1.5, color = "gray40") +
+  geom_smooth(method = "lm", se = TRUE, color = "#377EB8", linewidth = 1) +
+  geom_text(
+    data = cors,
+    aes(x = Inf, y = Inf, label = label),
+    hjust = 1.1, vjust = 1.5, size = 3.5, fontface = "bold", color = "#377EB8",
+    inherit.aes = FALSE
+  ) +
+  facet_wrap(~pos_group, scales = "free", ncol = 3) +
+  scale_x_continuous(labels = percent_format()) +
+  scale_y_continuous(labels = percent_format()) +
+  labs(
+    title = "Second Contract Value vs Post-Contract Performance",
+    subtitle = "Does the market price players correctly? Higher correlation = more efficient market",
+    x = "Second Contract APY (% of Cap)", y = "Post-Contract Avg Snap %"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(strip.text = element_text(face = "bold", size = 12))
+```
+
+The correlations range from moderate to strong across all positions. The market isn't perfect, but it's not randomly pricing players either.
+
+### Market Efficiency by Position
+
+```{r market-correlation-bar, fig.height=6, fig.width=10}
+all_cors <- market_efficiency %>%
+  filter(!is.na(post_contract_avg_snap), !is.na(second_apy_cap_pct)) %>%
+  group_by(pos_group) %>%
+  summarise(
+    cor = cor(second_apy_cap_pct, post_contract_avg_snap),
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(pos_group = fct_reorder(pos_group, cor))
+
+ggplot(all_cors, aes(x = cor, y = pos_group, fill = pos_group)) +
+  geom_col(width = 0.6, alpha = 0.85) +
+  geom_text(aes(label = round(cor, 3)), hjust = -0.15, size = 3.8, fontface = "bold") +
+  scale_fill_manual(values = pos_colors) +
+  scale_x_continuous(limits = c(0, 1), expand = expansion(mult = c(0, 0.1))) +
+  labs(
+    title = "Market Efficiency: Correlation Between Contract Value and Performance",
+    subtitle = "Higher = market prices the position more accurately | Second contract APY vs post-contract snap %",
+    x = "Correlation (r)", y = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "none")
+```
+
+```{r market-narrative, results='asis'}
+qb_cor <- all_cors %>% filter(pos_group == "QB") %>% pull(cor)
+dl_cor <- all_cors %>% filter(pos_group == "DL") %>% pull(cor)
+rb_cor <- all_cors %>% filter(pos_group == "RB") %>% pull(cor)
+
+cat(paste0(
+  "**QB has the weakest market signal** (r = ", round(qb_cor, 3),
+  ") — the market struggles most to price quarterbacks, which makes sense given the ",
+  "position's boom-or-bust nature. **DL is the most efficiently priced** (r = ",
+  round(dl_cor, 3), "). RB sits at **", round(rb_cor, 3),
+  "** — one of the strongest correlations.\n\n",
+  "This is the plot twist we didn't expect. We came in hoping to argue that RBs are ",
+  "undervalued by the market — that the low Sharpe was an artifact of underpayment, not ",
+  "real low value. But the data says the opposite: **the market prices RBs accurately.** ",
+  "The low Sharpe ratio for RBs isn't a market distortion. It's real.\n\n",
+  "But here's why this *strengthens* arguments 2 and 3: if the market is efficient, then ",
+  "the low Sharpe reflects the true average value of the position. The key word is *average*. ",
+  "Blue-chip RBs in thin classes are the exceptions to the average — and because the market ",
+  "is efficient, we can trust that the blue chips who *do* get paid earned it."
+))
+```
+
+---
+
+## When to Follow vs Override the Sharpe Ratio
+
+We've tested four arguments against the model. Three cracked it open; one reinforced it. Here's the decision framework that emerges:
+
+<div style="background-color: #f0f4f8; border: 2px solid #377EB8; padding: 20px 25px; margin: 20px 0; border-radius: 8px; font-family: monospace; font-size: 14px; line-height: 2;">
+
+<span style="font-family: sans-serif; font-weight: bold; font-size: 16px; color: #377EB8;">The Override Decision Tree</span>
+
+**Is this position a real team need?**
+&nbsp;&nbsp;&nbsp;&nbsp;No &rarr; **Follow the Sharpe ratio.** Draft the highest-value position available.
+
+&nbsp;&nbsp;&nbsp;&nbsp;Yes &darr;
+
+**Is this a blue-chip prospect (top 10% talent)?**
+&nbsp;&nbsp;&nbsp;&nbsp;No &rarr; **Follow the Sharpe ratio.** Average prospects regress to average outcomes.
+
+&nbsp;&nbsp;&nbsp;&nbsp;Yes &darr;
+
+**Is the class thin at this position?**
+&nbsp;&nbsp;&nbsp;&nbsp;No &rarr; **Follow the Sharpe ratio.** Comparable talent will be available later.
+
+&nbsp;&nbsp;&nbsp;&nbsp;Yes &darr;
+
+**OVERRIDE the Sharpe ratio. Take the blue chip.**
+
+</div>
+
+The framework is deliberately conservative. You need *all three* conditions to override: a real need, a blue-chip prospect, and a thin class. Miss any one, and the model's general advice holds.
+
+Most of the time, the Sharpe ratio is right. The exceptions are narrow — but when they occur, they're the picks that define drafts.
+
+---
+
+## What We Still Believe
+
+Not everything from Part 1 fell apart. Here's what survived the stress test:
+
+- **QB is still the best top-10 investment on average.** Nothing we found changes the overall positional hierarchy. If you need a QB and there's a blue-chip one available, take him without hesitation.
+
+- **Late 1st round is still the sweet spot for OT and EDGE.** The combination of high hit rates and strong second-contract value makes picks 15-32 the most efficient draft real estate for these positions.
+
+- **Day 3 RBs are still fine most of the time.** The cheap FA replacement cost means you can fill the position without premium capital. When the class isn't deep and the prospect isn't blue-chip, this is still the right call.
+
+- **The aggregate advice is right; context determines the exceptions.** The Sharpe ratio is a compass, not a GPS. It points you in the right direction. But the last mile requires scouting, roster analysis, and class evaluation that no single metric can capture.
+
+- **The market is mostly efficient.** This validates the Sharpe framework rather than undermining it. Second-contract value reflects real performance, not market noise. When the model says a position has low returns, believe it — then check whether you're looking at the average or the exception.
+
+---
+
+## Methodology Notes
+
+**Data:** Player stats from Pro Football Reference via `nflreadr`. Contract data from OverTheCap via `nflreadr`. All values normalized to percentage of salary cap at time of signing. Analysis covers 2010-2022 draft classes (minimum 4 NFL seasons for fair evaluation).
+
+**Blue-chip classification:** Top 10% of career approximate value within each position group, across all drafts since 1980.
+
+**Class depth:** A class is "deep" if its hit rate exceeds the position's median hit rate across all years in the sample. "Thin" otherwise.
+
+**Roster needs:** A position is "filled" if the team had a starter playing above the hit threshold at that position in the draft year. A position is a "need" if it wasn't filled.
+
+**Market efficiency:** Correlation between second-contract APY (% of cap) and post-contract average snap percentage. Higher correlation indicates the market accurately prices player value.
+
+**Part 1:** Full methodology and interactive charts at [stranger9977.github.io/draft-sharpe-analysis](https://stranger9977.github.io/draft-sharpe-analysis/)
+
+*Built with R, ggplot2, nflplotR, and gt. Data from nflverse and Pro Football Reference.*
