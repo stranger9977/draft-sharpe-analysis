@@ -1053,7 +1053,6 @@ team_later <- team_picks_all %>%
 make_round_chart <- function(data, round_label) {
   d <- data %>% filter(draft_round == round_label)
   ggplot(d, aes(x = reorder(team, avg_relative), y = avg_relative)) +
-    geom_col(fill = "#78909C", width = 0.7) +
     geom_nfl_wordmarks(aes(team_abbr = team), width = 0.065) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
     coord_flip() +
