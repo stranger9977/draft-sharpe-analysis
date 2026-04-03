@@ -1005,18 +1005,22 @@ team_avg <- team_picks %>%
   filter(n_picks >= 2) %>%
   arrange(desc(avg_sharpe))
 
+# Join team colors
+team_avg <- team_avg %>%
+  left_join(teams %>% select(team_abbr, team_color), by = c("team" = "team_abbr"))
+
 ggplot(team_avg, aes(x = reorder(team, avg_sharpe), y = avg_sharpe)) +
-  geom_col(aes(fill = avg_sharpe > 0), width = 0.7, show.legend = FALSE) +
-  geom_nfl_wordmarks(aes(team_abbr = team), width = 0.065) +
+  geom_col(aes(fill = team_color), width = 0.7, show.legend = FALSE) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
-  scale_fill_manual(values = c("TRUE" = "#2196F3", "FALSE" = "#F44336")) +
+  scale_fill_identity() +
   coord_flip() +
   labs(
     title = "Average Round 1 Sharpe Ratio by Team (2018–2022)",
     subtitle = "How well has each team allocated first-round capital? | Min 2 R1 picks",
     x = NULL, y = "Average Sharpe of R1 Picks"
   ) +
-  theme_minimal(base_size = 13)
+  theme_minimal(base_size = 13) +
+  theme(axis.text.y = element_text(face = "bold", size = 10))
 ```
 
 ```{r team-efficiency-commentary, results='asis'}
@@ -1073,51 +1077,34 @@ ggplot(relative_sharpe, aes(x = tier, y = fct_reorder(pos_group, relative, .fun 
   )
 ```
 
-```{r draft-curve-bar, fig.height=7, fig.width=11}
-# Grouped bar: show the actual vs relative-optimal allocation for key positions
-# "Optimal" = allocate proportionally to positions with above-average Sharpe for that round
-actual_alloc <- df_eligible %>%
+```{r draft-curve-lines, fig.height=7, fig.width=10}
+# Line chart: each position's relative Sharpe across rounds — the actual "curve"
+curve_lines <- relative_sharpe %>%
   filter(pos_group %in% key_positions) %>%
-  count(tier, pos_group) %>%
-  group_by(tier) %>%
-  mutate(actual_pct = n / sum(n)) %>%
-  ungroup()
-
-optimal_relative <- relative_sharpe %>%
-  filter(pos_group %in% key_positions) %>%
-  mutate(weight = pmax(relative, 0)) %>%
-  group_by(tier) %>%
-  mutate(optimal_pct = ifelse(sum(weight) > 0, weight / sum(weight), 1 / n())) %>%
-  ungroup() %>%
-  select(pos_group, tier, optimal_pct)
-
-comparison <- actual_alloc %>%
-  left_join(optimal_relative, by = c("pos_group", "tier")) %>%
-  select(tier, pos_group, actual_pct, optimal_pct) %>%
-  pivot_longer(cols = c(actual_pct, optimal_pct), names_to = "type", values_to = "pct") %>%
   mutate(
-    type = ifelse(type == "actual_pct", "How Teams Actually Draft", "Sharpe-Optimal for Round"),
+    tier_num = as.numeric(tier),
     pos_group = factor(pos_group, levels = key_positions)
   )
 
-ggplot(comparison, aes(x = pos_group, y = pct, fill = type)) +
-  geom_col(position = "dodge", width = 0.7) +
-  facet_wrap(~tier, nrow = 1) +
-  scale_y_continuous(labels = percent_format()) +
-  scale_fill_manual(values = c(
-    "How Teams Actually Draft" = "#78909C",
-    "Sharpe-Optimal for Round" = "#2196F3"
-  )) +
-  labs(
-    title = "How the NFL Drafts vs. How It Should (Round-Adjusted)",
-    subtitle = "Actual vs. optimal allocation based on relative Sharpe within each round | Key positions, 2010–2022",
-    x = NULL, y = "% of Picks", fill = NULL
+ggplot(curve_lines, aes(x = tier, y = relative, color = pos_group, group = pos_group)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3.5) +
+  geom_text(
+    data = curve_lines %>% filter(tier == "Rounds 4-7"),
+    aes(label = pos_group), hjust = -0.3, fontface = "bold", size = 4, show.legend = FALSE
   ) +
-  theme_minimal(base_size = 13) +
+  scale_color_manual(values = pos_colors[key_positions]) +
+  scale_x_discrete(expand = expansion(mult = c(0.05, 0.15))) +
+  labs(
+    title = "The Draft Curve: How Positional Value Shifts Across Rounds",
+    subtitle = "Sharpe relative to round average | Above the line = better bet than average for that round",
+    x = NULL, y = "Relative Sharpe (vs. Round Avg)", color = NULL
+  ) +
+  theme_minimal(base_size = 14) +
   theme(
-    legend.position = "top",
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
-    strip.text = element_text(face = "bold", size = 11)
+    legend.position = "none",
+    panel.grid.minor = element_blank()
   )
 ```
 
