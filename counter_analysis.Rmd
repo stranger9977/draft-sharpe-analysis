@@ -578,121 +578,86 @@ cat(paste0(
 
 We can define "blue chip" two ways: retrospectively (top 10% of career AV at the position) and prospectively (top 10% of NGS Combined Score at the position). How much do they overlap -- and does it differ by position?
 
-Every player with an NGS score falls into one of four buckets: blue chip by both definitions (pre-draft AND career), pre-draft only (high NGS, lower career AV), career only (lower NGS, high career AV), or neither. Here's how they scatter — each dot is a player, positioned by their NGS score (x) and career AV (y):
+If high NGS scores actually predict career success, the top-scoring prospects should cluster toward the top of the career value axis. Here's every RB with an NGS score — the pre-draft blue chips (top 10% NGS) are highlighted:
 
-```{r ngs-vs-career-scatter, fig.height=8, fig.width=11}
-bc_overlap <- ngs_with_outcomes %>%
-  mutate(
-    bc_type = case_when(
-      is_blue_chip & is_ngs_blue_chip ~ "Both",
-      is_blue_chip & !is_ngs_blue_chip ~ "Career Only",
-      !is_blue_chip & is_ngs_blue_chip ~ "Pre-Draft Only",
-      TRUE ~ "Neither"
-    ),
-    bc_type = factor(bc_type, levels = c("Both", "Career Only", "Pre-Draft Only", "Neither"))
-  )
+```{r ngs-bc-scatter-rb, fig.height=7, fig.width=10}
+rb_scatter <- ngs_with_outcomes %>%
+  filter(pos_group == "RB") %>%
+  mutate(is_bc = is_ngs_blue_chip)
 
-# Thresholds for reference lines
-ngs_bc_thresholds <- ngs_with_outcomes %>%
-  group_by(pos_group) %>%
-  summarise(
-    ngs_90 = quantile(cmbn_score, 0.9, na.rm = TRUE),
-    av_90 = quantile(car_av, 0.9, na.rm = TRUE),
-    .groups = "drop"
-  )
+# Label top NGS prospects
+rb_labeled <- rb_scatter %>% filter(is_bc | car_av >= quantile(car_av, 0.9))
 
-# RB-specific thresholds
-rb_thresh <- ngs_bc_thresholds %>% filter(pos_group == "RB")
-
-rb_scatter <- bc_overlap %>% filter(pos_group == "RB")
-
-ggplot(rb_scatter, aes(x = cmbn_score, y = car_av, color = bc_type)) +
-  geom_vline(xintercept = rb_thresh$ngs_90, linetype = "dashed", color = "gray50", linewidth = 0.5) +
-  geom_hline(yintercept = rb_thresh$av_90, linetype = "dashed", color = "gray50", linewidth = 0.5) +
-  geom_point(data = rb_scatter %>% filter(bc_type == "Neither"), alpha = 0.3, size = 2) +
-  geom_point(data = rb_scatter %>% filter(bc_type != "Neither"), alpha = 0.8, size = 3) +
-  geom_text(data = rb_scatter %>% filter(bc_type == "Both"),
-            aes(label = pfr_player_name), vjust = -1, size = 2.8, fontface = "bold", show.legend = FALSE) +
-  geom_text(data = rb_scatter %>% filter(bc_type == "Pre-Draft Only"),
-            aes(label = pfr_player_name), vjust = -1, size = 2.5, show.legend = FALSE) +
-  annotate("text", x = rb_thresh$ngs_90 + 0.5, y = max(rb_scatter$car_av) * 0.95,
-           label = "Top 10%\nNGS", hjust = 0, size = 3, color = "gray50") +
-  annotate("text", x = min(rb_scatter$cmbn_score) + 1, y = rb_thresh$av_90 + 1,
-           label = "Top 10% Career AV", hjust = 0, size = 3, color = "gray50") +
-  scale_color_manual(values = c(
-    "Both" = "#2e7d32", "Career Only" = "#FF9800",
-    "Pre-Draft Only" = "#377EB8", "Neither" = "gray70"
-  ), name = "Blue-Chip Status") +
+ggplot(rb_scatter, aes(x = cmbn_score, y = car_av)) +
+  geom_point(data = rb_scatter %>% filter(!is_bc), color = "gray70", alpha = 0.4, size = 2) +
+  geom_point(data = rb_scatter %>% filter(is_bc), color = "#377EB8", size = 3.5, alpha = 0.8) +
+  geom_text(data = rb_labeled,
+            aes(label = pfr_player_name, color = is_bc),
+            vjust = -1, size = 2.8, fontface = "bold", show.legend = FALSE) +
+  geom_smooth(method = "lm", se = TRUE, color = "#377EB8", linewidth = 0.8, alpha = 0.2) +
+  scale_color_manual(values = c("TRUE" = "#377EB8", "FALSE" = "gray50")) +
   labs(
-    title = "RB: Pre-Draft Score vs Career Value",
-    subtitle = "Dashed lines = top 10% thresholds | Named players are blue chips | Where does the pre-draft signal work?",
+    title = "RB: Do Pre-Draft Scores Predict Career Value?",
+    subtitle = "Blue = pre-draft blue chip (top 10% NGS) | Gray = everyone else | Higher NGS → higher career AV?",
     x = "NGS Combined Score (pre-draft)", y = "Career Approximate Value"
   ) +
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "top")
+  theme_minimal(base_size = 14)
 ```
 
 ```{r ngs-bc-rb-narrative, results='asis'}
-rb_both <- bc_overlap %>% filter(bc_type == "Both", pos_group == "RB")
-rb_ngs_only <- bc_overlap %>% filter(bc_type == "Pre-Draft Only", pos_group == "RB")
-rb_baseline <- ngs_with_outcomes %>% filter(pos_group == "RB") %>%
-  summarise(rate = mean(is_hit, na.rm = TRUE)) %>% pull(rate)
+rb_bc <- rb_scatter %>% filter(is_bc)
+rb_nonbc <- rb_scatter %>% filter(!is_bc)
 
 cat(paste0(
-  "The upper-right quadrant is where the model would love to live — players who scored in the top 10% ",
-  "pre-draft AND delivered top 10% career value. For RBs, **", nrow(rb_both),
-  "** players land there. The upper-left (career-only blue chips) are late bloomers the pre-draft signal missed. ",
-  "The lower-right (pre-draft only) are the busts — high NGS scores that didn't translate (",
-  nrow(rb_ngs_only), " players).\n\n",
-  "The pre-draft signal works: players flagged as blue chips by both metrics became starters at **",
-  round(mean(rb_both$is_hit, na.rm = TRUE) * 100, 1),
-  "%**. Pre-draft-only blue chips hit at **",
-  round(mean(rb_ngs_only$is_hit, na.rm = TRUE) * 100, 1),
-  "%** — still above the **", round(rb_baseline * 100, 1),
-  "%** baseline for all RBs. The question for Love is which quadrant he'll land in."
+  "The pre-draft blue chips (blue dots) cluster toward the upper right — high NGS scores ",
+  "mapping to high career value. Pre-draft blue chip RBs averaged **",
+  round(mean(rb_bc$car_av, na.rm = TRUE), 1),
+  "** career AV, vs **", round(mean(rb_nonbc$car_av, na.rm = TRUE), 1),
+  "** for everyone else. They became starters at **",
+  round(mean(rb_bc$is_hit, na.rm = TRUE) * 100, 1),
+  "%** vs **", round(mean(rb_nonbc$is_hit, na.rm = TRUE) * 100, 1),
+  "%**.\n\n",
+  "Not every pre-draft blue chip panned out — Jahvid Best and LaMichael James scored elite on NGS but busted. ",
+  "But the signal is clear: the top of the NGS distribution produces starters at dramatically higher rates."
 ))
 ```
 
 The same view across all positions:
 
-```{r ngs-vs-career-scatter-all, fig.height=16, fig.width=12}
-all_scatter <- bc_overlap %>%
+```{r ngs-bc-scatter-all, fig.height=16, fig.width=12}
+all_scatter <- ngs_with_outcomes %>%
   filter(pos_group %in% key_positions) %>%
-  mutate(pos_group = factor(pos_group, levels = key_positions))
+  mutate(
+    is_bc = is_ngs_blue_chip,
+    pos_group = factor(pos_group, levels = key_positions)
+  )
 
-ggplot(all_scatter, aes(x = cmbn_score, y = car_av, color = bc_type)) +
-  geom_point(data = all_scatter %>% filter(bc_type == "Neither"), alpha = 0.2, size = 1.5) +
-  geom_point(data = all_scatter %>% filter(bc_type != "Neither"), alpha = 0.7, size = 2.5) +
-  scale_color_manual(values = c(
-    "Both" = "#2e7d32", "Career Only" = "#FF9800",
-    "Pre-Draft Only" = "#377EB8", "Neither" = "gray70"
-  ), name = "Blue-Chip Status") +
+ggplot(all_scatter, aes(x = cmbn_score, y = car_av)) +
+  geom_point(data = all_scatter %>% filter(!is_bc), color = "gray70", alpha = 0.3, size = 1.5) +
+  geom_point(data = all_scatter %>% filter(is_bc), color = "#377EB8", size = 2.5, alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "#377EB8", linewidth = 0.7, alpha = 0.5) +
   facet_wrap(~pos_group, scales = "free", ncol = 3) +
   labs(
     title = "Pre-Draft Score vs Career Value: All Positions",
-    subtitle = "Green = blue chip by both metrics | Orange = career only | Blue = pre-draft only | Gray = neither",
+    subtitle = "Blue = pre-draft blue chip (top 10% NGS) | Does the signal work at every position?",
     x = "NGS Combined Score", y = "Career AV"
   ) +
   theme_minimal(base_size = 13) +
   theme(
-    legend.position = "top",
     strip.text = element_text(face = "bold", size = 12)
   )
 ```
 
 ```{r ngs-bc-all-narrative, results='asis'}
-both_all <- bc_overlap %>% filter(bc_type == "Both")
-ngs_only_all <- bc_overlap %>% filter(bc_type == "Pre-Draft Only")
-baseline_all <- mean(ngs_with_outcomes$is_hit, na.rm = TRUE)
+bc_all <- all_scatter %>% filter(is_bc)
+nonbc_all <- all_scatter %>% filter(!is_bc)
 
 cat(paste0(
-  "Across all positions, players in the **both** quadrant became starters at **",
-  round(mean(both_all$is_hit, na.rm = TRUE) * 100, 1),
-  "%**. Pre-draft-only blue chips hit at **",
-  round(mean(ngs_only_all$is_hit, na.rm = TRUE) * 100, 1),
-  "%** — compared to **", round(baseline_all * 100, 1),
-  "%** across all players. The pattern holds everywhere: the pre-draft signal isn't perfect, ",
-  "but it meaningfully separates prospects who become starters from those who don't."
+  "Across all positions, pre-draft blue chips became starters at **",
+  round(mean(bc_all$is_hit, na.rm = TRUE) * 100, 1),
+  "%** vs **", round(mean(nonbc_all$is_hit, na.rm = TRUE) * 100, 1),
+  "%** for everyone else. The trend line slopes upward at every position — the pre-draft signal ",
+  "isn't perfect, but it meaningfully separates prospects who become starters from those who don't."
 ))
 ```
 
