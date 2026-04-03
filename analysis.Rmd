@@ -249,6 +249,61 @@ cat("
 ")
 ```
 
+### Worked Example: QB Top 10 vs RB Top 10
+
+```{r sharpe-example, results='asis'}
+qb_t10 <- sharpe %>% filter(pos_group == "QB", tier == "Top 10")
+rb_t10 <- sharpe %>% filter(pos_group == "RB", tier == "Top 10")
+
+qb_num <- qb_t10$elite_prob * elite_threshold - qb_t10$fa_replacement
+rb_num <- rb_t10$elite_prob * elite_threshold - rb_t10$fa_replacement
+
+cat(paste0(
+  "Walking through the formula with real numbers:\n\n",
+
+  "| Step | What it means | QB Top 10 | RB Top 10 |\n",
+  "|---|---|---|---|\n",
+  "| **P(elite)** | % of picks producing a top-10% return | ",
+    percent(qb_t10$elite_prob, accuracy = 0.1), " | ",
+    percent(rb_t10$elite_prob, accuracy = 0.1), " |\n",
+  "| **Elite Threshold** | The top-10% return bar (same for all positions) | ",
+    percent(elite_threshold, accuracy = 0.1), " | ",
+    percent(elite_threshold, accuracy = 0.1), " |\n",
+  "| **P(elite) × Threshold** | Expected payoff from elite outcomes | ",
+    percent(qb_t10$elite_prob * elite_threshold, accuracy = 0.1), " | ",
+    percent(rb_t10$elite_prob * elite_threshold, accuracy = 0.1), " |\n",
+  "| **FA Replacement** | Cost to sign a starter instead | ",
+    percent(qb_t10$fa_replacement, accuracy = 0.1), " | ",
+    percent(rb_t10$fa_replacement, accuracy = 0.1), " |\n",
+  "| **Numerator** | Expected value over replacement | ",
+    round(qb_num, 4), " | ", round(rb_num, 4), " |\n",
+  "| **SD (volatility)** | How risky is this bet? | ",
+    percent(qb_t10$sd_player_return, accuracy = 0.1), " | ",
+    percent(rb_t10$sd_player_return, accuracy = 0.1), " |\n",
+  "| **Sharpe** | Risk-adjusted return | **",
+    round(qb_num / qb_t10$sd_player_return, 2), "** | **",
+    round(rb_num / rb_t10$sd_player_return, 2), "** |\n\n",
+
+  "**QB Top 10:** 73% of top-10 QBs produce elite returns, and FA QBs are expensive (14.6% of cap), ",
+  "but the expected elite payoff (24.2%) still exceeds the FA cost — so the numerator is positive. ",
+  "Even with high variance, the Sharpe is +0.37.\n\n",
+
+  "**RB Top 10:** 0% of top-10 RBs produced an elite return — none cracked the top 10% of all players. ",
+  "So the expected elite payoff is zero, but you're still paying 6.0% in FA opportunity cost. ",
+  "The numerator goes negative, giving a Sharpe of -0.62. The math says: just sign a free agent.\n"
+))
+```
+
+### Where Each Piece Comes From
+
+This formula combines two existing frameworks with new additions:
+
+- **P(elite) and Elite Threshold** come from [Brill & Wyner (2024)](https://arxiv.org/abs/2407.00730). Their key insight: draft pick value is **nonlinear** — earlier picks have fatter right tails. Using P(elite) instead of the average return captures this. A simple average would miss the boom outcomes that make top picks valuable.
+
+- **FA Replacement and the hit classification** build on [Timo Riske's methodology at PFF](https://www.pff.com/news/draft-what-historical-hit-rates-reveal-about-positional-success). His snap share baselines define what a "starter" looks like at each position, which determines both the hit threshold and the snap ratio used in rookie surplus.
+
+- **Rookie contract surplus** and **supply-controlled FA replacement** are new. Neither source quantified the cap savings from having a starter on a rookie deal, or calibrated FA cost to actual market supply by position.
+
 ```{r rookie-surplus-pct, results='asis'}
 surplus_pcts <- df_eligible %>%
   filter(player_return > 0, rookie_surplus > 0) %>%
