@@ -63,7 +63,7 @@ library(nflreadr)
 
 pos_colors <- c(
   "QB" = "#E41A1C", "RB" = "#377EB8", "WR" = "#4DAF4A", "TE" = "#984EA3",
-  "OT" = "#FF7F00", "IOL" = "#FFFF33", "EDGE" = "#A65628", "DL" = "#F781BF",
+  "OT" = "#FF7F00", "IOL" = "#B8860B", "EDGE" = "#A65628", "DL" = "#F781BF",
   "LB" = "#999999", "CB" = "#66C2A5", "S" = "#FC8D62"
 )
 
