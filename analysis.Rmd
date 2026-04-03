@@ -175,7 +175,7 @@ free agency?
 
 This analysis combines three frameworks:
 
-1. **Hit Rate ([Riske/PFF](https://www.pff.com/news/draft-pff-data-study-what-makes-an-nfl-draft-pick-a-hit)):**
+1. **Hit Rate ([Riske/PFF](https://www.pff.com/news/draft-what-historical-hit-rates-reveal-about-positional-success)):**
    A player is a "hit" if their average snap percentage over their first 4 NFL seasons reaches at
    least 75% of the positional baseline. Snap % is averaged over ALL expected games (including
    seasons not played as zero), so injuries and busts are properly penalized.
@@ -198,7 +198,7 @@ contracts. By stopping at 2022, every player in the dataset has had a real chanc
 
 This analysis builds directly on two key pieces of work:
 
-- **Timo Riske's hit rate methodology** ([PFF, 2022](https://www.pff.com/news/draft-pff-data-study-what-makes-an-nfl-draft-pick-a-hit)):
+- **Timo Riske's hit rate methodology** ([PFF, 2022](https://www.pff.com/news/draft-what-historical-hit-rates-reveal-about-positional-success)):
   Riske defined what a draft "hit" means — a player whose snap share over their first 4 seasons
   exceeds a fraction of the positional baseline. We tighten his original 2/3 threshold to 75%
   to better align with our elite-probability Sharpe formulation, but use the same positional
@@ -306,22 +306,22 @@ ggplot(dumbbell_data, aes(y = pos_group)) +
 
 ## Hit Rates by Position and Tier
 
-How often does a draft pick become a starter? A "hit" means the player's average snap percentage over their first 4 NFL seasons reaches at least 75% of the positional baseline — the typical snap share for an established starter at that position. The baseline varies because positions share the field differently:
+How often does a draft pick become a starter? We classify a player as a "hit" if they play at least 75% as much as an established starter at their position over their first 4 NFL seasons. The threshold varies by position because not every position plays every snap:
 
-| Position | Starter Baseline | 75% = Hit Threshold |
-|---|---|---|
-| IOL | 99.6% | 74.7% |
-| OT | 97.3% | 73.0% |
-| S | 95.2% | 71.4% |
-| LB / CB | 92.3% | 69.2% |
-| WR | 85.3% | 64.0% |
-| QB | 82.9% | 62.2% |
-| EDGE | 81.2% | 60.9% |
-| DL | 71.7% | 53.8% |
-| TE | 71.2% | 53.4% |
-| RB | 56.4% | 42.3% |
+| Position | What a starter plays | Hit threshold (75% of that) | What it means |
+|---|---|---|---|
+| IOL | ~100% of snaps | 75% | On the field nearly every play for 3+ years |
+| OT | ~97% | 73% | Same — linemen don't rotate |
+| S | ~95% | 71% | Safeties play almost every defensive snap |
+| LB / CB | ~92% | 69% | Occasionally rotate in sub packages |
+| WR | ~85% | 64% | Come off in heavy sets and some run formations |
+| QB | ~83% | 62% | Starters play every snap when healthy — injuries drive this down |
+| EDGE | ~81% | 61% | Rotate with other pass rushers on some downs |
+| DL | ~72% | 54% | Heavy rotation — even stars share snaps with the line |
+| TE | ~71% | 53% | Many offenses rotate TEs situationally |
+| RB | ~56% | 42% | Even a bellcow comes off for passing downs and in committee |
 
-RBs have the lowest bar because even a bellcow RB1 shares snaps on passing downs and in rotation — 56% is what a starter looks like. IOL starters almost never come off the field, so their bar is the highest. Snap % is averaged over **all expected games** across 4 seasons, so missed games due to injury count as zeros — availability matters.
+Snap % is averaged over **all expected games** across 4 seasons — missed games due to injury count as zeros, so availability matters. A player who tears their ACL and misses a full season still clears the threshold at every position if they're a starter when healthy (75% of snaps played × 3/4 seasons ≈ 56%).
 
 ```{r hit-rate-heatmap, fig.height=8}
 hit_rates <- sharpe %>%
@@ -1180,6 +1180,6 @@ ggplot(team_pos_all, aes(x = pct, y = team, fill = pos_bucket)) +
 ---
 
 *Data: [nflreadr](https://nflreadr.nflverse.com/) (PFR draft picks, snap counts, OverTheCap contracts).
-Methodology: [Riske/PFF hit rates](https://www.pff.com/news/draft-pff-data-study-what-makes-an-nfl-draft-pick-a-hit),
+Methodology: [Riske/PFF hit rates](https://www.pff.com/news/draft-what-historical-hit-rates-reveal-about-positional-success),
 [Brill & Wyner 2024](https://arxiv.org/abs/2407.00730) nonlinear upside framework.
 Analysis covers drafted players 2009–2022 with snap count data available (2013+).*
