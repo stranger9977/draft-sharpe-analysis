@@ -138,6 +138,37 @@ cat(paste0(
 ))
 ```
 
+### What About RB at Pick #3?
+
+```{r rb-pick3, results='asis'}
+# All top-5 RBs in our dataset
+top5_rb <- player_lookup %>% filter(pos_group == "RB", pick <= 5, season <= 2022)
+pick3_rb <- player_lookup %>% filter(pos_group == "RB", pick == 3, season <= 2022)
+
+# All pick #3 selections
+pick3_all <- player_lookup %>% filter(pick == 3, season <= 2022)
+pick3_elite <- pick3_all %>% filter(player_return > elite_threshold)
+
+cat(paste0(
+  "Mock drafts have an RB going as high as **#3 overall** this year. The data has something to say about that.\n\n",
+
+  "Since 2010, only **one RB has been drafted at #3**: Trent Richardson (2012). ",
+  "He wasn't a hit — snap ratio of just ", round(pick3_rb$snap_ratio[1], 2),
+  "× — and returned only ", percent(pick3_rb$player_return[1], accuracy = 0.1), " of cap. ",
+  "Across all ", nrow(top5_rb), " RBs drafted in the top 5, the hit rate is ",
+  percent(mean(top5_rb$is_hit), accuracy = 1),
+  " — but **none produced an elite return** (mean: ",
+  percent(mean(top5_rb$player_return), accuracy = 0.1),
+  " vs. the ", percent(elite_threshold, accuracy = 0.1), " elite threshold).\n\n",
+
+  "For context, pick #3 has been used ", nrow(pick3_all), " times since 2010. ",
+  "The selections that *did* produce elite returns? ",
+  paste(pick3_elite$pfr_player_name, paste0("(", pick3_elite$pos_group, ", ", pick3_elite$season, ")"), collapse = ", "),
+  ". The position matters — and at #3, the opportunity cost of passing on EDGE or QB ",
+  "to take an RB is historically steep."
+))
+```
+
 ```{r love-chart, fig.height=8, fig.width=10}
 # The Sharpe heatmap as the hook — shows the full landscape at a glance
 ggplot(sharpe, aes(x = tier, y = reorder(pos_group, sharpe_elite), fill = sharpe_elite)) +
