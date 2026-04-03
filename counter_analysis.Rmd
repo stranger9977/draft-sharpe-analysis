@@ -578,9 +578,9 @@ cat(paste0(
 
 We can define "blue chip" two ways: retrospectively (top 10% of career AV at the position) and prospectively (top 10% of NGS Combined Score at the position). How much do they overlap -- and does it differ by position?
 
-First, RB:
+Every player with an NGS score falls into one of four buckets: blue chip by both definitions (pre-draft AND career), pre-draft only (high NGS, lower career AV), career only (lower NGS, high career AV), or neither. Here's how they scatter — each dot is a player, positioned by their NGS score (x) and career AV (y):
 
-```{r ngs-vs-career-bc-rb-big, fig.height=5, fig.width=10}
+```{r ngs-vs-career-scatter, fig.height=8, fig.width=11}
 bc_overlap <- ngs_with_outcomes %>%
   mutate(
     bc_type = case_when(
@@ -588,41 +588,48 @@ bc_overlap <- ngs_with_outcomes %>%
       is_blue_chip & !is_ngs_blue_chip ~ "Career Only",
       !is_blue_chip & is_ngs_blue_chip ~ "Pre-Draft Only",
       TRUE ~ "Neither"
-    )
+    ),
+    bc_type = factor(bc_type, levels = c("Both", "Career Only", "Pre-Draft Only", "Neither"))
   )
 
-bc_by_pos <- bc_overlap %>%
-  filter(bc_type != "Neither") %>%
-  group_by(pos_group, bc_type) %>%
+# Thresholds for reference lines
+ngs_bc_thresholds <- ngs_with_outcomes %>%
+  group_by(pos_group) %>%
   summarise(
-    n = n(),
-    hit_rate = mean(is_hit, na.rm = TRUE),
+    ngs_90 = quantile(cmbn_score, 0.9, na.rm = TRUE),
+    av_90 = quantile(car_av, 0.9, na.rm = TRUE),
     .groups = "drop"
-  ) %>%
-  mutate(
-    bc_type = factor(bc_type, levels = c("Both", "Pre-Draft Only", "Career Only")),
-    pos_group = factor(pos_group, levels = key_positions)
   )
 
-bc_rb <- bc_by_pos %>% filter(pos_group == "RB")
+# RB-specific thresholds
+rb_thresh <- ngs_bc_thresholds %>% filter(pos_group == "RB")
 
-ggplot(bc_rb, aes(x = hit_rate, y = bc_type, fill = bc_type)) +
-  geom_col(width = 0.6, alpha = 0.85) +
-  geom_text(aes(label = paste0(round(hit_rate * 100), "% (n=", n, ")")),
-            hjust = -0.05, size = 4, fontface = "bold") +
-  scale_fill_manual(values = c(
-    "Both" = "#2e7d32",
-    "Pre-Draft Only" = "#377EB8",
-    "Career Only" = "#FF9800"
-  ), guide = "none") +
-  scale_x_continuous(labels = percent_format(), limits = c(0, 1.15),
-                     expand = expansion(mult = c(0, 0))) +
+rb_scatter <- bc_overlap %>% filter(pos_group == "RB")
+
+ggplot(rb_scatter, aes(x = cmbn_score, y = car_av, color = bc_type)) +
+  geom_vline(xintercept = rb_thresh$ngs_90, linetype = "dashed", color = "gray50", linewidth = 0.5) +
+  geom_hline(yintercept = rb_thresh$av_90, linetype = "dashed", color = "gray50", linewidth = 0.5) +
+  geom_point(data = rb_scatter %>% filter(bc_type == "Neither"), alpha = 0.3, size = 2) +
+  geom_point(data = rb_scatter %>% filter(bc_type != "Neither"), alpha = 0.8, size = 3) +
+  geom_text(data = rb_scatter %>% filter(bc_type == "Both"),
+            aes(label = pfr_player_name), vjust = -1, size = 2.8, fontface = "bold", show.legend = FALSE) +
+  geom_text(data = rb_scatter %>% filter(bc_type == "Pre-Draft Only"),
+            aes(label = pfr_player_name), vjust = -1, size = 2.5, show.legend = FALSE) +
+  annotate("text", x = rb_thresh$ngs_90 + 0.5, y = max(rb_scatter$car_av) * 0.95,
+           label = "Top 10%\nNGS", hjust = 0, size = 3, color = "gray50") +
+  annotate("text", x = min(rb_scatter$cmbn_score) + 1, y = rb_thresh$av_90 + 1,
+           label = "Top 10% Career AV", hjust = 0, size = 3, color = "gray50") +
+  scale_color_manual(values = c(
+    "Both" = "#2e7d32", "Career Only" = "#FF9800",
+    "Pre-Draft Only" = "#377EB8", "Neither" = "gray70"
+  ), name = "Blue-Chip Status") +
   labs(
-    title = "RB: Hit Rate by Blue-Chip Definition",
-    subtitle = "Hit = Article 1's snap-based starter threshold | Pre-draft BC = top 10% NGS | Career BC = top 10% career AV",
-    x = "Hit Rate (snap-based starter)", y = NULL
+    title = "RB: Pre-Draft Score vs Career Value",
+    subtitle = "Dashed lines = top 10% thresholds | Named players are blue chips | Where does the pre-draft signal work?",
+    x = "NGS Combined Score (pre-draft)", y = "Career Approximate Value"
   ) +
-  theme_minimal(base_size = 14)
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top")
 ```
 
 ```{r ngs-bc-rb-narrative, results='asis'}
@@ -632,38 +639,45 @@ rb_baseline <- ngs_with_outcomes %>% filter(pos_group == "RB") %>%
   summarise(rate = mean(is_hit, na.rm = TRUE)) %>% pull(rate)
 
 cat(paste0(
-  "For RBs identified as blue chips by **both** pre-draft and career metrics, the hit rate is **",
+  "The upper-right quadrant is where the model would love to live — players who scored in the top 10% ",
+  "pre-draft AND delivered top 10% career value. For RBs, **", nrow(rb_both),
+  "** players land there. The upper-left (career-only blue chips) are late bloomers the pre-draft signal missed. ",
+  "The lower-right (pre-draft only) are the busts — high NGS scores that didn't translate (",
+  nrow(rb_ngs_only), " players).\n\n",
+  "The pre-draft signal works: players flagged as blue chips by both metrics became starters at **",
   round(mean(rb_both$is_hit, na.rm = TRUE) * 100, 1),
-  "%**. Pre-draft-only blue chips (high NGS but didn't reach top 10% career AV) still hit at **",
+  "%**. Pre-draft-only blue chips hit at **",
   round(mean(rb_ngs_only$is_hit, na.rm = TRUE) * 100, 1),
-  "%** — compared to a baseline of **", round(rb_baseline * 100, 1),
-  "%** for all RBs with NGS scores. The pre-draft signal is meaningful.\n\n",
-  "How does this compare across positions?"
+  "%** — still above the **", round(rb_baseline * 100, 1),
+  "%** baseline for all RBs. The question for Love is which quadrant he'll land in."
 ))
 ```
 
-```{r ngs-vs-career-bc-all-small, fig.height=14, fig.width=12}
-bc_other <- bc_by_pos %>% filter(pos_group != "RB")
+The same view across all positions:
 
-ggplot(bc_other, aes(x = hit_rate, y = bc_type, fill = bc_type)) +
-  geom_col(width = 0.6, alpha = 0.85) +
-  geom_text(aes(label = paste0(round(hit_rate * 100), "% (n=", n, ")")),
-            hjust = -0.05, size = 2.8, fontface = "bold") +
-  scale_fill_manual(values = c(
-    "Both" = "#2e7d32",
-    "Pre-Draft Only" = "#377EB8",
-    "Career Only" = "#FF9800"
-  ), guide = "none") +
-  scale_x_continuous(labels = percent_format(), limits = c(0, 1.15),
-                     expand = expansion(mult = c(0, 0))) +
-  facet_wrap(~pos_group, ncol = 2) +
+```{r ngs-vs-career-scatter-all, fig.height=16, fig.width=12}
+all_scatter <- bc_overlap %>%
+  filter(pos_group %in% key_positions) %>%
+  mutate(pos_group = factor(pos_group, levels = key_positions))
+
+ggplot(all_scatter, aes(x = cmbn_score, y = car_av, color = bc_type)) +
+  geom_point(data = all_scatter %>% filter(bc_type == "Neither"), alpha = 0.2, size = 1.5) +
+  geom_point(data = all_scatter %>% filter(bc_type != "Neither"), alpha = 0.7, size = 2.5) +
+  scale_color_manual(values = c(
+    "Both" = "#2e7d32", "Career Only" = "#FF9800",
+    "Pre-Draft Only" = "#377EB8", "Neither" = "gray70"
+  ), name = "Blue-Chip Status") +
+  facet_wrap(~pos_group, scales = "free", ncol = 3) +
   labs(
-    title = "Hit Rate by Blue-Chip Definition: All Positions",
-    subtitle = "Hit = Article 1's snap-based starter | Pre-draft BC = top 10% NGS | Career BC = top 10% career AV",
-    x = "Hit Rate (snap-based starter)", y = NULL
+    title = "Pre-Draft Score vs Career Value: All Positions",
+    subtitle = "Green = blue chip by both metrics | Orange = career only | Blue = pre-draft only | Gray = neither",
+    x = "NGS Combined Score", y = "Career AV"
   ) +
   theme_minimal(base_size = 13) +
-  theme(strip.text = element_text(face = "bold", size = 12))
+  theme(
+    legend.position = "top",
+    strip.text = element_text(face = "bold", size = 12)
+  )
 ```
 
 ```{r ngs-bc-all-narrative, results='asis'}
@@ -672,16 +686,13 @@ ngs_only_all <- bc_overlap %>% filter(bc_type == "Pre-Draft Only")
 baseline_all <- mean(ngs_with_outcomes$is_hit, na.rm = TRUE)
 
 cat(paste0(
-  "Across all positions, players who were blue chips by **both** definitions became starters at **",
+  "Across all positions, players in the **both** quadrant became starters at **",
   round(mean(both_all$is_hit, na.rm = TRUE) * 100, 1),
   "%**. Pre-draft-only blue chips hit at **",
   round(mean(ngs_only_all$is_hit, na.rm = TRUE) * 100, 1),
-  "%** — compared to a baseline of **", round(baseline_all * 100, 1),
-  "%** across all players with NGS scores.\n\n",
-  "The pre-draft signal isn't equally useful everywhere — it's strongest at positions ",
-  "where athletic profiles translate most directly to NFL production, and weakest where ",
-  "scheme fit and coaching development matter more. But at every position, ",
-  "the top pre-draft prospects outperform the field."
+  "%** — compared to **", round(baseline_all * 100, 1),
+  "%** across all players. The pattern holds everywhere: the pre-draft signal isn't perfect, ",
+  "but it meaningfully separates prospects who become starters from those who don't."
 ))
 ```
 
@@ -911,53 +922,66 @@ cat(paste0(
 
 This is the practical question. Article 1 gave us the Sharpe ratio for RB in the top 10: **-0.615**. That's the average across all RBs drafted in the top 10 since 2010. But averages hide a massive range. Here's every first-round RB in our data, plotted against the opportunity cost of not drafting the best available non-RB at the same pick.
 
-```{r rb-breakeven, fig.height=8, fig.width=11}
+```{r rb-breakeven, fig.height=9, fig.width=12}
 # All first-round picks with individual Sharpe
 all_r1 <- player_lookup %>%
   filter(pick <= 32, pos_group %in% key_positions)
 
-# Compute opportunity cost at each pick: mean Sharpe of non-RB picks in the same tier
-opp_cost_by_tier <- all_r1 %>%
-  filter(pos_group != "RB") %>%
-  mutate(tier = factor(tier, levels = tier_order)) %>%
-  group_by(tier) %>%
-  summarise(
-    opp_cost_sharpe = mean(player_sharpe, na.rm = TRUE),
-    opp_cost_return = mean(player_return, na.rm = TRUE),
-    .groups = "drop"
-  )
+# For each RB first rounder, find the next non-RB drafted
+rb_r1 <- all_r1 %>% filter(pos_group == "RB")
 
-# RB first-rounders with their tier
-rb_r1 <- all_r1 %>%
-  filter(pos_group == "RB") %>%
-  left_join(opp_cost_by_tier, by = "tier") %>%
+rb_with_alts <- map_dfr(1:nrow(rb_r1), function(i) {
+  row <- rb_r1[i, ]
+  candidate <- all_r1 %>%
+    filter(season == row$season, pos_group != "RB", pick > row$pick) %>%
+    arrange(pick) %>%
+    slice_head(n = 1)
+  if (nrow(candidate) > 0) {
+    row %>% mutate(
+      alt_name = candidate$pfr_player_name,
+      alt_pos = candidate$pos_group,
+      alt_pick = candidate$pick,
+      alt_sharpe = candidate$player_sharpe
+    )
+  } else {
+    row %>% mutate(
+      alt_name = NA_character_, alt_pos = NA_character_,
+      alt_pick = NA_real_, alt_sharpe = NA_real_
+    )
+  }
+})
+
+rb_with_alts <- rb_with_alts %>%
   mutate(
-    beat_opp = player_sharpe > opp_cost_sharpe,
-    name_label = paste0(pfr_player_name, "\n('", str_sub(season, 3, 4), ", #", pick, ")")
+    beat_alt = player_sharpe > alt_sharpe,
+    rb_label = paste0(pfr_player_name, " ('", str_sub(season, 3, 4), ")"),
+    alt_label = paste0(alt_name, " (", alt_pos, ")"),
+    # Truncate long names
+    alt_label = str_trunc(alt_label, 25)
   )
 
-ggplot(rb_r1, aes(x = pick, y = player_sharpe)) +
-  # Opportunity cost line
-  geom_hline(data = opp_cost_by_tier %>% filter(tier %in% c("Top 10", "Late 1st")),
-             aes(yintercept = opp_cost_sharpe, linetype = tier),
-             color = "gray40", linewidth = 0.8) +
-  # Zero line
+ggplot(rb_with_alts, aes(x = pick)) +
   geom_hline(yintercept = 0, color = "gray80", linewidth = 0.5) +
-  # Individual RBs
-  geom_point(aes(color = beat_opp), size = 4, alpha = 0.8) +
-  geom_text(aes(label = pfr_player_name), vjust = -1.2, size = 2.8, fontface = "bold") +
-  # CMC and Gurley highlighted
-  geom_point(data = rb_r1 %>% filter(pfr_player_name %in% c("Christian McCaffrey", "Todd Gurley")),
-             color = "#377EB8", size = 5, shape = 1, stroke = 2) +
+  # Segments connecting RB to their alternative
+  geom_segment(aes(xend = pick, y = player_sharpe, yend = alt_sharpe),
+               color = "gray70", linewidth = 0.5, alpha = 0.5) +
+  # Non-RB alternatives
+  geom_point(aes(y = alt_sharpe), shape = 4, size = 3, color = "#FF9800", stroke = 1.5) +
+  # RB dots
+  geom_point(aes(y = player_sharpe, color = beat_alt), size = 4, alpha = 0.8) +
+  # RB name labels
+  geom_text(aes(y = player_sharpe, label = pfr_player_name),
+            vjust = -1.2, size = 2.5, fontface = "bold") +
+  # Alternative name labels
+  geom_text(aes(y = alt_sharpe, label = alt_label),
+            vjust = 1.8, size = 2.2, color = "#FF9800", fontface = "italic") +
   scale_color_manual(values = c("TRUE" = "#2e7d32", "FALSE" = "#c62828"),
-                     labels = c("TRUE" = "Beat opportunity cost", "FALSE" = "Below opportunity cost"),
-                     name = "vs. Non-RB Alternative") +
-  scale_linetype_manual(values = c("Top 10" = "dashed", "Late 1st" = "dotted"),
-                        name = "Avg Non-RB Sharpe") +
+                     labels = c("TRUE" = "RB beat the alternative", "FALSE" = "Alternative was better"),
+                     name = NULL) +
   scale_x_continuous(breaks = seq(0, 32, 4)) +
   labs(
-    title = "The RB Gamble: Individual Sharpe vs Opportunity Cost",
-    subtitle = "Each dot = a first-round RB | Dashed line = avg non-RB Sharpe in that tier | Blue circles = CMC & Gurley",
+    title = "The RB Gamble: Who They Took vs Who They Could Have Had",
+    subtitle = "Circle = RB drafted | X = next non-RB pick | Vertical line = the gap | Green = RB won the bet",
     x = "Draft Pick", y = "Individual Player Sharpe"
   ) +
   theme_minimal(base_size = 14) +
@@ -965,26 +989,24 @@ ggplot(rb_r1, aes(x = pick, y = player_sharpe)) +
 ```
 
 ```{r rb-breakeven-narrative, results='asis'}
-# Key stats
 rb_top10_sharpe <- sharpe %>% filter(pos_group == "RB", tier == "Top 10") %>% pull(sharpe_elite)
-cmc <- rb_r1 %>% filter(pfr_player_name == "Christian McCaffrey")
-gurley <- rb_r1 %>% filter(pfr_player_name == "Todd Gurley")
-opp_top10 <- opp_cost_by_tier %>% filter(tier == "Top 10") %>% pull(opp_cost_sharpe)
-rb_beat_pct <- mean(rb_r1$beat_opp, na.rm = TRUE)
+cmc <- rb_with_alts %>% filter(pfr_player_name == "Christian McCaffrey")
+gurley <- rb_with_alts %>% filter(pfr_player_name == "Todd Gurley")
+trich <- rb_with_alts %>% filter(pfr_player_name == "Trent Richardson")
+rb_beat_pct <- mean(rb_with_alts$beat_alt, na.rm = TRUE)
 
 cat(paste0(
   "Article 1's tier-level Sharpe for RB in the top 10 is **", round(rb_top10_sharpe, 3),
-  "** — the worst of any position. But that number averages together Christian McCaffrey (",
-  round(cmc$player_sharpe, 2), ") with Trent Richardson (0.06). The range is enormous.\n\n",
-  "The dashed line shows the opportunity cost: the average Sharpe of non-RB picks in the top 10 (",
-  round(opp_top10, 2), "). To justify the pick, an RB needs to land **above that line**. ",
-  "Only **", round(rb_beat_pct * 100), "%** of first-round RBs did.\n\n",
-  "**CMC at pick 8** (Sharpe: ", round(cmc$player_sharpe, 2),
-  ") and **Gurley at pick 10** (Sharpe: ", round(gurley$player_sharpe, 2),
-  ") are the RB ceiling — both comfortably beat the opportunity cost. ",
-  "Love needs to be in that tier, not the Trent Richardson tier, to justify a top-10 pick.\n\n",
-  "The NGS data says Love's profile looks like the CMC/Gurley cluster, not the Richardson cluster. ",
-  "But the model's warning is clear: even among first-round RBs, most don't clear the bar."
+  "** — the worst of any position. Now you can see why: most RBs lost the bet against the next non-RB pick.\n\n",
+  "**The wins:** CMC (Sharpe ", round(cmc$player_sharpe, 2),
+  ") beat ", cmc$alt_name, " (", cmc$alt_pos, ", ",
+  round(cmc$alt_sharpe, 2), "). Gurley (",
+  round(gurley$player_sharpe, 2), ") beat ", gurley$alt_name, " (", gurley$alt_pos, ").\n\n",
+  "**The losses:** Trent Richardson at pick 3 (Sharpe ",
+  round(trich$player_sharpe, 2), ") — the team could have had **", trich$alt_name,
+  "** (", trich$alt_pos, ", Sharpe ", round(trich$alt_sharpe, 2), ").\n\n",
+  "Only **", round(rb_beat_pct * 100), "%** of first-round RBs beat their next non-RB alternative. ",
+  "Love needs to be in the CMC/Gurley cluster, not the Richardson cluster, to justify the pick."
 ))
 ```
 
