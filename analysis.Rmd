@@ -324,29 +324,37 @@ How often does a draft pick become a starter? I classify a player as a "hit" if 
 
 Snap % is averaged over **all expected games** across 4 seasons — missed games due to injury count as zeros, so availability matters. A player who tears their ACL and misses a full season still clears the threshold at every position if they're a starter when healthy (75% of snaps played × 3/4 seasons ≈ 56%).
 
-```{r hit-rate-heatmap, fig.height=8}
-hit_rates <- sharpe %>%
-  select(pos_group, tier, hit_rate, n)
-
-ggplot(hit_rates, aes(x = tier, y = reorder(pos_group, hit_rate), fill = hit_rate)) +
-  geom_tile(color = "white", linewidth = 0.5) +
-  geom_text(aes(label = paste0(round(hit_rate * 100), "%\n(n=", n, ")")),
-            size = 3.2, color = "white", fontface = "bold") +
-  scale_fill_gradient2(
-    low = "#c62828", mid = "#f9a825", high = "#2e7d32",
-    midpoint = 0.5, limits = c(0, 1),
-    labels = percent_format()
-  ) +
-  labs(
-    title = "Draft Hit Rates by Position Group and Tier",
-    subtitle = "Hit = average snap % over 4 seasons exceeds 75% positional baseline",
-    x = NULL, y = NULL, fill = "Hit Rate"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(
-    axis.text.x = element_text(angle = 30, hjust = 1),
-    panel.grid = element_blank()
+```{r hit-rate-by-round, fig.height=6}
+round_hits <- df_eligible %>%
+  mutate(round = case_when(
+    pick <= 32 ~ "Round 1",
+    pick <= 64 ~ "Round 2",
+    pick <= 100 ~ "Round 3",
+    pick <= 135 ~ "Round 4",
+    pick <= 170 ~ "Round 5",
+    pick <= 215 ~ "Round 6",
+    TRUE ~ "Round 7"
+  )) %>%
+  mutate(round = factor(round, levels = paste("Round", 1:7))) %>%
+  group_by(round) %>%
+  summarise(
+    n = n(),
+    hits = sum(is_hit),
+    hit_rate = hits / n,
+    .groups = "drop"
   )
+
+ggplot(round_hits, aes(x = round, y = hit_rate)) +
+  geom_col(fill = "#2e7d32", width = 0.7) +
+  geom_text(aes(label = paste0(round(hit_rate * 100, 1), "%\n(n=", n, ")")),
+            vjust = -0.3, size = 4, fontface = "bold") +
+  scale_y_continuous(labels = percent_format(), limits = c(0, 0.55)) +
+  labs(
+    title = "Draft Hit Rate by Round",
+    subtitle = "Hit = snap share over 4 seasons reaches 75% of positional baseline | Drafted 2010–2022",
+    x = NULL, y = "Hit Rate"
+  ) +
+  theme_minimal(base_size = 14)
 ```
 
 ## Supply-Controlled Free Agency Replacement Cost
@@ -1034,6 +1042,35 @@ refined in future work.
 - **QB projection → bust-rate discount.** Explicitly modeling the NCAA-to-NFL translation failure rate for QBs could produce a more honest expected value, even though the math still favors taking the shot.
 
 ---
+
+## Appendix: Hit Rates by Position and Tier
+
+The detailed view — hit rates broken out by position group and draft tier (Top 10, Late 1st, Round 2, Round 3, Rounds 4-7).
+
+```{r hit-rate-heatmap, fig.height=8}
+hit_rates <- sharpe %>%
+  select(pos_group, tier, hit_rate, n)
+
+ggplot(hit_rates, aes(x = tier, y = reorder(pos_group, hit_rate), fill = hit_rate)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(aes(label = paste0(round(hit_rate * 100), "%\n(n=", n, ")")),
+            size = 3.2, color = "white", fontface = "bold") +
+  scale_fill_gradient2(
+    low = "#c62828", mid = "#f9a825", high = "#2e7d32",
+    midpoint = 0.5, limits = c(0, 1),
+    labels = percent_format()
+  ) +
+  labs(
+    title = "Draft Hit Rates by Position Group and Tier",
+    subtitle = "Hit = average snap % over 4 seasons exceeds 75% positional baseline",
+    x = NULL, y = NULL, fill = "Hit Rate"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    panel.grid = element_blank()
+  )
+```
 
 ## Appendix: Round 1 Surplus Leaderboard
 
