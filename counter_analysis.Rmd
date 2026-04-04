@@ -1110,24 +1110,24 @@ non_rb_split <- all_r1_av %>%
   filter(pos_group != "RB") %>%
   mutate(pos_tier = ifelse(pos_group %in% premium_pos, "Premium", "Non-Premium")) %>%
   group_by(pick, pos_tier) %>%
-  summarise(med_av = median(car_av, na.rm = TRUE), n = n(), .groups = "drop")
+  summarise(avg_av = mean(car_av, na.rm = TRUE), n = n(), .groups = "drop")
 
 # Combined line for crossover detection
 non_rb_combined <- all_r1_av %>%
   filter(pos_group != "RB") %>%
   group_by(pick) %>%
-  summarise(med_av = median(car_av, na.rm = TRUE), n = n(), .groups = "drop") %>%
+  summarise(avg_av = mean(car_av, na.rm = TRUE), n = n(), .groups = "drop") %>%
   arrange(pick)
 
-# 5-pick rolling smooth (using median of medians)
-smooth_line <- function(df, col = "med_av") {
+# 5-pick rolling smooth
+smooth_line <- function(df, col = "avg_av") {
   df <- df %>% arrange(pick) %>% filter(pick <= 32)
   vals <- numeric(nrow(df))
   for(i in seq_along(df$pick)) {
     p <- df$pick[i]
     window_picks <- (p - 2):(p + 2)
     window_data <- df %>% filter(pick %in% window_picks)
-    vals[i] <- median(window_data[[col]], na.rm = TRUE)
+    vals[i] <- mean(window_data[[col]], na.rm = TRUE)
   }
   df$smooth_av <- vals
   df
