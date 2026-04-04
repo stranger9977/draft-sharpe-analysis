@@ -406,6 +406,10 @@ cat(paste0(
   "QB is the one position where only blue-chip prospects (Elite tier) reliably return value in the top 10 — ",
   "a Good QB prospect at pick 5 is a much bigger gamble than a Good OT or EDGE at the same spot. ",
   "For most other positions, Good is deep enough to find value.\n\n",
+  "On the other end, **IOL** is loaded — ",
+  if(nrow(deep_2025) > 0 && deep_2025$pos_group[1] == "IOL") paste0(deep_2025$n_good_plus[1], " Good+ prospects") else "the deepest position group",
+  " give teams plenty of quality options throughout the draft. ",
+  "If you need an interior lineman in 2025, the class will come to you.\n\n",
   "This is exactly the kind of information the Sharpe ratio can't incorporate — ",
   "the best position to draft depends on which classes are loaded *this year*."
 ))
@@ -488,13 +492,13 @@ The same signal-vs-reality check across other positions:
 ```{r other-pos-timeline-small, fig.height=12, fig.width=8}
 other_classes <- class_depth %>%
   filter(pos_group %in% key_positions, pos_group != "RB",
-         !is.na(hit_rate), !is.na(ngs_class_quality))
+         !is.na(hit_rate)) %>%
+  mutate(ngs_class_quality = replace_na(ngs_class_quality, "No NGS Data"))
 
 ggplot(other_classes, aes(x = factor(season), y = hit_rate, fill = ngs_class_quality)) +
   geom_col(width = 0.7, alpha = 0.85) +
   scale_fill_manual(
-    values = c("Deep" = "#2e7d32", "Average" = "#FFA726", "Thin" = "#c62828"),
-    na.value = "gray50",
+    values = c("Deep" = "#2e7d32", "Average" = "#FFA726", "Thin" = "#c62828", "No NGS Data" = "gray50"),
     name = "Pre-Draft Class Quality"
   ) +
   scale_y_continuous(labels = percent_format(), expand = expansion(mult = c(0, 0.15))) +
@@ -648,11 +652,18 @@ all_scatter <- ngs_with_outcomes %>%
     pos_group = factor(pos_group, levels = key_positions)
   )
 
-# Label the blue chips in each position
+# Label the top blue chips in each position
 bc_labels <- all_scatter %>%
   filter(is_bc) %>%
   group_by(pos_group) %>%
   slice_max(car_av, n = 3) %>%
+  ungroup()
+
+# Label interesting gray dots: non-blue-chips with top career AV (the model misses)
+gray_labels <- all_scatter %>%
+  filter(!is_bc) %>%
+  group_by(pos_group) %>%
+  slice_max(car_av, n = 2) %>%
   ungroup()
 
 ggplot(all_scatter, aes(x = cmbn_score, y = car_av)) +
@@ -660,6 +671,8 @@ ggplot(all_scatter, aes(x = cmbn_score, y = car_av)) +
   geom_point(data = all_scatter %>% filter(is_bc), color = "#377EB8", size = 2.5, alpha = 0.7) +
   geom_text(data = bc_labels, aes(label = pfr_player_name),
             vjust = -0.8, size = 2.2, color = "#377EB8", fontface = "bold") +
+  geom_text(data = gray_labels, aes(label = pfr_player_name),
+            vjust = -0.8, size = 2, color = "gray40", fontface = "italic") +
   geom_smooth(method = "lm", se = FALSE, color = "#377EB8", linewidth = 0.7, alpha = 0.5) +
   facet_wrap(~pos_group, scales = "free", ncol = 3) +
   labs(
@@ -996,7 +1009,7 @@ cat(paste0(
 
 This is the practical question. Article 1 gave us the Sharpe ratio for RB in the top 10: **-0.615**. That's the average across all RBs drafted in the top 10 since 2010. But averages hide a massive range. Here's every first-round RB in our data, plotted against the opportunity cost of not drafting the best available non-RB at the same pick.
 
-Each player's individual Sharpe is computed the same way as Article 1's positional Sharpe, but for a single player: their rookie contract surplus, second-contract value, and whether they became a starter (hit = 75% of positional snap baseline). The **circle** is the RB's individual Sharpe. The **yellow X** is the best non-RB player still available — the highest-Sharpe non-RB drafted in the rest of round 1 that year. This is the opportunity cost: what the team *could have had* if they'd passed on the RB. Green means the RB bet paid off; red means the best available alternative would have been better.
+Each player's individual Sharpe is computed the same way as Article 1's positional Sharpe, but for a single player: their rookie contract surplus, second-contract value, and whether they became a starter (hit = 75% of positional snap baseline). The **circle** is the RB's individual Sharpe. The **yellow X** is the best non-RB taken in the next 5 picks — a realistic proxy for who the team could have drafted instead. Green means the RB bet paid off; red means the nearby alternative would have been better.
 
 ```{r rb-breakeven, fig.height=9, fig.width=8}
 # All first-round picks with individual Sharpe
@@ -1009,7 +1022,7 @@ rb_r1 <- all_r1 %>% filter(pos_group == "RB")
 rb_with_alts <- map_dfr(1:nrow(rb_r1), function(i) {
   row <- rb_r1[i, ]
   candidate <- all_r1 %>%
-    filter(season == row$season, pos_group != "RB", pick > row$pick) %>%
+    filter(season == row$season, pos_group != "RB", pick > row$pick, pick <= row$pick + 5) %>%
     slice_max(player_sharpe, n = 1)
   if (nrow(candidate) > 0) {
     row %>% mutate(
@@ -1050,8 +1063,8 @@ ggplot(rb_with_alts, aes(y = row_label)) +
                      labels = c("TRUE" = "RB beat the alternative", "FALSE" = "Alternative was better"),
                      name = NULL) +
   labs(
-    title = "The RB Gamble: Who They Took vs Who They Could Have Had",
-    subtitle = "Circle = RB | X = next non-RB drafted | Green = RB won the bet",
+    title = "The RB Gamble: Who They Took\nvs Who They Could Have Had",
+    subtitle = "Circle = RB | X = best non-RB in next 5 picks | Green = RB won the bet",
     x = "Individual Player Sharpe", y = NULL
   ) +
   theme_minimal(base_size = 13) +
@@ -1070,7 +1083,7 @@ rb_beat_pct <- mean(rb_with_alts$beat_alt, na.rm = TRUE)
 
 cat(paste0(
   "Article 1's tier-level Sharpe for RB in the top 10 is **", round(rb_top10_sharpe, 3),
-  "** — the worst of any position. Now you can see why: most RBs lost the bet against the next non-RB pick.\n\n",
+  "** — the worst of any position. Now you can see why: most RBs lost the bet against the best nearby alternative.\n\n",
   "**The wins:** CMC (Sharpe ", round(cmc$player_sharpe, 2),
   ") beat ", cmc$alt_name, " (", cmc$alt_pos, ", ",
   round(cmc$alt_sharpe, 2), "). Gurley (",
@@ -1078,7 +1091,7 @@ cat(paste0(
   "**The losses:** Trent Richardson at pick 3 (Sharpe ",
   round(trich$player_sharpe, 2), ") — the team could have had **", trich$alt_name,
   "** (", trich$alt_pos, ", Sharpe ", round(trich$alt_sharpe, 2), ").\n\n",
-  "Only **", round(rb_beat_pct * 100), "%** of first-round RBs beat their next non-RB alternative. ",
+  "Only **", round(rb_beat_pct * 100), "%** of first-round RBs beat the best non-RB taken in the next 5 picks. ",
   "Love needs to be in the CMC/Gurley cluster, not the Richardson cluster, to justify the pick."
 ))
 ```
