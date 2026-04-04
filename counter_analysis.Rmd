@@ -1246,12 +1246,15 @@ draft_2026 <- read_csv("output/v2/draft_order_2026_r1.csv", show_col_types = FAL
 # Teams that need an RB based on current roster quality
 # "Need" = no established bellcow, committee situation, or unproven room
 need_teams <- c(
+  "ARI",  # Allgeier + aging Conner, no long-term answer
   "WAS",  # Rachaad White + Jerome Ford — committee backs, no bellcow
-  "JAX",  # Tuten/Allen — completely rebuilt room after Etienne trade, unproven
+  "NYG",  # Skattebo is a rookie, Tracy unproven — no established starter
+  "TEN",  # Pollard aging, Spears hasn't seized the role
+  "MIN",  # Aaron Jones is 31, Mason is a rental — no long-term answer
   "CAR",  # Chuba Hubbard is a career backup, Brooks coming off injury
+  "JAX",  # Tuten/Allen — completely rebuilt room after Etienne trade, unproven
   "NE",   # RBBC — Stevenson is a committee lead, no difference-maker
-  "SEA",  # Lost Kenneth Walker via trade, Charbonnet untested as lead
-  "ARI"   # Allgeier + aging Conner, no long-term answer
+  "SEA"   # Lost Kenneth Walker via trade, Charbonnet untested as lead
 )
 
 rb_table <- ourlads %>%
