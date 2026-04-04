@@ -1213,6 +1213,8 @@ cat(paste0(
 
 The chart above tells us what happens when an elite RB *hits*. But you don't know if Love will be CMC or Fournette before the draft. The real question: given the full range of outcomes for blue-chip RB prospects, at what pick does the expected value justify the selection?
 
+This is where the 2025 class context matters. The Sharpe ratio's opportunity cost assumes every class is average — equal depth at every position. But in 2025, **RB supply is scarce** (Love is the only Elite-tier RB, with a 17-point gap to RB2) while **premium position supply is deep** (IOL has 40 Good+ prospects, CB has 39, WR has 32). When premium positions are loaded, you can find that EDGE or OT in round 2 or 3. When RB is thin, you can't. The effective opportunity cost of drafting Love is lower than the historical average suggests — because what you're "giving up" will still be there later.
+
 ```{r love-fair-value, fig.height=6, fig.width=8}
 # Blue-chip RB expected Sharpe (all NGS top-10% RBs)
 bc_rb_sharpes <- blue_chip %>%
@@ -1224,60 +1226,89 @@ bc_q75 <- quantile(bc_rb_sharpes$player_sharpe, 0.75)
 bc_min <- min(bc_rb_sharpes$player_sharpe)
 bc_max <- max(bc_rb_sharpes$player_sharpe)
 
-# Non-RB average Sharpe by individual pick, smoothed
+# Split non-RB into premium (positive Sharpe: QB, EDGE, OT, WR) vs non-premium
+premium_pos <- c("QB", "EDGE", "OT", "WR")
+
+non_rb_split <- player_lookup %>%
+  filter(pick <= 32, pos_group != "RB") %>%
+  mutate(pos_tier = ifelse(pos_group %in% premium_pos, "Premium", "Non-Premium")) %>%
+  group_by(pick, pos_tier) %>%
+  summarise(avg_sharpe = mean(player_sharpe, na.rm = TRUE), n = n(), .groups = "drop")
+
+# Also compute the combined line for crossover detection
 non_rb_by_pick <- player_lookup %>%
   filter(pick <= 32, pos_group != "RB") %>%
   group_by(pick) %>%
   summarise(avg_sharpe = mean(player_sharpe, na.rm = TRUE), n = n(), .groups = "drop") %>%
   arrange(pick)
 
-# 5-pick rolling mean (manual, no zoo dependency)
-smooth_vals <- numeric(32)
-for(i in 1:32) {
-  window <- max(1, i-2):min(32, i+2)
-  smooth_vals[i] <- mean(non_rb_by_pick$avg_sharpe[window])
+# 5-pick rolling smooth for each
+smooth_line <- function(df) {
+  df <- df %>% arrange(pick) %>% filter(pick <= 32)
+  vals <- numeric(nrow(df))
+  for(i in seq_along(df$pick)) {
+    p <- df$pick[i]
+    window_picks <- (p - 2):(p + 2)
+    window_data <- df %>% filter(pick %in% window_picks)
+    vals[i] <- mean(window_data$avg_sharpe, na.rm = TRUE)
+  }
+  df$smooth_sharpe <- vals
+  df
 }
-non_rb_by_pick$smooth_sharpe <- smooth_vals
 
-# Find the crossover pick where median BC RB beats non-RB (from the back of round 1)
-crossover_pick <- non_rb_by_pick %>%
-  arrange(desc(pick)) %>%
-  filter(smooth_sharpe > bc_median) %>%
-  slice_head(n = 1) %>%
-  pull(pick) + 1
+premium_line <- smooth_line(non_rb_split %>% filter(pos_tier == "Premium"))
+nonprem_line <- smooth_line(non_rb_split %>% filter(pos_tier == "Non-Premium"))
+combined_line <- smooth_line(non_rb_by_pick)
 
-ggplot(non_rb_by_pick, aes(x = pick)) +
-  # Full range of BC RB outcomes (min to max)
+# Find crossover zones using combined line
+above_blue <- combined_line$smooth_sharpe > bc_median
+early_end <- which(above_blue)[1] - 1
+late_start_idx <- max(which(above_blue)) + 1
+late_start_pick <- combined_line$pick[late_start_idx]
+dead_zone_start <- early_end + 1
+dead_zone_end <- late_start_pick - 1
+
+# Also find where BC RB beats non-premium specifically
+nonprem_crossover <- nonprem_line %>% filter(smooth_sharpe <= bc_median)
+
+ggplot() +
+  # Full range of BC RB outcomes
   annotate("rect", xmin = -Inf, xmax = Inf, ymin = bc_min, ymax = bc_max,
            fill = "#377EB8", alpha = 0.08) +
-  # IQR of BC RB outcomes (25th to 75th)
+  # IQR
   annotate("rect", xmin = -Inf, xmax = Inf, ymin = bc_q25, ymax = bc_q75,
            fill = "#377EB8", alpha = 0.15) +
-  # Crossover zone
-  annotate("rect", xmin = crossover_pick - 0.5, xmax = 32.5, ymin = -Inf, ymax = Inf,
-           fill = "#2e7d32", alpha = 0.06) +
-  annotate("text", x = crossover_pick + 0.5, y = bc_max - 0.1,
-           label = paste0("Pick ", crossover_pick, "+:\nfair value zone"),
-           color = "#2e7d32", hjust = 0, size = 3.5, fontface = "bold") +
-  # Non-RB opportunity cost
-  geom_line(aes(y = smooth_sharpe), color = "#FF9800", linewidth = 1.2) +
-  geom_point(aes(y = avg_sharpe), color = "#FF9800", alpha = 0.4, size = 2) +
+  # Dead zone
+  annotate("rect", xmin = dead_zone_start - 0.5, xmax = dead_zone_end + 0.5,
+           ymin = -Inf, ymax = Inf, fill = "#c62828", alpha = 0.04) +
+  annotate("text", x = (dead_zone_start + dead_zone_end) / 2, y = bc_max + 0.15,
+           label = paste0("Dead zone (", dead_zone_start, "-", dead_zone_end, ")"),
+           color = "#c62828", hjust = 0.5, size = 3.5, fontface = "bold") +
+  # Premium line (the real competition)
+  geom_line(data = premium_line, aes(x = pick, y = smooth_sharpe),
+            color = "#c62828", linewidth = 1.2) +
+  # Non-premium line
+  geom_line(data = nonprem_line, aes(x = pick, y = smooth_sharpe),
+            color = "#FF9800", linewidth = 1.2, linetype = "dashed") +
   # BC RB median
   geom_hline(yintercept = bc_median, color = "#377EB8", linewidth = 1.2, linetype = "solid") +
   # Labels
-  annotate("text", x = 2, y = bc_median + 0.08,
-           label = paste0("BC RB median Sharpe: ", round(bc_median, 2)),
-           color = "#377EB8", hjust = 0, size = 3.5, fontface = "bold") +
-  annotate("text", x = 1, y = bc_q75 + 0.06, label = "75th pctl",
-           color = "#377EB8", hjust = 0, size = 3, fontface = "italic") +
-  annotate("text", x = 1, y = bc_q25 - 0.06, label = "25th pctl",
-           color = "#377EB8", hjust = 0, size = 3, fontface = "italic") +
-  annotate("text", x = 28, y = non_rb_by_pick$smooth_sharpe[28] + 0.08,
-           label = "Avg non-RB at pick", color = "#FF9800", hjust = 1, size = 3.5, fontface = "bold") +
+  annotate("text", x = 17, y = bc_median - 0.1,
+           label = paste0("BC RB median: ", round(bc_median, 2)),
+           color = "#377EB8", hjust = 0.5, size = 3.5, fontface = "bold") +
+  annotate("text", x = 13, y = max(premium_line$smooth_sharpe, na.rm=TRUE) + 0.08,
+           label = "Premium (QB, EDGE, OT, WR)", color = "#c62828", hjust = 0.5, size = 3.5, fontface = "bold") +
+  annotate("text", x = 25, y = min(nonprem_line$smooth_sharpe, na.rm=TRUE) - 0.08,
+           label = "Non-premium (CB, IOL, TE, etc.)", color = "#FF9800", hjust = 0.5, size = 3.5, fontface = "bold") +
+  annotate("text", x = 32, y = bc_q75 + 0.06, label = "75th pctl",
+           color = "#377EB8", hjust = 1, size = 3, fontface = "italic") +
+  annotate("text", x = 32, y = bc_q25 - 0.06, label = "25th pctl",
+           color = "#377EB8", hjust = 1, size = 3, fontface = "italic") +
   scale_x_continuous(breaks = seq(1, 32, 2)) +
+  coord_cartesian(ylim = c(bc_min - 0.2, bc_max + 0.3)) +
   labs(
     title = "Love's Fair Value: Where the Gamble Makes Sense",
-    subtitle = "Blue band = BC RB outcome range (darker = IQR) | Orange = avg non-RB at pick",
+    subtitle = "Blue band = BC RB range | Red = premium positions | Orange dashed = non-premium",
     x = "Pick Number", y = "Individual Player Sharpe"
   ) +
   theme_minimal(base_size = 13)
@@ -1285,9 +1316,9 @@ ggplot(non_rb_by_pick, aes(x = pick)) +
 
 ```{r love-fair-value-narrative, results='asis'}
 # Compute % of BC RBs that beat non-RB at different pick ranges
-early <- non_rb_by_pick %>% filter(pick <= 10) %>% summarise(avg = mean(smooth_sharpe))
-mid <- non_rb_by_pick %>% filter(pick >= 11, pick <= 20) %>% summarise(avg = mean(smooth_sharpe))
-late <- non_rb_by_pick %>% filter(pick >= 21) %>% summarise(avg = mean(smooth_sharpe))
+early <- combined_line %>% filter(pick <= 10) %>% summarise(avg = mean(smooth_sharpe))
+mid <- combined_line %>% filter(pick >= 11, pick <= 20) %>% summarise(avg = mean(smooth_sharpe))
+late <- combined_line %>% filter(pick >= 21) %>% summarise(avg = mean(smooth_sharpe))
 
 pct_beat_early <- mean(bc_rb_sharpes$player_sharpe > early$avg)
 pct_beat_mid <- mean(bc_rb_sharpes$player_sharpe > mid$avg)
@@ -1298,20 +1329,31 @@ cat(paste0(
   "We use the median rather than the mean because the distribution is skewed — a few spectacular busts ",
   "(Trent Richardson) drag the mean down. The median (", round(bc_median, 2), ") better represents what a ",
   "typical blue-chip RB actually delivers.\n\n",
-  "The blue bands show the full range of BC RB outcomes: the darker band is the interquartile range ",
-  "(middle 50% of outcomes), and the lighter band is the full range from worst to best.\n\n",
-  "**The definitive answer: pick ", crossover_pick, ".**\n\n",
-  "That's where the orange line (non-RB opportunity cost) drops below the blue line (BC RB median). ",
-  "From pick ", crossover_pick, " onward, the typical blue-chip RB outcome beats what you'd get from ",
-  "the average non-RB alternative. The green zone marks where the gamble is in your favor.\n\n",
-  "Before pick ", crossover_pick, ", the non-RB alternatives are too rich — picks 11-15 are especially ",
-  "dangerous, where the average non-RB pick returns nearly 1.9. Even the best BC RBs barely clear that bar.\n\n",
-  "The range tells the rest of the story:\n\n",
-  "- **Picks 1-10:** ", round(pct_beat_early * 100), "% of BC RBs beat the non-RB alternative — a coin flip at best\n",
-  "- **Picks 11-20:** ", round(pct_beat_mid * 100), "% — the worst odds in the round\n",
-  "- **Picks 21-32:** ", round(pct_beat_late * 100), "% — the gamble tips in your favor\n\n",
-  "**For Love specifically:** if he's available at pick ", crossover_pick, " or later, the data says take him. ",
-  "Before that, you're paying a premium the position historically can't justify — even for blue-chip prospects."
+  "The blue bands show the full range of BC RB outcomes. The chart splits the opportunity cost into ",
+  "two lines: **premium positions** (QB, EDGE, OT, WR — the positions with positive Sharpe from Article 1) ",
+  "in red, and **non-premium positions** (CB, IOL, TE, DL, LB, S) in dashed orange.\n\n",
+  "This split reveals what's really driving the dead zone. The red line (premium) peaks in the middle of round 1 — ",
+  "that's where EDGE, OT, and WR talent is richest. The dashed orange line (non-premium) stays well below the BC RB median ",
+  "almost everywhere. **The dead zone isn't about all non-RB alternatives. It's specifically about premium positions.**\n\n",
+  "**The dead zone: picks ", dead_zone_start, "-", dead_zone_end, ".** This is where premium talent is densest. ",
+  "Even the median BC RB can't compete with a strong EDGE or OT prospect in this range.\n\n",
+  "**Outside the dead zone**, the picture flips. At picks 1-", early_end,
+  ", the premium positions are mostly QBs (high bust rate). At picks ", late_start_pick,
+  "+, the premium talent thins out. In both windows, a blue-chip RB is a reasonable bet.\n\n",
+  "But here's where the rest of the article matters:\n\n",
+  "- **Roster needs:** If a team already has EDGE and OT filled, the premium alternative is less attractive ",
+  "— and the effective opportunity cost looks more like the dashed line than the solid one.\n",
+  "- **Class depth:** In 2025, the RB class is thin (Love is the only Elite). A team that passes on Love ",
+  "can't find comparable RB value later. Meanwhile, IOL and CB are loaded — those positions *will* be available in round 2+.\n",
+  "- **Prospect separation:** The BC RB median (", round(bc_median, 2), ") represents the typical outcome. ",
+  "Love's NGS profile puts him in the top tier of BC RBs, so his expected value is likely above the median.\n\n",
+  "When all three factors align — a team with premium positions filled, picking outside the dead zone, ",
+  "with a separated prospect in a thin class — the effective opportunity cost drops below the BC RB median. ",
+  "That's when you draft Love.\n\n",
+  "The range by pick:\n\n",
+  "- **Picks 1-", early_end, ":** ", round(pct_beat_early * 100), "% of BC RBs beat the non-RB alternative\n",
+  "- **Picks ", dead_zone_start, "-", dead_zone_end, ":** ", round(pct_beat_mid * 100), "% — the worst odds in the round\n",
+  "- **Picks ", late_start_pick, "-32:** ", round(pct_beat_late * 100), "% — the gamble tips in your favor"
 ))
 ```
 
@@ -1359,36 +1401,77 @@ cat(paste0(
 ))
 ```
 
-Here's what the RB rooms looked like across the league in the most recent season of our data. Teams without a starter-level back (below 75% snap threshold) are flagged as having an RB need.
+Here's what every team's RB room looks like heading into the 2025 draft, based on 2024 snap shares. Teams without a starter-level back are flagged as having an RB need — these are the teams where drafting Love makes the most sense.
 
-```{r rb-room-gt}
-# Build name lookup from blue_chip data
-name_map <- blue_chip %>%
-  select(pfr_player_id, pfr_player_name) %>%
-  distinct() %>%
-  filter(!is.na(pfr_player_id))
+```{r rb-room-gt-2025}
+# Pull 2024 snap counts for RBs
+rb_snaps_2024 <- nflreadr::load_snap_counts(2024) %>%
+  filter(position == "RB", game_type == "REG") %>%
+  group_by(team, player) %>%
+  summarise(
+    total_off_snaps = sum(offense_snaps, na.rm = TRUE),
+    games = n(),
+    .groups = "drop"
+  )
 
-# Most recent season RB rooms
-latest_rb <- rb_snap_needs %>%
-  filter(draft_season == max(draft_season)) %>%
-  left_join(name_map, by = "pfr_player_id") %>%
+# Get team total offensive snaps for snap share
+team_off_snaps <- nflreadr::load_snap_counts(2024) %>%
+  filter(game_type == "REG") %>%
+  group_by(team, game_id) %>%
+  summarise(game_off_snaps = max(offense_snaps, na.rm = TRUE), .groups = "drop") %>%
+  group_by(team) %>%
+  summarise(team_total_snaps = sum(game_off_snaps), .groups = "drop")
+
+# Calculate snap share per RB
+rb_shares <- rb_snaps_2024 %>%
+  left_join(team_off_snaps, by = "team") %>%
+  mutate(snap_share = total_off_snaps / team_total_snaps) %>%
+  arrange(team, desc(snap_share))
+
+# Rank within team: RB1, RB2, RB3
+rb_ranked <- rb_shares %>%
+  group_by(team) %>%
+  mutate(rank = row_number()) %>%
+  filter(rank <= 3) %>%
+  ungroup()
+
+# Check which teams on 2025 rosters still have these RBs
+rosters_2025 <- nflreadr::load_rosters(2025) %>%
+  filter(position == "RB") %>%
+  select(full_name, team) %>%
+  mutate(on_2025_roster = TRUE)
+
+# Build wide table: one row per team with RB1, RB2, RB3
+rb_wide <- rb_ranked %>%
   mutate(
-    top_rb = coalesce(pfr_player_name, "—"),
-    snap_pct = ifelse(is.na(avg_snap_pct), NA, avg_snap_pct),
-    status = ifelse(snap_filled, "Filled", "Need")
+    role = paste0("RB", rank),
+    label = paste0(player, " (", round(snap_share * 100), "%)")
   ) %>%
-  arrange(status, desc(snap_pct)) %>%
-  select(team, top_rb, snap_pct, status)
+  select(team, role, label, rank, snap_share) %>%
+  pivot_wider(names_from = role, values_from = c(label, snap_share),
+              names_glue = "{role}_{.value}")
 
-latest_rb %>%
+# Determine need: RB1 snap share < 50% or no RB1 above threshold
+rb_status <- rb_ranked %>%
+  filter(rank == 1) %>%
+  mutate(status = ifelse(snap_share >= 0.50, "Filled", "Need")) %>%
+  select(team, rb1_share = snap_share, status)
+
+rb_table <- rb_wide %>%
+  left_join(rb_status, by = "team") %>%
+  arrange(status, rb1_share) %>%
+  select(team, RB1_label, RB2_label, RB3_label, status)
+
+rb_table %>%
   gt() %>%
   cols_label(
     team = "Team",
-    top_rb = "Top RB (Prior Season)",
-    snap_pct = "Snap %",
-    status = "RB Status"
+    RB1_label = "RB1",
+    RB2_label = "RB2",
+    RB3_label = "RB3",
+    status = "Status"
   ) %>%
-  fmt_percent(columns = snap_pct, decimals = 0) %>%
+  sub_missing(missing_text = "—") %>%
   tab_style(
     style = cell_fill(color = "#ffebee"),
     locations = cells_body(rows = status == "Need")
@@ -1398,13 +1481,16 @@ latest_rb %>%
     locations = cells_body(rows = status == "Filled")
   ) %>%
   tab_header(
-    title = md("**RB Room Snapshot**"),
-    subtitle = paste0("Most recent season (", max(rb_snap_needs$draft_season), ") | Starter = 75%+ positional snaps")
+    title = md("**2025 RB Room Snapshot**"),
+    subtitle = "Based on 2024 snap shares | RB1/RB2/RB3 by snap % | Need = RB1 below 50% snap share"
   ) %>%
   tab_options(
-    table.font.size = px(13),
-    data_row.padding = px(4)
+    table.font.size = px(12),
+    data_row.padding = px(3)
   )
+
+# Save teams needing RB for downstream
+teams_needing_rb_2025 <- rb_status %>% filter(status == "Need") %>% pull(team)
 ```
 
 ### Who Should Draft Love? The Roster Piece
@@ -1412,29 +1498,19 @@ latest_rb %>%
 The breakeven analysis tells us *where* in the first round Love makes sense (picks 6-10). The class depth tells us *why* this year is different (thin RB class, huge separation). But we haven't answered *which teams* should actually consider it. That requires the roster analysis from Assumption 1.
 
 ```{r love-roster-fit, results='asis'}
-# Which teams picking in the top 10 of 2025 need an RB (snap-based)?
-# Use the most recent season in our data as proxy for 2025 needs
-latest_season <- max(roster_needs$draft_season)
-recent_rb_needs <- roster_needs %>%
-  filter(pos_group == "RB", draft_season == latest_season) %>%
-  mutate(snap_filled = coalesce(starter_is_hit, FALSE))
-
-teams_needing_rb <- recent_rb_needs %>%
-  filter(!snap_filled) %>%
-  pull(team)
-
-n_needing <- length(teams_needing_rb)
-n_total <- nrow(recent_rb_needs)
+n_needing <- length(teams_needing_rb_2025)
 
 cat(paste0(
-  "In the most recent season of our data (", latest_season, "), **", n_needing, " of ", n_total,
-  "** teams lacked a starter-level RB by snap production",
-  if(n_needing > 0 & n_needing <= 15) paste0(": ", paste(teams_needing_rb, collapse = ", ")) else "", ".\n\n",
-  "The fair value analysis says pick ", crossover_pick, "+ is where the math favors a blue-chip RB. ",
+  "Heading into 2025, **", n_needing, " of 32",
+  "** teams lack a clear starter-level RB by 2024 snap share",
+  if(n_needing > 0 & n_needing <= 15) paste0(": ", paste(teams_needing_rb_2025, collapse = ", ")) else "", ".\n\n",
+  "The fair value analysis says the gamble favors a blue-chip RB at picks 1-", early_end,
+  " and ", late_start_pick, "+, with a dead zone at picks ", dead_zone_start, "-", dead_zone_end,
+  " where the non-RB alternatives are too rich. ",
   "The case for Love is strongest when all three factors align: a team that genuinely needs ",
-  "an RB, picking at ", crossover_pick, " or later, in a year where the class is thin and the prospect ",
-  "is clearly separated. Teams picking earlier face too steep an opportunity cost — ",
-  "the non-RB alternatives in the 10-15 range are historically the richest in the draft. ",
+  "an RB, picking outside the dead zone, in a year where the class is thin and the prospect ",
+  "is clearly separated. Teams picking in the ", dead_zone_start, "-", dead_zone_end,
+  " range face the steepest opportunity cost in the entire first round. ",
   "Teams with a productive back already on the roster should follow the model's advice and draft a premium position."
 ))
 ```
@@ -1451,17 +1527,17 @@ Everything we've built in this article converges on a single question. Three arg
 
 **The NGS history says:** RBs with scores like Love's (94.3) have historically hit at rates far above the position average. The pre-draft signal maps to career outcomes. CMC and Gurley — the RB ceiling — had individual Sharpes above 2.0.
 
-**The breakeven says:** The non-RB opportunity cost peaks at picks 11-15 and drops at the ends. The median blue-chip RB crosses the non-RB alternative at pick `r crossover_pick`. Before that, even elite RBs face steep odds. After that, the gamble is in your favor.
+**The breakeven says:** The non-RB opportunity cost peaks at picks `r dead_zone_start`-`r dead_zone_end` and drops at both ends. Two fair-value zones emerge: picks 1-`r early_end` (where non-RB alternatives are weaker) and `r late_start_pick`+ (where the talent thins out). The dead zone in between is where even elite RBs face the steepest odds.
 
 **The need says:** Most teams need an RB in most years. It's a high-turnover position. The question isn't whether to invest — it's where and in whom.
 
 </div>
 
-**Our answer: pick `r crossover_pick`.**
+**Our answer: avoid picks `r dead_zone_start`-`r dead_zone_end`.**
 
-That's the crossover — the point where the typical blue-chip RB outcome beats the average non-RB alternative. Before pick `r crossover_pick`, the non-RB options are too good; the opportunity cost is too high even for a prospect like Love. At `r crossover_pick` and beyond, a blue-chip RB with Love's profile is the better bet.
+The data reveals two windows where a blue-chip RB is the right call: picks 1-`r early_end` and `r late_start_pick`+. In between is a dead zone where the non-RB talent is the richest in the entire draft — EDGE, CB, WR, OT prospects that reliably return value. Even CMC-caliber outcomes barely clear that bar.
 
-Not at 3. Not at 10. Not at 14. At `r crossover_pick`, for a team that needs a back, in a thin RB class with a separated prospect — that's where the model's blanket "never draft RB" advice stops being right.
+For Love, the realistic scenario is a team picking in the `r late_start_pick`+ range that needs a back. At `r late_start_pick` or later, the typical blue-chip RB outcome beats the alternative, the class is thin, and Love is clearly separated from the field. That's when you break the model.
 
 ---
 
