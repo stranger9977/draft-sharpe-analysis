@@ -358,7 +358,7 @@ ggplot(ngs_other_tiers, aes(x = draft_year, y = n, fill = ngs_tier)) +
   ) +
   scale_x_discrete(drop = FALSE) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
-  facet_wrap(~pos_group, scales = "free_y", ncol = 3) +
+  facet_wrap(~pos_group, scales = "free_y", ncol = 3, axes = "all") +
   labs(
     title = "Draft Class Depth Across All Positions (2010-2026)",
     subtitle = "Good (70-90) and Elite (90+) NGS prospects by year | Each position tells a different story",
@@ -531,7 +531,7 @@ ggplot(other_classes, aes(x = draft_year, y = hit_rate, fill = ngs_class_quality
     name = "Pre-Draft Class Quality"
   ) +
   scale_y_continuous(labels = percent_format(), expand = expansion(mult = c(0, 0.15))) +
-  facet_wrap(~pos_group, scales = "free_y", ncol = 2) +
+  facet_wrap(~pos_group, scales = "free_y", ncol = 2, axes = "all") +
   scale_x_discrete(drop = FALSE) +
   labs(
     title = "Pre-Draft Signal vs Reality: All Positions",
@@ -848,15 +848,20 @@ ngs_rb <- ngs_prospects %>%
     player_label = fct_reorder(player_label, cmbn_score)
   )
 
-ggplot(ngs_rb, aes(x = cmbn_score, y = player_label, color = ngs_tier)) +
-  geom_point(size = 8, shape = 21, fill = "white", stroke = 2, show.legend = TRUE) +
+ggplot(ngs_rb, aes(x = cmbn_score, y = player_label, fill = ngs_tier, color = ngs_tier)) +
+  geom_col(width = 0.7, alpha = 0.85, show.legend = TRUE) +
+  geom_point(size = 8, shape = 21, fill = "white", stroke = 2, show.legend = FALSE) +
   geom_text(aes(label = round(cmbn_score, 1)), size = 2.3, fontface = "bold",
             show.legend = FALSE) +
-  scale_color_manual(
+  scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
   ) +
-  scale_x_continuous(breaks = seq(55, 95, 5)) +
+  scale_color_manual(
+    values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
+    guide = "none"
+  ) +
+  scale_x_continuous(breaks = seq(55, 95, 5), expand = expansion(mult = c(0, 0.08))) +
   coord_cartesian(xlim = c(55, 100), clip = "off") +
   labs(
     title = "2026 RB Prospects: NGS Combined Score",
@@ -927,22 +932,28 @@ top20 <- all_rb_ngs %>% slice_head(n = 20) %>%
     ngs_tier = factor(ngs_tier, levels = c("Elite", "Good", "Average", "Below Avg"))
   )
 
-ggplot(top20, aes(x = cmbn_score, y = label, fill = ngs_tier)) +
-  geom_col(width = 0.7, alpha = 0.85) +
-  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 3.5, fontface = "bold") +
+ggplot(top20, aes(x = cmbn_score, y = label, fill = ngs_tier, color = ngs_tier)) +
+  geom_col(width = 0.7, alpha = 0.85, show.legend = TRUE) +
+  geom_point(size = 8, shape = 21, fill = "white", stroke = 2, show.legend = FALSE) +
+  geom_text(aes(label = round(cmbn_score, 1)), size = 2.3, fontface = "bold",
+            show.legend = FALSE) +
   scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
   ) +
-  scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
-  coord_cartesian(xlim = c(75, NA)) +
+  scale_color_manual(
+    values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
+    guide = "none"
+  ) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.08))) +
+  coord_cartesian(xlim = c(75, NA), clip = "off") +
   labs(
     title = "Top 20 RB Prospects by NGS Score (2010-2026)",
     subtitle = paste0("Love ranks #", love_rank, " out of ", total_rb, " RBs — ", love_pctile, "th percentile"),
     x = "NGS Combined Score", y = NULL
   ) +
   theme_minimal(base_size = 13) +
-  theme(legend.position = "top")
+  theme(legend.position = "top", panel.grid.major.y = element_blank())
 ```
 
 ```{r love-historical-narrative, results='asis'}
@@ -992,17 +1003,21 @@ top_2025_all <- top_2025_all %>%
     pos_group = factor(pos_group, levels = key_positions)
   )
 
-ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, color = ngs_tier)) +
-  geom_point(size = 8, shape = 21, aes(fill = "white"), stroke = 2, show.legend = TRUE) +
+ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tier, color = ngs_tier)) +
+  geom_col(width = 0.7, alpha = 0.85, show.legend = TRUE) +
+  geom_point(size = 8, shape = 21, fill = "white", stroke = 2, show.legend = FALSE) +
   geom_text(aes(label = round(cmbn_score, 1)), size = 2.3, fontface = "bold",
             show.legend = FALSE) +
-  scale_color_manual(
+  scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
   ) +
-  scale_fill_identity() +
+  scale_color_manual(
+    values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
+    guide = "none"
+  ) +
   scale_y_discrete(labels = function(x) str_remove(x, "^.*___")) +
-  scale_x_continuous(breaks = seq(60, 100, 10)) +
+  scale_x_continuous(breaks = seq(60, 100, 10), expand = expansion(mult = c(0, 0.08))) +
   coord_cartesian(xlim = c(58, 100), clip = "off") +
   facet_wrap(~pos_group, scales = "free_y", ncol = 2) +
   labs(
