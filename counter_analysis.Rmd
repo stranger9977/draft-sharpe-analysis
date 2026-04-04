@@ -296,9 +296,12 @@ We'll start with RB -- the position at the center of the Sharpe debate -- then s
 ngs_rb_tiers <- ngs_class_tiers %>%
   filter(pos_group == "RB", season >= 2010, season <= 2025,
          ngs_tier %in% c("Elite", "Good")) %>%
-  mutate(ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")))
+  mutate(
+    ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
+    draft_year = if_else(season == 2025, 2026L, as.integer(season))
+  )
 
-ggplot(ngs_rb_tiers, aes(x = factor(season), y = n, fill = ngs_tier)) +
+ggplot(ngs_rb_tiers, aes(x = factor(draft_year), y = n, fill = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85) +
   scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A"),
@@ -306,7 +309,7 @@ ggplot(ngs_rb_tiers, aes(x = factor(season), y = n, fill = ngs_tier)) +
   ) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
   labs(
-    title = "RB Draft Class Depth: Good and Elite Prospects by Year",
+    title = "RB Draft Class Depth: Good and Elite Prospects (2010-2026)",
     subtitle = "Only prospects scoring Good (70-90) or Elite (90+) on NGS Combined Score",
     x = NULL, y = "Number of Good+ Prospects"
   ) +
@@ -327,10 +330,11 @@ ngs_other_tiers <- ngs_class_tiers %>%
          ngs_tier %in% c("Elite", "Good")) %>%
   mutate(
     ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
-    pos_group = factor(pos_group, levels = key_positions)
+    pos_group = factor(pos_group, levels = key_positions),
+    draft_year = if_else(season == 2025, 2026L, as.integer(season))
   )
 
-ggplot(ngs_other_tiers, aes(x = factor(season), y = n, fill = ngs_tier)) +
+ggplot(ngs_other_tiers, aes(x = factor(draft_year), y = n, fill = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85) +
   scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A"),
@@ -339,7 +343,7 @@ ggplot(ngs_other_tiers, aes(x = factor(season), y = n, fill = ngs_tier)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
   facet_wrap(~pos_group, scales = "free_y", ncol = 3) +
   labs(
-    title = "Draft Class Depth Across All Positions",
+    title = "Draft Class Depth Across All Positions (2010-2026)",
     subtitle = "Good (70-90) and Elite (90+) NGS prospects by year | Each position tells a different story",
     x = NULL, y = "Number of Good+ Prospects"
   ) +
@@ -500,9 +504,10 @@ The same signal-vs-reality check across other positions:
 ```{r other-pos-timeline-small, fig.height=12, fig.width=8}
 other_classes <- class_depth %>%
   filter(pos_group %in% key_positions, pos_group != "RB",
-         !is.na(hit_rate), !is.na(ngs_class_quality))
+         !is.na(hit_rate), !is.na(ngs_class_quality)) %>%
+  mutate(draft_year = if_else(season == 2025, 2026L, as.integer(season)))
 
-ggplot(other_classes, aes(x = factor(season), y = hit_rate, fill = ngs_class_quality)) +
+ggplot(other_classes, aes(x = factor(draft_year), y = hit_rate, fill = ngs_class_quality)) +
   geom_col(width = 0.7, alpha = 0.85) +
   scale_fill_manual(
     values = c("Deep" = "#2e7d32", "Average" = "#FFA726", "Thin" = "#c62828"),
@@ -1105,24 +1110,24 @@ non_rb_split <- all_r1_av %>%
   filter(pos_group != "RB") %>%
   mutate(pos_tier = ifelse(pos_group %in% premium_pos, "Premium", "Non-Premium")) %>%
   group_by(pick, pos_tier) %>%
-  summarise(avg_av = mean(car_av, na.rm = TRUE), n = n(), .groups = "drop")
+  summarise(med_av = median(car_av, na.rm = TRUE), n = n(), .groups = "drop")
 
 # Combined line for crossover detection
 non_rb_combined <- all_r1_av %>%
   filter(pos_group != "RB") %>%
   group_by(pick) %>%
-  summarise(avg_av = mean(car_av, na.rm = TRUE), n = n(), .groups = "drop") %>%
+  summarise(med_av = median(car_av, na.rm = TRUE), n = n(), .groups = "drop") %>%
   arrange(pick)
 
-# 5-pick rolling smooth
-smooth_line <- function(df, col = "avg_av") {
+# 5-pick rolling smooth (using median of medians)
+smooth_line <- function(df, col = "med_av") {
   df <- df %>% arrange(pick) %>% filter(pick <= 32)
   vals <- numeric(nrow(df))
   for(i in seq_along(df$pick)) {
     p <- df$pick[i]
     window_picks <- (p - 2):(p + 2)
     window_data <- df %>% filter(pick %in% window_picks)
-    vals[i] <- mean(window_data[[col]], na.rm = TRUE)
+    vals[i] <- median(window_data[[col]], na.rm = TRUE)
   }
   df$smooth_av <- vals
   df
@@ -1181,14 +1186,14 @@ ggplot() +
             color = "#FF9800", linewidth = 1.2, linetype = "dashed") +
   # BC RB median
   geom_hline(yintercept = bc_median, color = "#377EB8", linewidth = 1.2, linetype = "solid") +
-  # Labels
-  annotate("text", x = 17, y = bc_median - 3,
-           label = paste0("BC RB median: ", round(bc_median, 0), " career AV"),
-           color = "#377EB8", hjust = 0.5, size = 3.5, fontface = "bold") +
-  annotate("text", x = 8, y = max(premium_line$smooth_av, na.rm=TRUE) + 3,
-           label = "Premium (QB, EDGE, OT, WR)", color = "#c62828", hjust = 0.5, size = 3.5, fontface = "bold") +
-  annotate("text", x = 25, y = min(nonprem_line$smooth_av, na.rm=TRUE) - 3,
-           label = "Non-premium (CB, IOL, TE, etc.)", color = "#FF9800", hjust = 0.5, size = 3.5, fontface = "bold") +
+  # Labels - positioned to avoid overlap
+  annotate("text", x = 32, y = bc_median + 2,
+           label = paste0("BC RB median: ", round(bc_median, 0)),
+           color = "#377EB8", hjust = 1, size = 3.2, fontface = "bold") +
+  annotate("text", x = 4, y = premium_line$smooth_av[premium_line$pick == 4] + 4,
+           label = "Premium", color = "#c62828", hjust = 0.5, size = 3.5, fontface = "bold") +
+  annotate("text", x = 28, y = nonprem_line$smooth_av[nonprem_line$pick == 28] - 4,
+           label = "Non-premium", color = "#FF9800", hjust = 0.5, size = 3.5, fontface = "bold") +
   scale_x_continuous(breaks = seq(1, 32, 2)) +
   coord_cartesian(ylim = c(max(bc_min - 5, 0), bc_median + 30)) +
   labs(
@@ -1203,12 +1208,14 @@ ggplot() +
 cat(paste0(
   "The blue line is the median weighted career AV across all historical blue-chip RBs (top 10% NGS Combined Score): **",
   round(bc_median, 0), "**. The chart splits the opportunity cost into ",
-  "two lines: **premium positions** (QB, EDGE, OT, WR, the positions with positive Sharpe from Article 1) ",
-  "in red, and **non-premium positions** (CB, IOL, TE, DL, LB, S) in dashed orange.\n\n",
+  "**premium positions** (QB, EDGE, OT, WR) in red and **non-premium positions** (CB, IOL, TE, DL, LB, S) in dashed orange.\n\n",
+  "One quirk worth noting: non-premium positions spike at the very top of the draft. ",
+  "That's largely driven by the handful of elite CBs and IOL taken in the top 5 who became stars. ",
+  "It's a small sample, but it suggests that truly elite non-premium talent at the top of the draft ",
+  "can deliver outsized value.\n\n",
   "The dead zone is **picks ", dead_zone_start, "-", dead_zone_end, "**. This is where premium talent is densest ",
   "and even the median blue-chip RB can't compete with a strong EDGE or OT prospect. ",
-  "The non-premium line (dashed orange) stays below the BC RB median almost everywhere, which tells us something important: ",
-  "**the dead zone is driven entirely by premium positions.**\n\n",
+  "**The dead zone is driven entirely by premium positions** since the non-premium line stays below the BC RB median almost everywhere.\n\n",
   "**After pick ", dead_zone_end, "**, premium talent thins out and the calculus flips. ",
   "A blue-chip RB becomes a reasonable bet.\n\n",
   "Layer in the rest of this article:\n\n",
@@ -1265,97 +1272,48 @@ cat(paste0(
 ))
 ```
 
-Here's what every team's RB room looks like heading into the 2026 draft. We use 2025 snap shares to identify each team's RB1/RB2/RB3, then cross-reference with current rosters to flag players who are no longer on the team.
+Here's what every team's RB room looks like heading into the 2026 draft, based on current depth charts from OurLads.
 
 ```{r rb-room-gt-2026}
-# Pull 2025 snap counts for RBs
-snaps_2025_raw <- nflreadr::load_snap_counts(2025)
-
-rb_snaps_2025 <- snaps_2025_raw %>%
-  filter(position == "RB", game_type == "REG") %>%
-  group_by(team, player) %>%
-  summarise(
-    total_off_snaps = sum(offense_snaps, na.rm = TRUE),
-    games = n(),
-    .groups = "drop"
-  )
-
-# Get team total offensive snaps
-team_off_snaps <- snaps_2025_raw %>%
-  filter(game_type == "REG") %>%
-  group_by(team, game_id) %>%
-  summarise(game_off_snaps = max(offense_snaps, na.rm = TRUE), .groups = "drop") %>%
-  group_by(team) %>%
-  summarise(team_total_snaps = sum(game_off_snaps), .groups = "drop")
-
-# Calculate snap share and rank
-rb_ranked <- rb_snaps_2025 %>%
-  left_join(team_off_snaps, by = "team") %>%
-  mutate(snap_share = total_off_snaps / team_total_snaps) %>%
-  group_by(team) %>%
-  arrange(desc(snap_share)) %>%
-  mutate(rank = row_number()) %>%
-  filter(rank <= 3) %>%
-  ungroup()
-
-# Cross-reference with current rosters (ourlads depth charts)
+# Current rosters from ourlads depth charts (primary source)
 ourlads <- read_csv("output/v2/ourlads_rb_depth_2026.csv", show_col_types = FALSE)
-ourlads_long <- ourlads %>%
-  pivot_longer(cols = c(rb1, rb2, rb3), names_to = "slot", values_to = "player_name") %>%
-  filter(!is.na(player_name)) %>%
-  select(team, player_name)
-
-# Name matching: compare last names (handles suffix differences)
-rb_ranked <- rb_ranked %>%
-  mutate(
-    still_on_team = map2_lgl(player, team, function(p, t) {
-      team_rbs <- ourlads_long %>% filter(team == t) %>% pull(player_name)
-      p_last <- word(p, -1)
-      any(str_detect(team_rbs, fixed(p_last, ignore_case = TRUE)))
-    }),
-    label = paste0(
-      player, " (", round(snap_share * 100), "%)",
-      ifelse(!still_on_team, " ❌", "")
-    )
-  )
-
-# Pivot to one row per team
-rb1 <- rb_ranked %>% filter(rank == 1) %>% select(team, RB1 = label, rb1_share = snap_share, rb1_gone = still_on_team)
-rb2 <- rb_ranked %>% filter(rank == 2) %>% select(team, RB2 = label)
-rb3 <- rb_ranked %>% filter(rank == 3) %>% select(team, RB3 = label)
-
-rb_wide <- rb1 %>%
-  left_join(rb2, by = "team") %>%
-  left_join(rb3, by = "team")
 
 # 2026 R1 draft order
 draft_2026 <- read_csv("output/v2/draft_order_2026_r1.csv", show_col_types = FALSE)
 
-# Determine need and join picks
-rb_table <- rb_wide %>%
-  mutate(status = case_when(
-    !rb1_gone ~ "Need (RB1 gone)",
-    rb1_share < 0.50 ~ "Need (RBBC)",
-    TRUE ~ "Filled"
-  )) %>%
+# Teams that need an RB based on current roster quality
+# "Need" = no established bellcow, committee situation, or unproven room
+need_teams <- c(
+  "WAS",  # Rachaad White + Jerome Ford — committee backs, no bellcow
+  "JAX",  # Tuten/Allen — completely rebuilt room after Etienne trade, unproven
+  "CAR",  # Chuba Hubbard is a career backup, Brooks coming off injury
+  "NE",   # RBBC — Stevenson is a committee lead, no difference-maker
+  "SEA",  # Lost Kenneth Walker via trade, Charbonnet untested as lead
+  "ARI"   # Allgeier + aging Conner, no long-term answer
+)
+
+rb_table <- ourlads %>%
   left_join(draft_2026, by = "team") %>%
-  arrange(desc(str_detect(status, "Need")), pick) %>%
-  select(team, pick, RB1, RB2, RB3, status)
+  mutate(
+    status = if_else(team %in% need_teams, "Need", "Filled")
+  ) %>%
+  arrange(desc(status == "Need"), pick) %>%
+  select(team, pick, rb1, rb2, rb3, status)
 
 rb_table %>%
   gt() %>%
   cols_label(
     team = "Team",
     pick = "R1 Pick",
-    RB1 = "RB1 (2025)",
-    RB2 = "RB2",
-    RB3 = "RB3",
+    rb1 = "RB1",
+    rb2 = "RB2",
+    rb3 = "RB3",
     status = "Status"
   ) %>%
   sub_missing(missing_text = "—") %>%
   tab_style(
     style = cell_fill(color = "#ffebee"),
-    locations = cells_body(rows = str_detect(status, "Need"))
+    locations = cells_body(rows = status == "Need")
   ) %>%
   tab_style(
     style = cell_fill(color = "#e8f5e9"),
@@ -1363,7 +1321,7 @@ rb_table %>%
   ) %>%
   tab_header(
     title = md("**2026 RB Room Snapshot**"),
-    subtitle = "2025 snap shares | ❌ = no longer on team | Sorted by need then pick"
+    subtitle = "Current depth charts via OurLads | Sorted by need then pick"
   ) %>%
   tab_options(
     table.font.size = px(12),
@@ -1371,7 +1329,7 @@ rb_table %>%
   )
 
 # Save teams needing RB for downstream
-teams_needing_rb_2026 <- rb_table %>% filter(str_detect(status, "Need")) %>% pull(team)
+teams_needing_rb_2026 <- rb_table %>% filter(status == "Need") %>% pull(team)
 ```
 
 ### Putting It All Together: Who Should Draft Love?
