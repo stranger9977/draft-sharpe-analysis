@@ -996,22 +996,21 @@ cat(paste0(
 
 This is the practical question. Article 1 gave us the Sharpe ratio for RB in the top 10: **-0.615**. That's the average across all RBs drafted in the top 10 since 2010. But averages hide a massive range. Here's every first-round RB in our data, plotted against the opportunity cost of not drafting the best available non-RB at the same pick.
 
-Each player's individual Sharpe is computed the same way as Article 1's positional Sharpe, but for a single player: their rookie contract surplus, second-contract value, and whether they became a starter (hit = 75% of positional snap baseline). The **circle** is the RB's individual Sharpe. The **yellow X** is the next non-RB player drafted after them — the opportunity cost of taking an RB instead. Green means the RB bet paid off; red means the alternative would have been better.
+Each player's individual Sharpe is computed the same way as Article 1's positional Sharpe, but for a single player: their rookie contract surplus, second-contract value, and whether they became a starter (hit = 75% of positional snap baseline). The **circle** is the RB's individual Sharpe. The **yellow X** is the best non-RB player still available — the highest-Sharpe non-RB drafted in the rest of round 1 that year. This is the opportunity cost: what the team *could have had* if they'd passed on the RB. Green means the RB bet paid off; red means the best available alternative would have been better.
 
 ```{r rb-breakeven, fig.height=9, fig.width=8}
 # All first-round picks with individual Sharpe
 all_r1 <- player_lookup %>%
   filter(pick <= 32, pos_group %in% key_positions)
 
-# For each RB first rounder, find the next non-RB drafted
+# For each RB first rounder, find the BEST non-RB still available (highest Sharpe in rest of round 1)
 rb_r1 <- all_r1 %>% filter(pos_group == "RB")
 
 rb_with_alts <- map_dfr(1:nrow(rb_r1), function(i) {
   row <- rb_r1[i, ]
   candidate <- all_r1 %>%
     filter(season == row$season, pos_group != "RB", pick > row$pick) %>%
-    arrange(pick) %>%
-    slice_head(n = 1)
+    slice_max(player_sharpe, n = 1)
   if (nrow(candidate) > 0) {
     row %>% mutate(
       alt_name = candidate$pfr_player_name,
