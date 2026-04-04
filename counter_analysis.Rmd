@@ -1013,12 +1013,19 @@ elite_premium <- ngs_prospects %>%
   filter(!is.na(cmbn_score), pos_group %in% premium_pos, cmbn_score >= 90) %>%
   nrow()
 
+# Count all elite prospects
+all_elite <- ngs_prospects %>%
+  filter(!is.na(cmbn_score), cmbn_score >= 90)
+elite_non_premium <- all_elite %>% filter(!pos_group %in% premium_pos)
+
 elite_note <- if(elite_premium == 0) {
   paste0(
     "\n\nNotably, **no prospect at a premium position (QB, EDGE, OT, WR) cracks the Elite tier (90+) this year**. ",
-    "Love is the only Elite-graded prospect in the entire 2026 class. That flips the usual script: ",
+    "The ", nrow(all_elite), " Elite-graded prospects in 2026 are all at non-premium positions: ",
+    paste0(elite_non_premium$player, " (", elite_non_premium$pos_group, ", ", round(elite_non_premium$cmbn_score, 1), ")", collapse = ", "),
+    ". That flips the usual script: ",
     "the model says take premium positions early because the talent is richer there, ",
-    "but this year the richest talent at the top of the draft is at RB."
+    "but this year the richest talent at the top of the draft is at positions like RB and TE."
   )
 } else ""
 
@@ -1035,11 +1042,11 @@ cat(paste0(
 ))
 ```
 
-### How Good Does Love Need to Be?
+### Did First-Round RBs Actually Outproduce the Alternative?
 
-This is the practical question. Article 1 gave us the Sharpe ratio for RB in the top 10: **-0.615**. That's the average across all RBs drafted in the top 10 since 2010. But averages hide a massive range. Here's every first-round RB in our data, plotted against the player taken with the very next pick.
+Article 1 gave us the Sharpe ratio for RB in the top 10: **-0.615**. That's the average across all RBs drafted in the top 10 since 2010. But averages hide a massive range. Some first-round RBs were franchise cornerstones. Others were busts. The question isn't whether RBs are worth it *on average* -- it's how often they outproduce the player a team could have taken instead.
 
-We use **weighted career AV** (Approximate Value, weighted toward peak seasons) as the outcome metric here — it's more intuitive than Sharpe for individual player comparisons and captures career-level production directly. The **circle** is the RB. The **yellow X** is whoever was drafted immediately after them. Green means the RB produced more career value; red means the next pick was better.
+Here's every first-round RB in our data, plotted against the non-RB taken with the very next pick. The **circle** is the RB. The **yellow X** is whoever was drafted immediately after them. Green means the RB produced more career value; red means the next pick was better.
 
 ```{r rb-breakeven, fig.height=9, fig.width=8}
 # All first-round picks with career AV from blue_chip
@@ -1242,8 +1249,8 @@ cat(paste0(
   "- **Class depth:** In 2026, the RB class is thin (Love is the only Elite). Pass on him and there's no comparable RB later. ",
   "Meanwhile, IOL and CB are loaded -- those positions will still be available in round 2+.\n",
   "- **Prospect separation:** Love's NGS profile puts him in the top tier of historical BC RBs, so his expected value is likely *above* the median line, not on it.\n",
-  "- **No elite premium prospects:** This is the kicker. In a typical year, picks ", dead_zone_start, "-", dead_zone_end,
-  " are rich with elite EDGE, OT, and WR talent. In 2026, not a single premium-position prospect grades Elite on NGS. ",
+  "- **No elite premium prospects:** In a typical year, picks ", dead_zone_start, "-", dead_zone_end,
+  " are rich with elite EDGE, OT, and WR talent. In 2026, not a single premium-position prospect grades Elite (90+) on NGS. ",
   "The opportunity cost of taking Love isn't as high as the historical average suggests -- because the alternatives aren't as good as usual.\n\n",
   "Love at 10 isn't just defensible. It might be the pick where the model's own math starts to agree."
 ))
