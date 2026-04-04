@@ -309,17 +309,12 @@ We'll start with RB -- the position at the center of the Sharpe debate -- then s
 
 ```{r ngs-rb-depth-big, fig.height=5, fig.width=8}
 ngs_rb_tiers <- ngs_class_tiers %>%
-  filter(pos_group == "RB", season >= 2010, season <= 2025,
+  filter(pos_group == "RB", season >= 2010, season <= 2026,
          ngs_tier %in% c("Elite", "Good")) %>%
   mutate(
     ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
-    draft_year = if_else(season == 2025, 2026L, as.integer(season))
+    draft_year = factor(as.integer(season), levels = 2010:2026)
   )
-
-# Ensure all years 2010-2026 appear on x-axis (missing years show as empty)
-all_years <- factor(2010:2026, levels = 2010:2026)
-ngs_rb_tiers <- ngs_rb_tiers %>%
-  mutate(draft_year = factor(draft_year, levels = 2010:2026))
 
 ggplot(ngs_rb_tiers, aes(x = draft_year, y = n, fill = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85) +
@@ -347,12 +342,12 @@ Now the same view across every position:
 
 ```{r ngs-all-depth-small, fig.height=12, fig.width=8}
 ngs_other_tiers <- ngs_class_tiers %>%
-  filter(pos_group %in% key_positions, season >= 2010, season <= 2025,
+  filter(pos_group %in% key_positions, season >= 2010, season <= 2026,
          ngs_tier %in% c("Elite", "Good")) %>%
   mutate(
     ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
     pos_group = factor(pos_group, levels = key_positions),
-    draft_year = factor(if_else(season == 2025, 2026L, as.integer(season)), levels = 2010:2026)
+    draft_year = factor(as.integer(season), levels = 2010:2026)
   )
 
 ggplot(ngs_other_tiers, aes(x = draft_year, y = n, fill = ngs_tier)) +
@@ -527,12 +522,7 @@ The same signal-vs-reality check across other positions:
 other_classes <- class_depth %>%
   filter(pos_group %in% key_positions, pos_group != "RB",
          !is.na(hit_rate), !is.na(ngs_class_quality)) %>%
-  mutate(draft_year = if_else(season == 2025, 2026L, as.integer(season)))
-
-# Get the full range of years present in this data
-other_year_range <- sort(unique(other_classes$draft_year))
-other_classes <- other_classes %>%
-  mutate(draft_year = factor(draft_year, levels = other_year_range))
+  mutate(draft_year = factor(as.integer(season), levels = sort(unique(as.integer(season)))))
 
 ggplot(other_classes, aes(x = draft_year, y = hit_rate, fill = ngs_class_quality)) +
   geom_col(width = 0.7, alpha = 0.85) +
@@ -621,7 +611,10 @@ rb_labeled <- rb_scatter %>% filter(is_bc | car_av >= quantile(car_av, 0.9))
 
 ggplot(rb_scatter, aes(x = cmbn_score, y = car_av)) +
   geom_point(data = rb_scatter %>% filter(!is_bc), color = "gray70", alpha = 0.4, size = 2) +
-  geom_point(data = rb_scatter %>% filter(is_bc), color = "#377EB8", size = 3.5, alpha = 0.8) +
+  geom_point(data = rb_scatter %>% filter(is_bc), shape = 21, fill = "white",
+             color = "#377EB8", size = 6, stroke = 1.5) +
+  geom_text(data = rb_scatter %>% filter(is_bc),
+            aes(label = round(car_av, 0)), size = 2, color = "#377EB8", fontface = "bold") +
   geom_text_repel(data = rb_labeled,
             aes(label = pfr_player_name, color = is_bc),
             size = 2.8, fontface = "bold", show.legend = FALSE,
@@ -948,12 +941,27 @@ cat(paste0(
 
 ```{r ngs-2025-all-positions, fig.height=14, fig.width=8}
 # Top 5 prospects by position in 2026 class
+# Manual overrides: include Ty Simpson (QB) and Carnell Tate (WR) in top 5
+override_players <- c("Ty Simpson", "Carnell Tate")
 top_2025_all <- ngs_prospects %>%
   filter(!is.na(cmbn_score), pos_group %in% key_positions) %>%
   group_by(pos_group) %>%
   arrange(desc(cmbn_score)) %>%
   slice_head(n = 5) %>%
-  ungroup() %>%
+  ungroup()
+
+# Add overrides: replace 5th player in their position if not already present
+for(p in override_players) {
+  override_row <- ngs_prospects %>% filter(player == p, !is.na(cmbn_score))
+  if(nrow(override_row) > 0 && !p %in% top_2025_all$player) {
+    pg <- override_row$pos_group[1]
+    pos_rows <- top_2025_all %>% filter(pos_group == pg) %>% arrange(desc(cmbn_score))
+    top_2025_all <- top_2025_all %>% filter(!(pos_group == pg & player == pos_rows$player[5]))
+    top_2025_all <- bind_rows(top_2025_all, override_row)
+  }
+}
+
+top_2025_all <- top_2025_all %>%
   mutate(
     ngs_tier = case_when(
       cmbn_score >= 90 ~ "Elite",

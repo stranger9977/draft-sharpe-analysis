@@ -609,29 +609,122 @@ season,pos_group,ngs_tier,n
 2022,WR,Elite,2
 2022,WR,Good,17
 2022,WR,Average,3
-2024,IOL,Average,1
-2025,CB,Good,39
-2025,CB,Average,16
-2025,DL,Good,14
-2025,DL,Average,27
-2025,DL,Below Avg,3
-2025,IOL,Elite,1
-2025,IOL,Good,39
-2025,IOL,Average,15
-2025,IOL,Below Avg,2
-2025,LB,Elite,1
+2023,CB,Average,6
+2023,CB,Below Avg,2
+2023,CB,Elite,1
+2023,CB,Good,20
+2023,DL,Average,7
+2023,DL,Below Avg,1
+2023,DL,Good,5
+2023,EDGE,Average,6
+2023,EDGE,Below Avg,1
+2023,EDGE,Elite,2
+2023,EDGE,Good,9
+2023,IOL,Average,7
+2023,IOL,Below Avg,1
+2023,IOL,Good,13
+2023,LB,Average,8
+2023,LB,Below Avg,2
+2023,LB,Good,15
+2023,OT,Average,1
+2023,OT,Good,13
+2023,QB,Average,1
+2023,QB,Below Avg,1
+2023,QB,Elite,1
+2023,QB,Good,7
+2023,RB,Average,1
+2023,RB,Elite,1
+2023,RB,Good,12
+2023,S,Average,3
+2023,S,Below Avg,1
+2023,S,Good,7
+2023,TE,Average,3
+2023,TE,Below Avg,1
+2023,TE,Good,13
+2023,WR,Average,4
+2023,WR,Below Avg,1
+2023,WR,Good,22
+2024,CB,Average,12
+2024,CB,Good,21
+2024,DL,Average,9
+2024,DL,Below Avg,2
+2024,DL,Good,9
+2024,EDGE,Average,4
+2024,EDGE,Below Avg,2
+2024,EDGE,Good,3
+2024,IOL,Average,12
+2024,IOL,Below Avg,1
+2024,IOL,Good,15
+2024,LB,Average,15
+2024,LB,Good,17
+2024,OT,Average,2
+2024,OT,Below Avg,1
+2024,OT,Elite,1
+2024,OT,Good,16
+2024,QB,Average,1
+2024,QB,Good,8
+2024,RB,Average,2
+2024,RB,Below Avg,1
+2024,RB,Good,16
+2024,S,Average,5
+2024,S,Good,8
+2024,TE,Average,2
+2024,TE,Good,9
+2024,WR,Average,5
+2024,WR,Elite,2
+2024,WR,Good,25
+2025,CB,Average,6
+2025,CB,Good,15
+2025,DL,Average,11
+2025,DL,Below Avg,2
+2025,DL,Good,17
+2025,EDGE,Average,3
+2025,EDGE,Elite,1
+2025,EDGE,Good,12
+2025,IOL,Average,3
+2025,IOL,Good,13
+2025,LB,Average,8
+2025,LB,Below Avg,1
 2025,LB,Good,21
-2025,LB,Average,19
-2025,LB,Below Avg,4
-2025,QB,Good,10
-2025,QB,Average,5
+2025,OT,Average,5
+2025,OT,Good,15
+2025,QB,Average,2
+2025,QB,Good,8
+2025,RB,Average,6
+2025,RB,Below Avg,1
 2025,RB,Elite,1
-2025,RB,Good,7
-2025,RB,Average,8
-2025,RB,Below Avg,4
-2025,TE,Elite,1
-2025,TE,Good,14
-2025,TE,Average,13
-2025,WR,Good,32
-2025,WR,Average,9
+2025,RB,Good,17
+2025,S,Average,5
+2025,S,Below Avg,1
+2025,S,Good,10
+2025,TE,Average,4
+2025,TE,Good,9
+2025,WR,Average,2
 2025,WR,Below Avg,3
+2025,WR,Elite,1
+2025,WR,Good,22
+2026,CB,Average,16
+2026,CB,Good,39
+2026,DL,Average,27
+2026,DL,Below Avg,3
+2026,DL,Good,14
+2026,IOL,Average,15
+2026,IOL,Below Avg,2
+2026,IOL,Elite,1
+2026,IOL,Good,39
+2026,LB,Average,19
+2026,LB,Below Avg,4
+2026,LB,Elite,1
+2026,LB,Good,21
+2026,QB,Average,5
+2026,QB,Good,10
+2026,RB,Average,8
+2026,RB,Below Avg,4
+2026,RB,Elite,1
+2026,RB,Good,7
+2026,TE,Average,13
+2026,TE,Elite,1
+2026,TE,Good,14
+2026,WR,Average,9
+2026,WR,Below Avg,3
+2026,WR,Good,32
