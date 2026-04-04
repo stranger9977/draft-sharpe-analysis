@@ -23,6 +23,7 @@ library(scales)
 library(gt)
 library(nflplotR)
 library(nflreadr)
+library(ggrepel)
 
 pos_colors <- c(
   "QB" = "#E41A1C", "RB" = "#377EB8", "WR" = "#4DAF4A", "TE" = "#984EA3",
@@ -113,15 +114,24 @@ cat(paste0(
 ))
 ```
 
-### How We Measure Quality (and Why It Matters)
+### Weighted Career AV: Our Measuring Stick
 
-This section addresses the third assumption from our table: **snaps measure quality**. Part 1 and Part 2 measure "quality" differently, and that's deliberate -- it's one of the key places where the model's assumptions can be challenged.
+This article leans heavily on a single metric, so it's worth understanding exactly what it is and why we chose it.
 
-**Part 1's "hit"** is snap-based: a player who plays above the positional snap threshold (75% of baseline snaps) earns starter status. Snaps tell you who was on the field. This is how Article 1 builds its Sharpe ratio.
+**[Weighted Career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm)** (weighted career AV) is Pro Football Reference's attempt to boil an entire NFL career into one number. It works in two steps:
 
-**Part 2's "elite outcome"** uses [career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) (AV) from Pro Football Reference. Career AV is a cumulative, season-by-season measure of a player's total contribution -- it accounts for playing time, statistical production, and team success. A player who starts for 10 years accumulates more AV than one who starts for 3, even if both cleared the snap threshold. We define an elite outcome as finishing in the **top 10% of career AV at their position** (90th percentile). This is a much stricter bar than Part 1's snap-based hit.
+1. **Season-level AV** assigns each player a value for every season based on playing time, statistical production, and team success. A quarterback who throws 4,500 yards on a playoff team earns more AV than a backup who plays four games on a 4-win team.
+2. **Career weighting** sums those seasons but gives extra credit to peak years. The formula weights the best season at 100%, the second-best at 95%, the third at 90%, and so on. A player who had five great years and five mediocre ones scores higher than a player who was merely okay for ten straight.
 
-Why the distinction? Snaps tell you who became a starter. Weighted career AV tells you who became *great*. A player can clear the snap threshold and still have a mediocre career. When we're asking whether a generational prospect justifies breaking the model, we need the higher bar.
+The result: career AV rewards sustained excellence. Derrick Henry's 86 career AV reflects a decade of elite rushing production. A replacement-level back who hung around for eight years as a committee member might accumulate 25. The gap between those numbers is real -- it maps to Pro Bowls, All-Pro selections, and the kind of production that wins games.
+
+**Why not use Part 1's Sharpe ratio?** Part 1 measured "return" using second-contract value -- what the market paid a player after his rookie deal. That's a reasonable proxy for quality, but it has a blind spot: **the NFL market systematically underpays running backs**. A back who rushes for 1,200 yards a season for four years might walk in free agency or get a modest extension, while a league-average edge rusher commands $15M/year. The Sharpe ratio captures what the *market* values, not what the *player* produced.
+
+Weighted career AV strips out the market layer entirely. When we ran Part 1's Sharpe formula with career AV as the return metric instead of snap-based contract returns, **RB jumped from dead last (negative Sharpe) to 6th out of 11 positions** with a positive Sharpe of 0.249. That gap is the market inefficiency at work: RBs produce more than the market pays them for.
+
+For this article, we need a metric that measures production, not market sentiment. That's career AV.
+
+We define a **blue-chip outcome** as finishing in the **top 10% of weighted career AV at their position** (90th percentile). This is a much stricter bar than Part 1's snap-based "hit" -- it doesn't just ask whether a player became a starter, but whether they became *great*.
 
 ---
 
@@ -286,7 +296,7 @@ The Sharpe ratio averages across 13 draft classes (2010-2022). But class quality
 
 We actually can measure this -- at least partially. NFL Next Gen Stats publishes composite prospect scores before the draft, combining athletic testing, college production, and size. These scores exist before a single snap is played in the NFL.
 
-### Prospective Class Quality: What GMs Can Actually See
+### Prospective Class Quality: What Teams Know Before the Draft
 
 NGS uses four tiers: **Below Average** (50-60), **Average** (60-70), **Good** (70-90), and **Elite** (90+). Instead of looking at mean scores (which compress into a narrow band), we count how many prospects in each class grade as Good or better. A class with five Good+ prospects is fundamentally different from one with two, even if their averages are similar.
 
@@ -301,12 +311,18 @@ ngs_rb_tiers <- ngs_class_tiers %>%
     draft_year = if_else(season == 2025, 2026L, as.integer(season))
   )
 
-ggplot(ngs_rb_tiers, aes(x = factor(draft_year), y = n, fill = ngs_tier)) +
+# Ensure all years 2010-2026 appear on x-axis (missing years show as empty)
+all_years <- factor(2010:2026, levels = 2010:2026)
+ngs_rb_tiers <- ngs_rb_tiers %>%
+  mutate(draft_year = factor(draft_year, levels = 2010:2026))
+
+ggplot(ngs_rb_tiers, aes(x = draft_year, y = n, fill = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85) +
   scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A"),
     name = "NGS Tier"
   ) +
+  scale_x_discrete(drop = FALSE) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
   labs(
     title = "RB Draft Class Depth: Good and Elite Prospects (2010-2026)",
@@ -331,15 +347,16 @@ ngs_other_tiers <- ngs_class_tiers %>%
   mutate(
     ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
     pos_group = factor(pos_group, levels = key_positions),
-    draft_year = if_else(season == 2025, 2026L, as.integer(season))
+    draft_year = factor(if_else(season == 2025, 2026L, as.integer(season)), levels = 2010:2026)
   )
 
-ggplot(ngs_other_tiers, aes(x = factor(draft_year), y = n, fill = ngs_tier)) +
+ggplot(ngs_other_tiers, aes(x = draft_year, y = n, fill = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85) +
   scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A"),
     name = "NGS Tier"
   ) +
+  scale_x_discrete(drop = FALSE) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
   facet_wrap(~pos_group, scales = "free_y", ncol = 3) +
   labs(
@@ -349,7 +366,7 @@ ggplot(ngs_other_tiers, aes(x = factor(draft_year), y = n, fill = ngs_tier)) +
   ) +
   theme_minimal(base_size = 13) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 6),
     legend.position = "top",
     strip.text = element_text(face = "bold", size = 12)
   )
@@ -507,7 +524,12 @@ other_classes <- class_depth %>%
          !is.na(hit_rate), !is.na(ngs_class_quality)) %>%
   mutate(draft_year = if_else(season == 2025, 2026L, as.integer(season)))
 
-ggplot(other_classes, aes(x = factor(draft_year), y = hit_rate, fill = ngs_class_quality)) +
+# Get the full range of years present in this data
+other_year_range <- sort(unique(other_classes$draft_year))
+other_classes <- other_classes %>%
+  mutate(draft_year = factor(draft_year, levels = other_year_range))
+
+ggplot(other_classes, aes(x = draft_year, y = hit_rate, fill = ngs_class_quality)) +
   geom_col(width = 0.7, alpha = 0.85) +
   scale_fill_manual(
     values = c("Deep" = "#2e7d32", "Average" = "#FFA726", "Thin" = "#c62828"),
@@ -515,7 +537,7 @@ ggplot(other_classes, aes(x = factor(draft_year), y = hit_rate, fill = ngs_class
   ) +
   scale_y_continuous(labels = percent_format(), expand = expansion(mult = c(0, 0.15))) +
   facet_wrap(~pos_group, scales = "free_y", ncol = 2) +
-  scale_x_discrete(guide = guide_axis(check.overlap = TRUE)) +
+  scale_x_discrete(drop = FALSE) +
   labs(
     title = "Pre-Draft Signal vs Reality: All Positions",
     subtitle = "Retrospective hit rate by year | Bar color = pre-draft NGS class quality (deep/average/thin)",
@@ -523,7 +545,7 @@ ggplot(other_classes, aes(x = factor(draft_year), y = hit_rate, fill = ngs_class
   ) +
   theme_minimal(base_size = 13) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 6),
     legend.position = "top",
     strip.text = element_text(face = "bold", size = 12),
     panel.spacing.y = unit(1, "lines")
@@ -589,21 +611,23 @@ rb_scatter <- ngs_with_outcomes %>%
   filter(pos_group == "RB") %>%
   mutate(is_bc = is_ngs_blue_chip)
 
-# Label top NGS prospects
+# Label blue chips + top career AV non-blue-chips
 rb_labeled <- rb_scatter %>% filter(is_bc | car_av >= quantile(car_av, 0.9))
 
 ggplot(rb_scatter, aes(x = cmbn_score, y = car_av)) +
   geom_point(data = rb_scatter %>% filter(!is_bc), color = "gray70", alpha = 0.4, size = 2) +
   geom_point(data = rb_scatter %>% filter(is_bc), color = "#377EB8", size = 3.5, alpha = 0.8) +
-  geom_text(data = rb_labeled,
+  geom_text_repel(data = rb_labeled,
             aes(label = pfr_player_name, color = is_bc),
-            vjust = -1, size = 2.8, fontface = "bold", show.legend = FALSE) +
+            size = 2.8, fontface = "bold", show.legend = FALSE,
+            max.overlaps = 20, seed = 42, box.padding = 0.4,
+            min.segment.length = 0.2, segment.color = "gray70") +
   geom_smooth(method = "lm", se = TRUE, color = "#377EB8", linewidth = 0.8, alpha = 0.2) +
   scale_color_manual(values = c("TRUE" = "#377EB8", "FALSE" = "gray50")) +
   labs(
     title = "RB: Do Pre-Draft Scores Predict Career Value?",
-    subtitle = "Blue = pre-draft blue chip (top 10% NGS) | Gray = everyone else | Higher NGS → higher weighted career AV?",
-    x = "NGS Combined Score (pre-draft)", y = "Career Approximate Value"
+    subtitle = "Blue = pre-draft blue chip (top 10% NGS) | Gray = everyone else",
+    x = "NGS Combined Score (pre-draft)", y = "Weighted Career AV"
   ) +
   theme_minimal(base_size = 14)
 ```
@@ -653,10 +677,14 @@ gray_labels <- all_scatter %>%
 ggplot(all_scatter, aes(x = cmbn_score, y = car_av)) +
   geom_point(data = all_scatter %>% filter(!is_bc), color = "gray70", alpha = 0.3, size = 1.5) +
   geom_point(data = all_scatter %>% filter(is_bc), color = "#377EB8", size = 2.5, alpha = 0.7) +
-  geom_text(data = bc_labels, aes(label = pfr_player_name),
-            vjust = -0.8, size = 2.2, color = "#377EB8", fontface = "bold") +
-  geom_text(data = gray_labels, aes(label = pfr_player_name),
-            vjust = -0.8, size = 2, color = "gray40", fontface = "italic") +
+  geom_text_repel(data = bc_labels, aes(label = pfr_player_name),
+            size = 2.2, color = "#377EB8", fontface = "bold",
+            max.overlaps = 15, seed = 42, box.padding = 0.3,
+            min.segment.length = 0.2, segment.color = "gray70") +
+  geom_text_repel(data = gray_labels, aes(label = pfr_player_name),
+            size = 2, color = "gray40", fontface = "italic",
+            max.overlaps = 10, seed = 42, box.padding = 0.3,
+            min.segment.length = 0.2, segment.color = "gray80") +
   geom_smooth(method = "lm", se = FALSE, color = "#377EB8", linewidth = 0.7, alpha = 0.5) +
   facet_wrap(~pos_group, scales = "free", ncol = 3) +
   labs(
@@ -869,7 +897,7 @@ historical_rb_ngs <- ngs_with_outcomes %>%
 prospect_rb_ngs <- ngs_prospects %>%
   filter(pos_group == "RB", !is.na(cmbn_score)) %>%
   select(player_name = player, cmbn_score) %>%
-  mutate(season = 2025, source = "2026 Prospect")
+  mutate(season = 2026, source = "2026 Prospect")
 
 all_rb_ngs <- bind_rows(historical_rb_ngs, prospect_rb_ngs) %>%
   arrange(desc(cmbn_score)) %>%
@@ -937,7 +965,7 @@ top_2025_all <- ngs_prospects %>%
 
 ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, color = ngs_tier)) +
   geom_point(size = 4) +
-  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.4, size = 2.8, fontface = "bold",
+  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.3, size = 2.8, fontface = "bold",
             show.legend = FALSE) +
   scale_color_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
@@ -945,8 +973,8 @@ ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, color = ngs_ti
   ) +
   scale_y_discrete(labels = function(x) str_remove(x, "^.*___")) +
   scale_x_continuous(breaks = seq(60, 100, 10)) +
-  coord_cartesian(xlim = c(58, 105)) +
-  facet_wrap(~pos_group, scales = "free_y", ncol = 3) +
+  coord_cartesian(xlim = c(58, 100), clip = "off") +
+  facet_wrap(~pos_group, scales = "free_y", ncol = 2) +
   labs(
     title = "2026 Draft Class: Top 5 Prospects by NGS Combined Score",
     subtitle = "Elite (90+) | Good (70-90) | Average (60-70) | Below Avg (<60)",
@@ -956,7 +984,8 @@ ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, color = ngs_ti
   theme(
     legend.position = "top",
     strip.text = element_text(face = "bold", size = 11),
-    panel.grid.major.y = element_blank()
+    panel.grid.major.y = element_blank(),
+    plot.margin = margin(5, 25, 5, 5)
   )
 ```
 
@@ -978,15 +1007,31 @@ pos_sep <- ngs_prospects %>%
 biggest_gap <- pos_sep %>% slice_head(n = 1)
 smallest_gap <- pos_sep %>% slice_tail(n = 1)
 
+# Count elite (90+) prospects at premium positions
+premium_pos <- c("QB", "EDGE", "OT", "WR")
+elite_premium <- ngs_prospects %>%
+  filter(!is.na(cmbn_score), pos_group %in% premium_pos, cmbn_score >= 90) %>%
+  nrow()
+
+elite_note <- if(elite_premium == 0) {
+  paste0(
+    "\n\nNotably, **no prospect at a premium position (QB, EDGE, OT, WR) cracks the Elite tier (90+) this year**. ",
+    "Love is the only Elite-graded prospect in the entire 2026 class. That flips the usual script: ",
+    "the model says take premium positions early because the talent is richer there, ",
+    "but this year the richest talent at the top of the draft is at RB."
+  )
+} else ""
+
 cat(paste0(
   "The 2026 class has fascinating separation patterns. **", biggest_gap$pos_group,
   "** has the biggest gap between the top prospect (",
   biggest_gap$top_player, " at ", round(biggest_gap$top_score, 1),
-  ") and #2 — a **", round(biggest_gap$gap, 1),
+  ") and #2 -- a **", round(biggest_gap$gap, 1),
   "-point** chasm. Meanwhile, **", smallest_gap$pos_group,
   "** is the tightest race, with just a **", round(smallest_gap$gap, 1),
   "-point** gap at the top. Where a prospect is clearly separated, the blue-chip argument ",
-  "gets stronger. Where the class is tightly bunched, the model's average-case advice holds."
+  "gets stronger. Where the class is tightly bunched, the model's average-case advice holds.",
+  elite_note
 ))
 ```
 
@@ -1099,21 +1144,12 @@ bc_q75 <- quantile(bc_rb_av$car_av, 0.75)
 bc_min <- min(bc_rb_av$car_av)
 bc_max <- max(bc_rb_av$car_av)
 
-# Split non-RB into premium (positive Sharpe: QB, EDGE, OT, WR) vs non-premium
-premium_pos <- c("QB", "EDGE", "OT", "WR")
-
 # Use blue_chip for career AV (has all drafted players)
 all_r1_av <- blue_chip %>%
   filter(pick <= 32, pos_group %in% key_positions, !is.na(car_av), season >= 2010)
 
-non_rb_split <- all_r1_av %>%
-  filter(pos_group != "RB") %>%
-  mutate(pos_tier = ifelse(pos_group %in% premium_pos, "Premium", "Non-Premium")) %>%
-  group_by(pick, pos_tier) %>%
-  summarise(avg_av = mean(car_av, na.rm = TRUE), n = n(), .groups = "drop")
-
-# Combined line for crossover detection
-non_rb_combined <- all_r1_av %>%
+# Single non-RB line (all positions combined)
+non_rb_line <- all_r1_av %>%
   filter(pos_group != "RB") %>%
   group_by(pick) %>%
   summarise(avg_av = mean(car_av, na.rm = TRUE), n = n(), .groups = "drop") %>%
@@ -1133,23 +1169,21 @@ smooth_line <- function(df, col = "avg_av") {
   df
 }
 
-premium_line <- smooth_line(non_rb_split %>% filter(pos_tier == "Premium"))
-nonprem_line <- smooth_line(non_rb_split %>% filter(pos_tier == "Non-Premium"))
-combined_line <- smooth_line(non_rb_combined)
+non_rb_smooth <- smooth_line(non_rb_line)
 
-# Find where premium line first drops below BC RB median (the crossover point)
-# This marks the end of the dead zone - where premium talent no longer outproduces BC RBs
-prem_above <- premium_line$smooth_av > bc_median
+# Find where non-RB line first drops below BC RB median (the crossover point)
+# This marks the end of the dead zone - where non-RB talent no longer outproduces BC RBs
+above <- non_rb_smooth$smooth_av > bc_median
 
-# Find the first contiguous stretch where premium > median
-if(any(prem_above)) {
-  dead_zone_start <- premium_line$pick[which(prem_above)[1]]
+# Find the first contiguous stretch where non-RB > median
+if(any(above)) {
+  dead_zone_start <- non_rb_smooth$pick[which(above)[1]]
   # Find where the first run of TRUE ends
-  first_false <- which(!prem_above & premium_line$pick > dead_zone_start)
+  first_false <- which(!above & non_rb_smooth$pick > dead_zone_start)
   if(length(first_false) > 0) {
-    dead_zone_end <- premium_line$pick[first_false[1] - 1]
+    dead_zone_end <- non_rb_smooth$pick[first_false[1] - 1]
   } else {
-    dead_zone_end <- premium_line$pick[max(which(prem_above))]
+    dead_zone_end <- non_rb_smooth$pick[max(which(above))]
   }
 } else {
   dead_zone_start <- 0
@@ -1159,14 +1193,8 @@ if(any(prem_above)) {
 # Fair value = picks AFTER the dead zone
 fair_value_start <- dead_zone_end + 1
 
-# Also check late-round bounce-back for combined line
-combined_above <- combined_line$smooth_av > bc_median
-# For narrative: early and late zones
-early_end <- dead_zone_start - 1
-late_start_pick <- fair_value_start
-
 ggplot() +
-  # Dead zone (where premium > BC RB median)
+  # Dead zone (where non-RB > BC RB median)
   annotate("rect", xmin = dead_zone_start - 0.5, xmax = dead_zone_end + 0.5,
            ymin = -Inf, ymax = Inf, fill = "#c62828", alpha = 0.06) +
   annotate("text", x = (dead_zone_start + dead_zone_end) / 2, y = bc_median + 25,
@@ -1178,27 +1206,22 @@ ggplot() +
   annotate("text", x = (dead_zone_end + 32) / 2, y = bc_median + 25,
            label = paste0("Fair value (", fair_value_start, "+)"),
            color = "#2e7d32", hjust = 0.5, size = 3.5, fontface = "bold") +
-  # Premium line
-  geom_line(data = premium_line, aes(x = pick, y = smooth_av),
+  # Non-RB line
+  geom_line(data = non_rb_smooth, aes(x = pick, y = smooth_av),
             color = "#c62828", linewidth = 1.2) +
-  # Non-premium line
-  geom_line(data = nonprem_line, aes(x = pick, y = smooth_av),
-            color = "#FF9800", linewidth = 1.2, linetype = "dashed") +
   # BC RB median
   geom_hline(yintercept = bc_median, color = "#377EB8", linewidth = 1.2, linetype = "solid") +
-  # Labels - positioned to avoid overlap
+  # Labels
   annotate("text", x = 32, y = bc_median + 2,
            label = paste0("BC RB median: ", round(bc_median, 0)),
            color = "#377EB8", hjust = 1, size = 3.2, fontface = "bold") +
-  annotate("text", x = 4, y = premium_line$smooth_av[premium_line$pick == 4] + 4,
-           label = "Premium", color = "#c62828", hjust = 0.5, size = 3.5, fontface = "bold") +
-  annotate("text", x = 28, y = nonprem_line$smooth_av[nonprem_line$pick == 28] - 4,
-           label = "Non-premium", color = "#FF9800", hjust = 0.5, size = 3.5, fontface = "bold") +
+  annotate("text", x = 4, y = non_rb_smooth$smooth_av[non_rb_smooth$pick == 4] + 4,
+           label = "Non-RB avg", color = "#c62828", hjust = 0.5, size = 3.5, fontface = "bold") +
   scale_x_continuous(breaks = seq(1, 32, 2)) +
   coord_cartesian(ylim = c(max(bc_min - 5, 0), bc_median + 30)) +
   labs(
     title = "Love's Fair Value: Where the Gamble Makes Sense",
-    subtitle = "Red = premium positions | Orange = non-premium | Blue = BC RB median",
+    subtitle = "Red = non-RB positions (all) | Blue = BC RB median",
     x = "Pick Number", y = "Weighted Career AV"
   ) +
   theme_minimal(base_size = 13)
@@ -1207,24 +1230,22 @@ ggplot() +
 ```{r love-fair-value-narrative, results='asis'}
 cat(paste0(
   "The blue line is the median weighted career AV across all historical blue-chip RBs (top 10% NGS Combined Score): **",
-  round(bc_median, 0), "**. The chart splits the opportunity cost into ",
-  "**premium positions** (QB, EDGE, OT, WR) in red and **non-premium positions** (CB, IOL, TE, DL, LB, S) in dashed orange.\n\n",
-  "One quirk worth noting: non-premium positions spike at the very top of the draft. ",
-  "That's largely driven by the handful of elite CBs and IOL taken in the top 5 who became stars. ",
-  "It's a small sample, but it suggests that truly elite non-premium talent at the top of the draft ",
-  "can deliver outsized value.\n\n",
-  "The dead zone is **picks ", dead_zone_start, "-", dead_zone_end, "**. This is where premium talent is densest ",
-  "and even the median blue-chip RB can't compete with a strong EDGE or OT prospect. ",
-  "**The dead zone is driven entirely by premium positions** since the non-premium line stays below the BC RB median almost everywhere.\n\n",
-  "**After pick ", dead_zone_end, "**, premium talent thins out and the calculus flips. ",
-  "A blue-chip RB becomes a reasonable bet.\n\n",
-  "Layer in the rest of this article:\n\n",
-  "- **Roster needs:** If a team already has EDGE and OT filled, the effective opportunity cost drops to the dashed line.\n",
-  "- **Class depth:** In 2026, the RB class is thin (Love is the only Elite). Pass on Love and there's no comparable RB later. ",
-  "Meanwhile, IOL and CB are loaded and will be available in round 2+.\n",
-  "- **Prospect separation:** Love's NGS profile puts him in the top tier of BC RBs, so his expected value is likely above the median.\n\n",
-  "When all three factors align, a team with premium positions filled, picking after ", dead_zone_end,
-  ", with a separated prospect in a thin class, the model's advice no longer applies. That's when you draft Love."
+  round(bc_median, 0), "**. The red line is the average career AV of all non-RB first-rounders at each pick, smoothed over a 5-pick rolling window.\n\n",
+  "The dead zone is **picks ", dead_zone_start, "-", dead_zone_end,
+  "** -- and that number should jump off the page. Part 1 opened with the question: *Should you draft Jeremiah Love at 10?* ",
+  "The data just answered it. The crossover point -- where blue-chip RB value starts to exceed the average non-RB pick -- ",
+  "is **pick ", fair_value_start, "**. The model's original question and the model's own breaking point land on the exact same number.\n\n",
+  "In the dead zone, the average non-RB pick outproduces even the median blue-chip RB. The opportunity cost is too high. ",
+  "**After pick ", dead_zone_end, "**, non-RB talent thins out and the calculus flips.\n\n",
+  "Now layer in what we've built:\n\n",
+  "- **Roster needs:** If a team already has its premium positions filled, the opportunity cost drops further.\n",
+  "- **Class depth:** In 2026, the RB class is thin (Love is the only Elite). Pass on him and there's no comparable RB later. ",
+  "Meanwhile, IOL and CB are loaded -- those positions will still be available in round 2+.\n",
+  "- **Prospect separation:** Love's NGS profile puts him in the top tier of historical BC RBs, so his expected value is likely *above* the median line, not on it.\n",
+  "- **No elite premium prospects:** This is the kicker. In a typical year, picks ", dead_zone_start, "-", dead_zone_end,
+  " are rich with elite EDGE, OT, and WR talent. In 2026, not a single premium-position prospect grades Elite on NGS. ",
+  "The opportunity cost of taking Love isn't as high as the historical average suggests -- because the alternatives aren't as good as usual.\n\n",
+  "Love at 10 isn't just defensible. It might be the pick where the model's own math starts to agree."
 ))
 ```
 
@@ -1327,9 +1348,8 @@ cat(paste0(
 if(nrow(best_fits) > 0) {
   cat("**Best fits (need RB + fair value pick):**\n\n")
   for(i in 1:nrow(best_fits)) {
-    r <- best_fits[i, ]
-    cat(paste0("- **", r$team, " (pick ", r$pick, "):** ", r$zone_label,
-               ". RB room: ", r$RB1, "\n"))
+    cat(paste0("- **", best_fits$team[i], " (pick ", best_fits$pick[i], "):** ", best_fits$zone_label[i],
+               ". RB room: ", best_fits$rb1[i], ", ", best_fits$rb2[i], ", ", best_fits$rb3[i], "\n"))
   }
   cat("\n")
 }
@@ -1354,12 +1374,18 @@ cat(paste0(
 
 cat(paste0(
   "---\n\n",
-  "**The bottom line:** Article 1 said never draft an RB in round 1. This article found three blind spots: ",
-  "roster needs, class depth, and prospect separation. When all three align — a team that needs a back, ",
-  "picking outside the dead zone, in a year where the top RB is clearly separated from the field — ",
-  "the model's blanket advice meets its limit. ",
-  if(nrow(best_fits) > 0) paste0("In 2026, that's ", paste(best_fits$team, collapse = " and "), ".") else
-  "In 2026, no team has the perfect combination of need and pick position, which may mean Love slides or a team trades up."
+  "**The bottom line:** The model says the dead zone ends at pick ", dead_zone_end,
+  ". Every team above that line pays a premium in opportunity cost that even a blue-chip RB can't offset. ",
+  "Below it, the math flips.\n\n",
+  if(nrow(best_fits) > 0) paste0(
+    "The best fits are **", paste(paste0(best_fits$team, " (", best_fits$pick, ")"), collapse = ", "),
+    "** -- teams that need a back *and* pick in the fair value zone. ",
+    "But keep an eye on the dead-zone teams too. If Love slides past pick ", dead_zone_end,
+    ", a team like **MIN (18)** -- aging Aaron Jones, no long-term answer, picking squarely in the fair value zone -- ",
+    "has every reason to trade up. That's the scenario where all three counter-arguments align at once: ",
+    "need, class scarcity, and prospect separation. The model built in Part 1 can't see it. This article can."
+  ) else
+  "In 2026, no team perfectly combines need and fair-value pick position, which means Love could slide -- or a team trades up to get him."
 ))
 ```
 
@@ -1367,31 +1393,33 @@ cat(paste0(
 
 ## What We Learned
 
-We set out to stress-test the Sharpe ratio, not to destroy it. Three arguments, three perspectives. Here's what we found.
+We built the Sharpe ratio to answer a simple question: which positions are worth drafting in round 1? The answer was clear -- QB, EDGE, OT, and WR. RB was dead last.
 
-The Sharpe ratio is a powerful tool for general draft strategy. But it operates at the level of averages, and GMs operate at the level of specifics. The model can't account for three things: **roster context** (do you actually need this position?), **class variance** (is this a good year to draft it?), and **prospect separation** (is this prospect different from the rest?).
+Then we stress-tested it. And the model held up -- mostly. The positional hierarchy is real. But we found three blind spots that turn "never draft RB in round 1" from a universal law into a conditional one:
 
-When those factors align -- a genuine need, a weak class at that position, and a prospect whose pre-draft profile is separated from the field -- the model's blanket advice meets a real edge case. Not a refutation, but a boundary condition.
+1. **Roster context matters.** The Bills taught us that having a body at QB isn't the same as having Josh Allen. Nine teams enter 2026 without a long-term answer at RB. For them, the opportunity cost of *not* drafting one is higher than the model assumes.
 
-The NGS data gave us something the retrospective analysis couldn't: a prospective signal. Historical RBs with elite NGS Combined Scores hit at rates dramatically above the position average. The correlation between pre-draft scores and career outcomes isn't perfect, but it's real enough to challenge the assumption that all prospects at a position are interchangeable.
+2. **Class depth varies wildly.** The 2026 RB class is thin -- Love is the only Elite prospect. Pass on him and there's no comparable alternative in round 2 or 3. Meanwhile, IOL, CB, and WR are loaded. The positions the model says to take instead will still be available later. The RB won't be.
 
-None of this proves that any specific pick will work. The Sharpe ratio is right far more often than it's wrong. But when teams draft a low-Sharpe position and it works out, it's often because they had information the model didn't -- roster need, class quality, prospect separation. That's not irrationality. That's context.
+3. **Not all prospects are average.** Love's 94.3 NGS Combined Score ranks 4th among all RB prospects since 2010. Historical blue-chip RBs with scores like his became great at dramatically higher rates than the position average. The model averages over all RBs. Love isn't average.
+
+And then the number that ties it together: the fair value crossover lands at **pick 10** -- the exact pick from Part 1's opening question. The model's own math says that's where the gamble starts to make sense.
+
+The wildest scenario? Minnesota at pick 18, with Aaron Jones turning 32 and no long-term answer behind him. If Love is still on the board at 10 -- or slides past it -- the Vikings have every reason to trade up. They have the need, the pick falls in the fair value zone, and the 2026 class gives them no alternative. Every counter-argument in this article points at MIN.
 
 ---
 
 ## What Survived the Stress Test
 
-The counter-arguments don't destroy the model -- they define its edges. Here's what held up:
+The counter-arguments didn't destroy the model. They sharpened it. Here's what still holds:
 
-- **QB is still the best top-10 investment on average.** Nothing we found changes the overall positional hierarchy. If you need a QB and there's a blue-chip one available, take him without hesitation.
+- **QB is still king.** Nothing we found changes the top of the positional hierarchy. If you need a franchise QB and one is available, take him.
 
-- **Late 1st round is still the sweet spot for OT and EDGE.** The combination of high hit rates and strong second-contract value makes picks 15-32 the most efficient draft real estate for these positions.
+- **The dead zone is real.** Picks 1-9 are loaded with non-RB talent. Even in 2026, with a weaker-than-usual premium class, the opportunity cost in the top 10 is steep. Love at 3 is a different conversation than Love at 10.
 
-- **Day 3 RBs are still fine most of the time.** The cheap FA replacement cost means you can fill the position without premium capital. When the class isn't deep and the prospect isn't blue-chip, this is still the right call.
+- **Day 2+ RBs are still the default.** When the class isn't thin and the top RB isn't separated, the model's advice stands. Most years, you can find a productive back in rounds 2-4.
 
-- **The aggregate advice is right; context determines the exceptions.** The Sharpe ratio is a compass, not a GPS. It points you in the right direction. But the last mile requires scouting, roster analysis, and class evaluation that no single metric can capture.
-
-- **RBs produce immediately on rookie contracts.** This actually reinforces the Sharpe framework in a subtle way: RBs deliver their best production during their cheapest years. The rookie contract surplus is real — but it also means teams get the most value from an RB *before* the second contract the model measures. The model captures this: it's not that RBs are bad, it's that the position's value is front-loaded into the years where every pick is cheap.
+- **The Sharpe ratio is a compass, not a GPS.** It points you in the right direction. But the last mile -- roster needs, class depth, prospect separation -- requires judgment that no single metric can capture. The model tells you what to do on average. GMs don't draft on average. They draft in a specific year, for a specific team, at a specific pick. Context is the difference between a good process and a great one.
 
 ---
 
