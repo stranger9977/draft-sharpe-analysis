@@ -688,27 +688,36 @@ cat(paste0(
 
 ### The Historical NGS Elite
 
-Who were the highest-graded pre-draft prospects at each position, and did they deliver? A reminder: **"hit"** here means Article 1's snap-based starter threshold — a player who played above 75% of baseline snaps at their position. Starting with RB:
+Who were the highest-graded pre-draft prospects at each position, and did they deliver? Here we use the stricter bar: **top 10% of career AV** at their position — not just a starter, but a *great* player. Starting with RB:
 
 ```{r ngs-elite-rb-big, fig.height=5, fig.width=8}
-top_ngs_rb <- ngs_with_outcomes %>%
+# Compute career AV blue chip threshold per position
+av_thresholds <- ngs_with_outcomes %>%
+  group_by(pos_group) %>%
+  summarise(av_90 = quantile(car_av, 0.9, na.rm = TRUE), .groups = "drop")
+
+ngs_with_av_bc <- ngs_with_outcomes %>%
+  left_join(av_thresholds, by = "pos_group") %>%
+  mutate(is_career_bc = car_av >= av_90)
+
+top_ngs_rb <- ngs_with_av_bc %>%
   filter(pos_group == "RB") %>%
   arrange(desc(cmbn_score)) %>%
   slice_head(n = 8) %>%
   mutate(
     player_label = paste0(pfr_player_name, " ('", str_sub(season, 3, 4), ")"),
     player_label = fct_reorder(player_label, cmbn_score),
-    outcome = if_else(is_hit, "Hit", "Miss")
+    outcome = if_else(is_career_bc, "Top 10% Career AV", "Below Threshold")
   )
 
 ggplot(top_ngs_rb, aes(x = cmbn_score, y = player_label, fill = outcome)) +
   geom_col(width = 0.7, alpha = 0.85) +
   geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 4, fontface = "bold") +
-  scale_fill_manual(values = c("Hit" = "#2e7d32", "Miss" = "#c62828")) +
+  scale_fill_manual(values = c("Top 10% Career AV" = "#1565C0", "Below Threshold" = "#EF5350")) +
   scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
   labs(
     title = "Top 8 RB Prospects by NGS Combined Score (2010-2022)",
-    subtitle = "Pre-draft NGS score vs career outcome | Green = became a starter",
+    subtitle = "Pre-draft NGS score vs career outcome | Blue = top 10% career AV at position",
     x = "NGS Combined Score", y = NULL, fill = "Career\nOutcome"
   ) +
   theme_minimal(base_size = 14) +
@@ -717,20 +726,20 @@ ggplot(top_ngs_rb, aes(x = cmbn_score, y = player_label, fill = outcome)) +
 
 ```{r ngs-elite-rb-narrative, results='asis'}
 rb_elite_stats <- top_ngs_rb %>%
-  summarise(hit_rate = mean(is_hit, na.rm = TRUE), n = n())
+  summarise(elite_rate = mean(is_career_bc, na.rm = TRUE), n = n())
 
 cat(paste0(
-  "The top 8 RB prospects by pre-draft NGS score hit at **",
-  round(rb_elite_stats$hit_rate * 100, 1),
+  "The top 8 RB prospects by pre-draft NGS score finished in the top 10% of career AV at **",
+  round(rb_elite_stats$elite_rate * 100, 1),
   "%** — far above the position's overall average. The names are what you'd expect: ",
-  "Jonathan Taylor, Saquon Barkley, Breece Hall, Derrick Henry. These aren't random hits — ",
+  "Jonathan Taylor, Saquon Barkley, Derrick Henry, Ezekiel Elliott. These aren't random outcomes — ",
   "the pre-draft signal identified them before a single NFL snap.\n\n",
   "Now the same view across all positions:"
 ))
 ```
 
 ```{r ngs-elite-all-small, fig.height=14, fig.width=8}
-top_ngs_all <- ngs_with_outcomes %>%
+top_ngs_all <- ngs_with_av_bc %>%
   filter(pos_group %in% key_positions) %>%
   group_by(pos_group) %>%
   arrange(desc(cmbn_score)) %>%
@@ -740,53 +749,53 @@ top_ngs_all <- ngs_with_outcomes %>%
     player_label = paste0(pfr_player_name, " ('", str_sub(season, 3, 4), ")"),
     player_label_unique = paste0(pos_group, "___", player_label),
     player_label_unique = fct_reorder(player_label_unique, cmbn_score),
-    outcome = if_else(is_hit, "Hit", "Miss"),
+    outcome = if_else(is_career_bc, "Top 10% Career AV", "Below Threshold"),
     pos_group = factor(pos_group, levels = key_positions)
   )
 
 ggplot(top_ngs_all, aes(x = cmbn_score, y = player_label_unique, fill = outcome)) +
   geom_col(width = 0.7, alpha = 0.85) +
   geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 2.8, fontface = "bold") +
-  scale_fill_manual(values = c("Hit" = "#2e7d32", "Miss" = "#c62828")) +
+  scale_fill_manual(values = c("Top 10% Career AV" = "#1565C0", "Below Threshold" = "#EF5350")) +
   scale_y_discrete(labels = function(x) str_remove(x, "^.*___")) +
   scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
   facet_wrap(~pos_group, scales = "free", ncol = 2) +
   labs(
     title = "Top 6 Historical Players by NGS Combined Score: All Positions",
-    subtitle = "Pre-draft NGS score vs career outcome | Green = became a starter",
+    subtitle = "Pre-draft NGS score vs career outcome | Blue = top 10% career AV",
     x = "NGS Combined Score", y = NULL, fill = "Career\nOutcome"
   ) +
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 12) +
   theme(
     legend.position = "top",
-    strip.text = element_text(face = "bold", size = 12)
+    strip.text = element_text(face = "bold", size = 11)
   )
 ```
 
 ```{r ngs-elite-all-narrative, results='asis'}
-elite_stats <- ngs_with_outcomes %>%
+elite_stats <- ngs_with_av_bc %>%
   filter(pos_group %in% key_positions) %>%
   group_by(pos_group) %>%
   arrange(desc(cmbn_score)) %>%
   slice_head(n = 6) %>%
   summarise(
-    hit_rate = mean(is_hit, na.rm = TRUE),
+    elite_rate = mean(is_career_bc, na.rm = TRUE),
     n = n(),
     .groups = "drop"
   ) %>%
-  arrange(desc(hit_rate))
+  arrange(desc(elite_rate))
 
 best_elite <- elite_stats %>% slice_head(n = 1)
 worst_elite <- elite_stats %>% slice_tail(n = 1)
 
 cat(paste0(
-  "**", best_elite$pos_group, "** leads the pack — the top 6 NGS scorers hit at ",
-  round(best_elite$hit_rate * 100, 1),
+  "**", best_elite$pos_group, "** leads the pack — the top 6 NGS scorers reached top-10% career AV at ",
+  round(best_elite$elite_rate * 100, 1),
   "%. **", worst_elite$pos_group, "** has the weakest pre-draft-to-career translation (",
-  round(worst_elite$hit_rate * 100, 1),
+  round(worst_elite$elite_rate * 100, 1),
   "%). The model's \"never draft RB\" ",
   "is really \"never draft an *average* RB.\" When the pre-draft signal says a prospect is ",
-  "separated from the class, the historical hit rate is dramatically higher at every position."
+  "separated from the class, they become *great* at dramatically higher rates."
 ))
 ```
 
@@ -798,9 +807,9 @@ In Part 1, we asked: *Should you draft Jeremiah Love at 10?*
 
 The model said no. RB has a deeply negative Sharpe in the top 10. But we've now shown that the answer depends on things the model can't see: roster needs, class depth, and prospect separation. Love is the case that brings all three together.
 
-### Where Love Sits in the NGS Historical Record
+### The 2025 RB Class
 
-We showed above that historical RBs with elite pre-draft NGS scores hit at dramatically higher rates than the position average. Where does Love's 2025 profile fit in that history?
+We showed above that historical RBs with elite pre-draft NGS scores become great at dramatically higher rates than the position average. Where does Love's 2025 class fit in?
 
 ```{r ngs-love-bar-big, fig.height=7, fig.width=8}
 ngs_rb <- ngs_prospects %>%
@@ -845,7 +854,64 @@ cat(paste0(
   "Love's NGS Combined Score of **", round(love_row$cmbn_score, 1),
   "** is tied for #1 overall across all positions. His Production Score of **95.9** is the highest ",
   "of any prospect in the 2025 class. The gap to RB2 (", rb2_row$player, " at ",
-  round(rb2_row$cmbn_score, 1), ") is **", round(gap, 1), " points** -- a chasm by NGS standards.\n\n",
+  round(rb2_row$cmbn_score, 1), ") is **", round(gap, 1), " points** -- a chasm by NGS standards."
+))
+```
+
+### Where Love Ranks in the Historical Record
+
+How does Love's 94.3 compare to every RB prospect since 2010? Here's every RB with an NGS Combined Score, 2010-2025 — Love highlighted:
+
+```{r love-historical-rank, fig.height=5, fig.width=8}
+# Combine historical and 2025 RB NGS scores
+historical_rb_ngs <- ngs_with_outcomes %>%
+  filter(pos_group == "RB") %>%
+  select(player_name = pfr_player_name, season, cmbn_score) %>%
+  mutate(source = "Historical (2010-2022)")
+
+prospect_rb_ngs <- ngs_prospects %>%
+  filter(pos_group == "RB", !is.na(cmbn_score)) %>%
+  select(player_name = player, cmbn_score) %>%
+  mutate(season = 2025, source = "2025 Prospect")
+
+all_rb_ngs <- bind_rows(historical_rb_ngs, prospect_rb_ngs) %>%
+  arrange(desc(cmbn_score)) %>%
+  mutate(
+    rank = row_number(),
+    is_love = str_detect(player_name, "(?i)love") & source == "2025 Prospect"
+  )
+
+love_rank <- all_rb_ngs %>% filter(is_love) %>% pull(rank)
+total_rb <- nrow(all_rb_ngs)
+love_pctile <- round((1 - love_rank / total_rb) * 100, 1)
+
+# Show top 20 as a horizontal bar
+top20 <- all_rb_ngs %>% slice_head(n = 20) %>%
+  mutate(
+    label = paste0(player_name, " ('", str_sub(season, 3, 4), ")"),
+    label = fct_reorder(label, cmbn_score)
+  )
+
+ggplot(top20, aes(x = cmbn_score, y = label, fill = is_love)) +
+  geom_col(width = 0.7, alpha = 0.85) +
+  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 3.5, fontface = "bold") +
+  scale_fill_manual(values = c("TRUE" = "#1565C0", "FALSE" = "gray60"), guide = "none") +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
+  coord_cartesian(xlim = c(75, NA)) +
+  labs(
+    title = "Top 20 RB Prospects by NGS Score (2010-2025)",
+    subtitle = paste0("Love ranks #", love_rank, " out of ", total_rb, " RBs — ", love_pctile, "th percentile"),
+    x = "NGS Combined Score", y = NULL
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+```{r love-historical-narrative, results='asis'}
+cat(paste0(
+  "Love's 94.3 ranks **#", love_rank, "** among all ", total_rb,
+  " RB prospects in the NGS era. That puts him in the **", love_pctile,
+  "th percentile** — in the company of Jonathan Taylor, Saquon Barkley, and Breece Hall. ",
+  "The pre-draft signal is as strong as it gets.\n\n",
   "But Love isn't the only outlier in 2025. Here's a look at the top prospect at every position:"
 ))
 ```
@@ -872,16 +938,16 @@ top_2025_all <- ngs_prospects %>%
     pos_group = factor(pos_group, levels = key_positions)
   )
 
-ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tier)) +
-  geom_col(width = 0.7, alpha = 0.85) +
-  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 2.5, fontface = "bold") +
-  scale_fill_manual(
+ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, color = ngs_tier)) +
+  geom_point(size = 4) +
+  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.4, size = 2.8, fontface = "bold",
+            show.legend = FALSE) +
+  scale_color_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
   ) +
   scale_y_discrete(labels = function(x) str_remove(x, "^.*___")) +
-  scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
-  coord_cartesian(xlim = c(55, NA)) +
+  scale_x_continuous(limits = c(58, 100), breaks = seq(60, 100, 10)) +
   facet_wrap(~pos_group, scales = "free_y", ncol = 3) +
   labs(
     title = "2025 Draft Class: Top 5 Prospects by NGS Combined Score",
@@ -891,7 +957,8 @@ ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tie
   theme_minimal(base_size = 12) +
   theme(
     legend.position = "top",
-    strip.text = element_text(face = "bold", size = 11)
+    strip.text = element_text(face = "bold", size = 11),
+    panel.grid.major.y = element_blank()
   )
 ```
 
@@ -985,7 +1052,7 @@ ggplot(rb_with_alts, aes(y = row_label)) +
                      name = NULL) +
   labs(
     title = "The RB Gamble: Who They Took vs Who They Could Have Had",
-    subtitle = "Circle = RB | X = next non-RB drafted | Green = RB won the bet | Sorted by pick",
+    subtitle = "Circle = RB | X = next non-RB drafted | Green = RB won the bet",
     x = "Individual Player Sharpe", y = NULL
   ) +
   theme_minimal(base_size = 13) +
@@ -1116,10 +1183,86 @@ cat(paste0(
   "At picks 1-5, even an elite RB barely matches the average non-RB alternative. The opportunity cost is simply too high. ",
   "At picks 6-10, the elite RB **clears** the bar — this is where CMC (pick 8) and Gurley (pick 10) ",
   "actually lived, and both delivered positive returns above what the average alternative position offered. ",
-  "In the late first, the math gets more favorable, but elite RB talent is rarely available that late.\n\n",
-  "**The verdict: Love at pick 3-5 is a losing bet even if he hits.** The opportunity cost is too steep. ",
-  "But Love at pick 6-10 — if he's truly in the CMC/Gurley tier — is where the Sharpe model's ",
-  "advice starts to crack. And at picks 15+, an elite RB profile can justify the selection outright."
+  "In the late first, the math gets more favorable, but elite RB talent is rarely available that late."
+))
+```
+
+### Love's Fair Value: What the Data Says
+
+The chart above tells us what happens when an elite RB *hits*. But you don't know if Love will be CMC or Fournette before the draft. The real question: given the full range of outcomes for blue-chip RB prospects, at what pick does the expected value justify the selection?
+
+```{r love-fair-value, fig.height=6, fig.width=8}
+# Blue-chip RB expected Sharpe (all NGS top-10% RBs)
+bc_rb_sharpes <- blue_chip %>%
+  filter(pos_group == "RB", is_ngs_blue_chip == TRUE, !is.na(player_sharpe))
+
+bc_mean <- mean(bc_rb_sharpes$player_sharpe)
+bc_median <- median(bc_rb_sharpes$player_sharpe)
+
+# Non-RB average Sharpe by individual pick, smoothed
+non_rb_by_pick <- player_lookup %>%
+  filter(pick <= 32, pos_group != "RB") %>%
+  group_by(pick) %>%
+  summarise(avg_sharpe = mean(player_sharpe, na.rm = TRUE), n = n(), .groups = "drop") %>%
+  arrange(pick)
+
+# 5-pick rolling mean (manual, no zoo dependency)
+smooth_vals <- numeric(32)
+for(i in 1:32) {
+  window <- max(1, i-2):min(32, i+2)
+  smooth_vals[i] <- mean(non_rb_by_pick$avg_sharpe[window])
+}
+non_rb_by_pick$smooth_sharpe <- smooth_vals
+
+ggplot(non_rb_by_pick, aes(x = pick)) +
+  geom_line(aes(y = smooth_sharpe), color = "#FF9800", linewidth = 1.2) +
+  geom_point(aes(y = avg_sharpe), color = "#FF9800", alpha = 0.4, size = 2) +
+  geom_hline(yintercept = bc_mean, color = "#377EB8", linewidth = 1.2, linetype = "solid") +
+  geom_hline(yintercept = bc_median, color = "#377EB8", linewidth = 1, linetype = "dashed") +
+  annotate("text", x = 2, y = bc_mean + 0.06, label = paste0("BC RB expected value (mean: ", round(bc_mean, 2), ")"),
+           color = "#377EB8", hjust = 0, size = 3.5, fontface = "bold") +
+  annotate("text", x = 2, y = bc_median + 0.06, label = paste0("BC RB median: ", round(bc_median, 2)),
+           color = "#377EB8", hjust = 0, size = 3.5, fontface = "italic") +
+  annotate("text", x = 28, y = non_rb_by_pick$smooth_sharpe[28] + 0.08,
+           label = "Avg non-RB at pick", color = "#FF9800", hjust = 1, size = 3.5, fontface = "bold") +
+  scale_x_continuous(breaks = seq(1, 32, 2)) +
+  labs(
+    title = "Love's Fair Value: Expected RB Return vs Opportunity Cost",
+    subtitle = "Blue line = expected Sharpe for a blue-chip RB prospect | Orange = avg non-RB alternative",
+    x = "Pick Number", y = "Individual Player Sharpe"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+```{r love-fair-value-narrative, results='asis'}
+# Find first pick where mean BC beats smoothed non-RB
+crossover <- non_rb_by_pick %>% filter(smooth_sharpe <= bc_mean) %>% slice_head(n = 1)
+crossover_med <- non_rb_by_pick %>% filter(smooth_sharpe <= bc_median) %>% slice_head(n = 1)
+
+# Also compute: what % of BC RBs returned above the non-RB average at different pick ranges
+early <- non_rb_by_pick %>% filter(pick <= 10) %>% summarise(avg = mean(smooth_sharpe))
+mid <- non_rb_by_pick %>% filter(pick >= 11, pick <= 20) %>% summarise(avg = mean(smooth_sharpe))
+late <- non_rb_by_pick %>% filter(pick >= 21) %>% summarise(avg = mean(smooth_sharpe))
+
+pct_beat_early <- mean(bc_rb_sharpes$player_sharpe > early$avg)
+pct_beat_mid <- mean(bc_rb_sharpes$player_sharpe > mid$avg)
+pct_beat_late <- mean(bc_rb_sharpes$player_sharpe > late$avg)
+
+cat(paste0(
+  "The blue line is the expected Sharpe for a blue-chip RB prospect — the average outcome across all ",
+  "historical RBs who scored in the top 10% of NGS Combined Score. The orange line is the average ",
+  "non-RB return at each pick.\n\n",
+  "**The honest answer:** the expected value of a blue-chip RB (",
+  round(bc_mean, 2), ") never clearly exceeds the average non-RB alternative in the first round. ",
+  "The opportunity cost is real at every pick.\n\n",
+  "But expected value isn't the whole story. Among historical blue-chip RBs:\n\n",
+  "- **", round(pct_beat_early * 100), "%** would have beaten the average non-RB pick in the top 10\n",
+  "- **", round(pct_beat_mid * 100), "%** would have beaten the average non-RB pick at 11-20\n",
+  "- **", round(pct_beat_late * 100), "%** would have beaten the average non-RB pick at 21-32\n\n",
+  "That's the gamble. You're not betting on the average outcome — you're betting that Love is in the ",
+  round(pct_beat_mid * 100), "% who beat the alternative, not the ",
+  round((1 - pct_beat_mid) * 100), "% who don't. ",
+  "The data can't tell you which side Love falls on. But it can tell you the odds — and where those odds start to favor the bet."
 ))
 ```
 
