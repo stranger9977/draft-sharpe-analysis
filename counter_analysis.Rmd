@@ -394,7 +394,7 @@ cat(paste0(
 
 ```{r class-2025-commentary, results='asis'}
 class_2025 <- ngs_class_tiers %>%
-  filter(season == 2025, ngs_tier %in% c("Elite", "Good")) %>%
+  filter(season == 2026, ngs_tier %in% c("Elite", "Good")) %>%
   group_by(pos_group) %>%
   summarise(
     n_good_plus = sum(n),
@@ -611,10 +611,7 @@ rb_labeled <- rb_scatter %>% filter(is_bc | car_av >= quantile(car_av, 0.9))
 
 ggplot(rb_scatter, aes(x = cmbn_score, y = car_av)) +
   geom_point(data = rb_scatter %>% filter(!is_bc), color = "gray70", alpha = 0.4, size = 2) +
-  geom_point(data = rb_scatter %>% filter(is_bc), shape = 21, fill = "white",
-             color = "#377EB8", size = 6, stroke = 1.5) +
-  geom_text(data = rb_scatter %>% filter(is_bc),
-            aes(label = round(car_av, 0)), size = 2, color = "#377EB8", fontface = "bold") +
+  geom_point(data = rb_scatter %>% filter(is_bc), color = "#377EB8", size = 3.5, alpha = 0.8) +
   geom_text_repel(data = rb_labeled,
             aes(label = pfr_player_name, color = is_bc),
             size = 2.8, fontface = "bold", show.legend = FALSE,
@@ -851,21 +848,23 @@ ngs_rb <- ngs_prospects %>%
     player_label = fct_reorder(player_label, cmbn_score)
   )
 
-ggplot(ngs_rb, aes(x = cmbn_score, y = player_label, fill = ngs_tier)) +
-  geom_col(width = 0.7, alpha = 0.85) +
-  geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 3, fontface = "bold") +
-  scale_fill_manual(
+ggplot(ngs_rb, aes(x = cmbn_score, y = player_label, color = ngs_tier)) +
+  geom_point(size = 8, shape = 21, fill = "white", stroke = 2, show.legend = TRUE) +
+  geom_text(aes(label = round(cmbn_score, 1)), size = 2.3, fontface = "bold",
+            show.legend = FALSE) +
+  scale_color_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
   ) +
-  scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
-  coord_cartesian(xlim = c(50, NA)) +
+  scale_x_continuous(breaks = seq(55, 95, 5)) +
+  coord_cartesian(xlim = c(55, 100), clip = "off") +
   labs(
     title = "2026 RB Prospects: NGS Combined Score",
-    subtitle = "Love's 94.3 is tied for #1 overall (all positions) with Sonny Styles | ProdScr: 95.9 (highest of any prospect)",
+    subtitle = "Love's 94.3 is tied for #1 overall (all positions) with Sonny Styles",
     x = "NGS Combined Score", y = NULL
   ) +
-  theme_minimal(base_size = 14)
+  theme_minimal(base_size = 14) +
+  theme(panel.grid.major.y = element_blank())
 ```
 
 ```{r ngs-love-narrative, results='asis'}
@@ -886,18 +885,24 @@ cat(paste0(
 How does Love's 94.3 compare to every RB prospect since 2010? Here's every RB with an NGS Combined Score, with Love highlighted:
 
 ```{r love-historical-rank, fig.height=5, fig.width=8}
-# Combine historical and 2026 RB NGS scores
+# Combine historical (2010-2022), recent (2023-2025), and 2026 RB NGS scores
 historical_rb_ngs <- ngs_with_outcomes %>%
   filter(pos_group == "RB") %>%
   select(player_name = pfr_player_name, season, cmbn_score) %>%
-  mutate(source = "Historical (2010-2022)")
+  mutate(source = "Historical")
+
+# 2023-2025 classes from ngs_historical_matched
+recent_rb_ngs <- ngs_historical %>%
+  filter(pos_group == "RB", season %in% 2023:2025, !is.na(cmbn_score)) %>%
+  select(player_name = player, season, cmbn_score) %>%
+  mutate(source = "Recent (2023-2025)")
 
 prospect_rb_ngs <- ngs_prospects %>%
   filter(pos_group == "RB", !is.na(cmbn_score)) %>%
   select(player_name = player, cmbn_score) %>%
   mutate(season = 2026, source = "2026 Prospect")
 
-all_rb_ngs <- bind_rows(historical_rb_ngs, prospect_rb_ngs) %>%
+all_rb_ngs <- bind_rows(historical_rb_ngs, recent_rb_ngs, prospect_rb_ngs) %>%
   arrange(desc(cmbn_score)) %>%
   mutate(
     rank = row_number(),
@@ -908,17 +913,27 @@ love_rank <- all_rb_ngs %>% filter(is_love) %>% pull(rank)
 total_rb <- nrow(all_rb_ngs)
 love_pctile <- round((1 - love_rank / total_rb) * 100, 1)
 
-# Show top 20 as a horizontal bar
+# Show top 20 as a horizontal bar, colored by NGS tier
 top20 <- all_rb_ngs %>% slice_head(n = 20) %>%
   mutate(
     label = paste0(player_name, " ('", str_sub(season, 3, 4), ")"),
-    label = fct_reorder(label, cmbn_score)
+    label = fct_reorder(label, cmbn_score),
+    ngs_tier = case_when(
+      cmbn_score >= 90 ~ "Elite",
+      cmbn_score >= 70 ~ "Good",
+      cmbn_score >= 60 ~ "Average",
+      TRUE ~ "Below Avg"
+    ),
+    ngs_tier = factor(ngs_tier, levels = c("Elite", "Good", "Average", "Below Avg"))
   )
 
-ggplot(top20, aes(x = cmbn_score, y = label, fill = is_love)) +
+ggplot(top20, aes(x = cmbn_score, y = label, fill = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85) +
   geom_text(aes(label = round(cmbn_score, 1)), hjust = -0.15, size = 3.5, fontface = "bold") +
-  scale_fill_manual(values = c("TRUE" = "#1565C0", "FALSE" = "gray60"), guide = "none") +
+  scale_fill_manual(
+    values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
+    name = "NGS Tier"
+  ) +
   scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
   coord_cartesian(xlim = c(75, NA)) +
   labs(
@@ -926,14 +941,15 @@ ggplot(top20, aes(x = cmbn_score, y = label, fill = is_love)) +
     subtitle = paste0("Love ranks #", love_rank, " out of ", total_rb, " RBs — ", love_pctile, "th percentile"),
     x = "NGS Combined Score", y = NULL
   ) +
-  theme_minimal(base_size = 13)
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top")
 ```
 
 ```{r love-historical-narrative, results='asis'}
 cat(paste0(
   "Love's 94.3 ranks **#", love_rank, "** among all ", total_rb,
   " RB prospects in the NGS era. That puts him in the **", love_pctile,
-  "th percentile** — in the company of Jonathan Taylor, Saquon Barkley, and Breece Hall. ",
+  "th percentile** — in the company of Jonathan Taylor, Saquon Barkley, Breece Hall, and Bijan Robinson. ",
   "The pre-draft signal is as strong as it gets.\n\n",
   "But Love isn't the only outlier in 2026. Here's a look at the top prospect at every position:"
 ))
@@ -1422,7 +1438,7 @@ Then we stress-tested it. And the model held up -- mostly. The positional hierar
 
 2. **Class depth varies wildly.** The 2026 RB class is thin -- Love is the only Elite prospect. Pass on him and there's no comparable alternative in round 2 or 3. Meanwhile, IOL, CB, and WR are loaded. The positions the model says to take instead will still be available later. The RB won't be.
 
-3. **Not all prospects are average.** Love's 94.3 NGS Combined Score ranks 4th among all RB prospects since 2010. Historical blue-chip RBs with scores like his became great at dramatically higher rates than the position average. The model averages over all RBs. Love isn't average.
+3. **Not all prospects are average.** Love's 94.3 NGS Combined Score ranks 5th among all RB prospects since 2010. Historical blue-chip RBs with scores like his became great at dramatically higher rates than the position average. The model averages over all RBs. Love isn't average.
 
 And then the number that ties it together: the fair value crossover lands at **pick 10** -- the exact pick from Part 1's opening question. The model's own math says that's where the gamble starts to make sense.
 
