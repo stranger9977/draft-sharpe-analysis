@@ -1240,8 +1240,8 @@ cat(paste0(
   round(bc_median, 0), "**. The red line is the average career AV of all non-RB first-rounders at each pick, smoothed over a 5-pick rolling window.\n\n",
   "The dead zone is **picks ", dead_zone_start, "-", dead_zone_end,
   "** -- and that number should jump off the page. Part 1 opened with the question: *Should you draft Jeremiah Love at 10?* ",
-  "The data just answered it. The crossover point -- where blue-chip RB value starts to exceed the average non-RB pick -- ",
-  "is **pick ", fair_value_start, "**. The model's original question and the model's own breaking point land on the exact same number.\n\n",
+  "The career AV data just answered it. The crossover point -- where blue-chip RB value starts to exceed the average non-RB pick -- ",
+  "is **pick ", fair_value_start, "**. Part 1's question and the career AV breaking point land on the exact same number.\n\n",
   "In the dead zone, the average non-RB pick outproduces even the median blue-chip RB. The opportunity cost is too high. ",
   "**After pick ", dead_zone_end, "**, non-RB talent thins out and the calculus flips.\n\n",
   "Now layer in what we've built:\n\n",
@@ -1252,7 +1252,7 @@ cat(paste0(
   "- **No elite premium prospects:** In a typical year, picks ", dead_zone_start, "-", dead_zone_end,
   " are rich with elite EDGE, OT, and WR talent. In 2026, not a single premium-position prospect grades Elite (90+) on NGS. ",
   "The opportunity cost of taking Love isn't as high as the historical average suggests -- because the alternatives aren't as good as usual.\n\n",
-  "Love at 10 isn't just defensible. It might be the pick where the model's own math starts to agree."
+  "Love at 10 isn't just defensible. It might be the pick where the career AV math starts to agree with the gamble."
 ))
 ```
 
