@@ -2063,6 +2063,35 @@ ggplot() +
   theme_minimal(base_size = 13)
 ```
 
+```{r non-premium-economics, results='asis'}
+# Illustrate the economics: why non-premium return rises at later picks
+iol_fa <- round(fa_costs["IOL"] * salary_cap, 1)
+rk_pick1 <- round(rookie_apy["1"] * salary_cap, 1)
+rk_pick20 <- round(rookie_apy["20"] * salary_cap, 1)
+qb_fa <- round(fa_costs["QB"] * salary_cap, 1)
+
+cat(paste0(
+  "**Why does the non-premium line slope upward?** This is the Sharpe ratio's core economic argument, ",
+  "made visible.\n\n",
+  "Player return is built from rookie surplus — the gap between what a free-agent replacement costs and what the ",
+  "rookie deal pays, multiplied by how much the player actually plays. For non-premium positions like IOL, ",
+  "free-agent replacement costs just **$", iol_fa, "M/year**. At pick 1, the rookie deal costs **$", rk_pick1,
+  "M/year** — nearly identical to free agency. There is almost no gap to exploit, so surplus is close to zero ",
+  "regardless of how good the player is.\n\n",
+  "At pick 20, the rookie deal drops to **$", rk_pick20, "M/year**, opening a **$",
+  round((fa_costs["IOL"] - rookie_apy["20"]) * salary_cap, 1),
+  "M/year** gap. Over four rookie years, that gap compounds into real surplus. ",
+  "For non-premium positions, the savings only materialize at later picks — which is exactly why the Sharpe ratio ",
+  "says drafting them early is value-destructive.\n\n",
+  "Premium positions don't have this problem. A QB's free-agent replacement costs **$", qb_fa,
+  "M/year** — the gap between that and even the most expensive rookie deal is enormous at every pick. ",
+  "That's why the premium line slopes downward normally: the surplus is always large, and it gets slightly ",
+  "smaller as rookie costs rise at higher picks.\n\n",
+  "This chart is the Sharpe ratio's argument in picture form. Love has to overcome not just the position discount, ",
+  "but the structural economics of a position where rookie deals barely save money over free agency."
+))
+```
+
 ```{r love-fair-value-narrative, results='asis'}
 love_at_10_av <- love_curve %>% filter(pick == 10) %>% pull(pred_av)
 prem_at_10_av <- premium_avg %>% filter(pick == 10) %>% pull(avg_av)
