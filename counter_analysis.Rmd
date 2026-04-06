@@ -61,7 +61,8 @@ market_efficiency <- read_csv("output/v2/market_efficiency.csv", show_col_types 
 ngs_prospects <- read_csv("output/v2/ngs_prospects_2025.csv", show_col_types = FALSE) %>%
   mutate(pos_group = case_when(
     # NGS lists all defensive backs as "DB" → mapped to CB. Fix known safeties.
-    player %in% c("Caleb Downs", "Dillon Thieneman", "Nick Emmanwori", "Malaki Starks") ~ "S",
+    player %in% c("Caleb Downs", "Dillon Thieneman", "Nick Emmanwori", "Malaki Starks",
+                   "Bud Clark", "Kamari Ramsey", "D'Angelo Ponds") ~ "S",
     # NGS lumps all DL together. Reclassify EDGE rushers (DEs) vs interior DL (DTs).
     player %in% c("Rueben Bain Jr.", "Akheem Mesidor", "Keldric Faulk",
                    "Dani Dennis-Sutton", "Zion Young", "Aidan Hubbard",
@@ -1103,9 +1104,9 @@ top_2025_all <- top_2025_all %>%
 
 ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tier, color = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85, show.legend = TRUE) +
-  geom_point(aes(x = cmbn_score), size = 7, shape = 21, stroke = 1.5, show.legend = FALSE) +
+  geom_point(aes(x = cmbn_score), size = 9, shape = 21, stroke = 1.5, show.legend = FALSE) +
   geom_text(aes(x = cmbn_score, label = round(cmbn_score, 1)),
-            color = "white", hjust = 0.5, size = 2.2, fontface = "bold", show.legend = FALSE) +
+            color = "white", hjust = 0.5, size = 2.6, fontface = "bold", show.legend = FALSE) +
   scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
@@ -2247,8 +2248,10 @@ cat(paste0(
     if(!is.na(upside_fair_value)) upside_fair_value else "N/A",
     " where Love's upside case beats premium alternatives?\n")
   } else {
-    paste0("2. **Career value:** Love's predicted career AV exceeds the premium position average at every pick. ",
-    "The surplus math still favors premium positions, but the career production case supports Love anywhere in round 1.\n")
+    paste0("2. **Fair value:** Love's predicted career AV exceeds the premium position average at every pick. ",
+    "The surplus math still favors premium positions",
+    if(!is.na(upside_fair_value)) paste0(", but Love's upside case (Q90) crosses the premium surplus line at **pick ", upside_fair_value, "**") else "",
+    ". Teams picking at or after that point get the best of both arguments.\n")
   },
   "3. **Class context:** 2026 is a thin RB class with Love as the only Elite prospect — ",
   "this factor applies equally to every team.\n\n"
@@ -2299,8 +2302,11 @@ cat(paste0(
     )
   } else {
     paste0(
-      "**The bottom line:** Love's career AV projection beats the premium position average at every pick — there is no dead zone. ",
-      "The Sharpe ratio still favors premium positions on surplus value, but the career production case for Love holds across the entire first round.\n\n",
+      "**The bottom line:** Love's career AV projection beats the premium position average at every pick. ",
+      if(!is.na(upside_fair_value)) paste0(
+        "His upside case crosses the premium surplus line at **pick ", upside_fair_value, "**. ",
+        "Before that, the surplus math still favors premium positions. After it, even the Sharpe ratio's own framework supports Love.\n\n"
+      ) else "The Sharpe ratio still favors premium positions on surplus value, but the career production case holds across the entire first round.\n\n",
       if(nrow(best_fits) > 0) paste0(
         "The best fits are **", paste(paste0(best_fits$team, " (", best_fits$pick, ")"), collapse = ", "),
         "** -- teams that need a back *and* can't find a comparable RB later in this thin class. ",
