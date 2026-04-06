@@ -2230,15 +2230,8 @@ Everything we've built in this article converges on a single question. Which tea
 There's one more factor the surplus math can't see: **RBs peak early and decline fast.**
 
 ```{r rb-age-curve, fig.height=5, fig.width=9, message=FALSE, warning=FALSE}
-# Build age curves from snap count data
+# Build experience curves from snap count data + draft year from parquet
 library(nflreadr)
-
-# Rosters: get birth dates. Two passes — pfr_id join first, name join as fallback for OL
-rosters_raw <- load_rosters(2010:2024) %>%
-  select(season, pfr_id, gsis_id, full_name, position, birth_date) %>%
-  distinct() %>%
-  filter(!is.na(birth_date)) %>%
-  mutate(age = floor(as.numeric(difftime(as.Date(paste0(season, "-09-01")), birth_date, units = "days")) / 365.25))
 
 season_snaps <- load_snap_counts(2012:2024) %>%
   filter(game_type == "REG") %>%
@@ -2254,24 +2247,20 @@ snap_pos_map <- c("RB" = "RB", "FB" = "RB", "WR" = "WR", "QB" = "QB", "TE" = "TE
                   "CB" = "CB", "DB" = "CB", "SS" = "S", "FS" = "S", "S" = "S",
                   "ILB" = "LB", "MLB" = "LB", "LB" = "LB")
 
-# Join by pfr_id first
-pfr_join <- season_snaps %>%
-  inner_join(rosters_raw %>% filter(!is.na(pfr_id)) %>% select(season, pfr_id, age),
-             by = c("pfr_player_id" = "pfr_id", "season"),
-             relationship = "many-to-many") %>%
-  distinct(pfr_player_id, season, .keep_all = TRUE)
+# Get draft year + round from parquet
+draft_info <- df %>%
+  select(pfr_player_id, season, round) %>%
+  rename(draft_season = season, draft_round = round) %>%
+  filter(!is.na(pfr_player_id)) %>%
+  distinct(pfr_player_id, .keep_all = TRUE)
 
-# Name-based fallback for players not matched (mostly OL)
-unmatched <- season_snaps %>%
-  anti_join(pfr_join, by = c("pfr_player_id", "season")) %>%
-  inner_join(rosters_raw %>% select(season, full_name, age) %>% distinct(),
-             by = c("player" = "full_name", "season"),
-             relationship = "many-to-many") %>%
-  distinct(pfr_player_id, season, .keep_all = TRUE)
-
-snap_joined <- bind_rows(pfr_join, unmatched) %>%
-  mutate(pos_group = snap_pos_map[snap_position]) %>%
-  filter(!is.na(pos_group), age >= 22, age <= 33, games >= 4) %>%
+snap_joined <- season_snaps %>%
+  inner_join(draft_info, by = "pfr_player_id") %>%
+  mutate(
+    pos_group = snap_pos_map[snap_position],
+    years_exp = season - draft_season + 1  # Year 1 = rookie season
+  ) %>%
+  filter(!is.na(pos_group), years_exp >= 1, years_exp <= 12, games >= 4) %>%
   mutate(snap_pct = if_else(pos_group %in% c("RB", "WR", "QB", "TE", "OT", "IOL"),
                             avg_off_pct, avg_def_pct))
 
@@ -2287,98 +2276,121 @@ peak_data <- ever_starter %>%
   mutate(peak_snap = max(snap_pct), pct_of_peak = snap_pct / peak_snap) %>%
   ungroup()
 
-show_positions <- c("RB", "WR", "QB", "OT", "EDGE", "CB", "IOL", "LB", "S", "DL", "TE")
-age_curves <- peak_data %>%
-  filter(pos_group %in% show_positions) %>%
-  group_by(pos_group, age) %>%
+# Group positions: QB, Premium (EDGE/OT/WR), Non-Premium (all others except RB/QB), RB
+grouped_curves <- peak_data %>%
+  filter(!is.na(pos_group)) %>%
+  mutate(pos_bucket = case_when(
+    pos_group == "QB" ~ "QB",
+    pos_group == "RB" ~ "RB",
+    pos_group %in% c("EDGE", "OT", "WR") ~ "Premium (EDGE/OT/WR)",
+    TRUE ~ "Non-Premium (CB/DL/IOL/LB/S/TE)"
+  )) %>%
+  group_by(pos_bucket, years_exp) %>%
   summarise(avg_pct_peak = mean(pct_of_peak, na.rm = TRUE), n = n(), .groups = "drop") %>%
-  filter(n >= 20)
+  filter(n >= 15)
 
-# Find peak age per position
-peak_ages <- age_curves %>% group_by(pos_group) %>% slice_max(avg_pct_peak, n = 1)
+peak_yrs <- grouped_curves %>% group_by(pos_bucket) %>% slice_max(avg_pct_peak, n = 1)
 
-age_pos_colors <- c("RB" = "#377EB8", "WR" = "#E67E22", "QB" = "#c62828",
-                "OT" = "#66BB6A", "EDGE" = "#9C27B0", "CB" = "#FF9800",
-                "IOL" = "#00897B", "LB" = "#795548", "S" = "#607D8B",
-                "DL" = "#F781BF", "TE" = "#984EA3")
+bucket_colors <- c("QB" = "#c62828", "RB" = "#377EB8",
+                    "Premium (EDGE/OT/WR)" = "#4CAF50",
+                    "Non-Premium (CB/DL/IOL/LB/S/TE)" = "#9E9E9E")
 
-ggplot(age_curves, aes(x = age, y = avg_pct_peak, color = pos_group)) +
-  geom_line(linewidth = 1.5) +
-  geom_point(data = peak_ages, size = 4) +
-  scale_color_manual(values = age_pos_colors, name = "Position") +
+ggplot(grouped_curves, aes(x = years_exp, y = avg_pct_peak, color = pos_bucket)) +
+  geom_line(linewidth = 1.8) +
+  geom_point(data = peak_yrs, size = 5) +
+  scale_color_manual(values = bucket_colors, name = "") +
   scale_y_continuous(labels = scales::percent, limits = c(0.55, 1.0)) +
-  scale_x_continuous(breaks = 22:33) +
+  scale_x_continuous(breaks = 1:12) +
   labs(
-    title = "The RB Clock: Playing Time Relative to Peak, by Position",
-    subtitle = "NFL starters 2012-2024 (rosters from 2010) | Each player normalized to their own peak season",
-    x = "Age", y = "% of Peak Playing Time"
+    title = "The RB Clock: Playing Time Relative to Peak",
+    subtitle = "NFL starters drafted 2010-2022 | Each player normalized to their own peak season",
+    x = "Years of Experience", y = "% of Peak Playing Time"
   ) +
   theme_minimal(base_size = 13) +
-  theme(legend.position = "top")
+  theme(legend.position = "top",
+        legend.text = element_text(size = 11))
 ```
 
-```{r rb-age-curve-by-round, fig.height=8, fig.width=10, message=FALSE, warning=FALSE}
-# Join age curve data with draft round from parquet
-draft_rounds <- df %>%
-  select(pfr_player_id, round, pos_group) %>%
-  filter(!is.na(pfr_player_id), !is.na(round)) %>%
-  distinct(pfr_player_id, .keep_all = TRUE)
-
+```{r rb-age-curve-by-round, fig.height=9, fig.width=10, message=FALSE, warning=FALSE}
+# Facet by draft round using years of experience
 peak_with_round <- peak_data %>%
-  inner_join(draft_rounds %>% select(pfr_player_id, round),
-             by = "pfr_player_id") %>%
-  mutate(round_label = case_when(
-    round == 1 ~ "Round 1",
-    round == 2 ~ "Round 2",
-    round == 3 ~ "Round 3",
-    TRUE ~ "Rounds 4-7"
-  ),
-  round_label = factor(round_label, levels = c("Round 1", "Round 2", "Round 3", "Rounds 4-7")))
+  mutate(
+    round_label = case_when(
+      draft_round == 1 ~ "Round 1",
+      draft_round == 2 ~ "Round 2",
+      draft_round == 3 ~ "Round 3",
+      TRUE ~ "Rounds 4-7"
+    ),
+    round_label = factor(round_label, levels = c("Round 1", "Round 2", "Round 3", "Rounds 4-7")),
+    pos_bucket = case_when(
+      pos_group == "QB" ~ "QB",
+      pos_group == "RB" ~ "RB",
+      pos_group %in% c("EDGE", "OT", "WR") ~ "Premium",
+      TRUE ~ "Non-Premium"
+    )
+  )
 
-focus_positions <- c("RB", "WR", "QB", "OT", "EDGE")
-
-age_curves_by_round <- peak_with_round %>%
-  filter(pos_group %in% focus_positions) %>%
-  group_by(pos_group, round_label, age) %>%
+curves_by_round <- peak_with_round %>%
+  group_by(pos_bucket, round_label, years_exp) %>%
   summarise(avg_pct_peak = mean(pct_of_peak, na.rm = TRUE), n = n(), .groups = "drop") %>%
   filter(n >= 5)
 
-peak_ages_round <- age_curves_by_round %>%
-  group_by(pos_group, round_label) %>%
+peaks_by_round <- curves_by_round %>%
+  group_by(pos_bucket, round_label) %>%
   slice_max(avg_pct_peak, n = 1)
 
-round_pos_colors <- c("RB" = "#377EB8", "WR" = "#E67E22", "QB" = "#c62828",
-                       "OT" = "#66BB6A", "EDGE" = "#9C27B0")
+round_bucket_colors <- c("QB" = "#c62828", "RB" = "#377EB8",
+                          "Premium" = "#4CAF50", "Non-Premium" = "#9E9E9E")
 
-ggplot(age_curves_by_round, aes(x = age, y = avg_pct_peak, color = pos_group)) +
-  geom_line(linewidth = 1.2) +
-  geom_point(data = peak_ages_round, size = 3) +
-  facet_wrap(~round_label, ncol = 2) +
-  scale_color_manual(values = round_pos_colors, name = "Position") +
+# Round 1 — large hero chart
+r1_data <- curves_by_round %>% filter(round_label == "Round 1")
+r1_peaks <- peaks_by_round %>% filter(round_label == "Round 1")
+
+p_r1 <- ggplot(r1_data, aes(x = years_exp, y = avg_pct_peak, color = pos_bucket)) +
+  geom_line(linewidth = 1.8) +
+  geom_point(data = r1_peaks, size = 5) +
+  scale_color_manual(values = round_bucket_colors, name = "") +
   scale_y_continuous(labels = scales::percent, limits = c(0.4, 1.0)) +
-  scale_x_continuous(breaks = seq(22, 33, 2)) +
+  scale_x_continuous(breaks = 1:12) +
   labs(
-    title = "Age Curves by Draft Round: Round 1 RBs Decline Fastest",
-    subtitle = "Playing time relative to peak | Premium positions only | Min 5 players per age-round cell",
-    x = "Age", y = "% of Peak Playing Time"
+    title = "Round 1 Picks: RBs Peak Early, Decline Fast",
+    subtitle = "Playing time relative to peak | First-round picks only",
+    x = NULL, y = "% of Peak Playing Time"
   ) +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = "top",
-        strip.text = element_text(face = "bold", size = 12))
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top", legend.text = element_text(size = 11))
+
+# Rounds 2-3 and 4-7 — smaller panels below
+later_data <- curves_by_round %>% filter(round_label != "Round 1")
+later_peaks <- peaks_by_round %>% filter(round_label != "Round 1")
+
+p_later <- ggplot(later_data, aes(x = years_exp, y = avg_pct_peak, color = pos_bucket)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(data = later_peaks, size = 3) +
+  facet_wrap(~round_label, ncol = 3) +
+  scale_color_manual(values = round_bucket_colors, name = "") +
+  scale_y_continuous(labels = scales::percent, limits = c(0.4, 1.0)) +
+  scale_x_continuous(breaks = seq(1, 12, 2)) +
+  labs(x = "Years of Experience", y = "% of Peak Playing Time") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold", size = 11))
+
+gridExtra::grid.arrange(p_r1, p_later, nrow = 2, heights = c(2, 1))
 ```
 
 ```{r rb-age-narrative, results='asis'}
 fair_value_pick <- if(!is.na(upside_fair_value)) upside_fair_value else 32
 
-rb_peak <- peak_ages %>% filter(pos_group == "RB") %>% pull(age)
-wr_peak <- peak_ages %>% filter(pos_group == "WR") %>% pull(age)
-qb_peak <- peak_ages %>% filter(pos_group == "QB") %>% pull(age)
+rb_peak_yr <- peak_yrs %>% filter(pos_bucket == "RB") %>% pull(years_exp)
+qb_peak_yr <- peak_yrs %>% filter(pos_bucket == "QB") %>% pull(years_exp)
+prem_peak_yr <- peak_yrs %>% filter(pos_bucket == "Premium (EDGE/OT/WR)") %>% pull(years_exp)
 
 cat(paste0(
-  "RBs peak at **", rb_peak, "** and fall off a cliff. ",
-  "QBs and WRs sustain their playing time deep into their late 20s and early 30s. ",
+  "RBs peak in **year ", rb_peak_yr, "** and fall off a cliff. ",
+  "QBs and premium positions sustain their playing time well past year ", prem_peak_yr, ". ",
   "This creates a draft timing problem: teams picking in the top 10 are usually rebuilding. ",
-  "Draft an RB at 22 when your team isn't competitive, and by the time you're contending, ",
+  "Draft an RB when your team isn't competitive, and by the time you're contending, ",
   "you've burned the best years. Teams picking later — **pick ", fair_value_pick,
   " and beyond** — are closer to contention. They can put Love's peak years to use immediately. ",
   "That's not just a surplus argument. It's a roster construction argument."
