@@ -1316,12 +1316,13 @@ fa_costs <- df %>%
   summarise(fa_cost = mean(fa_median_apy_cap_pct, na.rm = TRUE), .groups = "drop") %>%
   deframe()
 
-# Known: Rookie APY by pick (CBA-driven, averaged 2018+)
-rookie_apy <- df %>%
+# Known: Rookie APY by pick (CBA-driven, smoothed with log fit to remove jumps)
+rookie_apy_raw <- df %>%
   filter(season >= 2018, pick <= 32) %>%
   group_by(pick) %>%
-  summarise(apy = mean(rookie_apy_cap_pct), .groups = "drop") %>%
-  deframe()
+  summarise(apy = mean(rookie_apy_cap_pct), .groups = "drop")
+rookie_apy_fit <- lm(apy ~ log(pick), data = rookie_apy_raw)
+rookie_apy <- setNames(predict(rookie_apy_fit, data.frame(pick = 1:32)), as.character(1:32))
 
 # Quantile regression models at 10th, 50th, 90th percentiles
 taus <- c(0.1, 0.5, 0.9)
