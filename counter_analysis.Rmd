@@ -24,6 +24,7 @@ library(gt)
 library(nflplotR)
 library(nflreadr)
 library(ggrepel)
+library(gridExtra)
 
 pos_colors <- c(
   "QB" = "#E41A1C", "RB" = "#377EB8", "WR" = "#4DAF4A", "TE" = "#984EA3",
@@ -33,6 +34,9 @@ pos_colors <- c(
 
 tier_order <- c("Top 10", "Late 1st", "Round 2", "Round 3", "Rounds 4-7")
 key_positions <- c("QB", "RB", "WR", "TE", "OT", "IOL", "EDGE", "DL", "LB", "CB", "S")
+
+# 2026 NFL salary cap for converting player_return (cap %) to dollars
+salary_cap <- 275  # $275M
 ```
 
 ```{r load-data}
@@ -54,9 +58,22 @@ team_efficiency <- read_csv("output/v2/team_efficiency_adjusted.csv", show_col_t
 r1_picks <- read_csv("output/v2/r1_picks_need_adjusted.csv", show_col_types = FALSE)
 market_efficiency <- read_csv("output/v2/market_efficiency.csv", show_col_types = FALSE)
 ngs_prospects <- read_csv("output/v2/ngs_prospects_2025.csv", show_col_types = FALSE) %>%
-  # NGS lists all defensive backs as "DB" → mapped to CB. Fix known safeties.
   mutate(pos_group = case_when(
+    # NGS lists all defensive backs as "DB" → mapped to CB. Fix known safeties.
     player %in% c("Caleb Downs", "Dillon Thieneman", "Nick Emmanwori", "Malaki Starks") ~ "S",
+    # NGS lumps all DL together. Reclassify EDGE rushers (DEs) vs interior DL (DTs).
+    player %in% c("Rueben Bain Jr.", "Akheem Mesidor", "Keldric Faulk",
+                   "Dani Dennis-Sutton", "Zion Young", "Aidan Hubbard",
+                   "LT Overton", "R Mason Thomas", "Zane Durant",
+                   "Tyreak Sapp", "Caleb Banks") ~ "EDGE",
+    pos_group == "DL" ~ "DL",
+    # T.J. Parker is listed as LB but projects as EDGE
+    player == "T.J. Parker" ~ "EDGE",
+    # NGS lumps all OL together. Reclassify tackles vs interior (G/C).
+    player %in% c("Spencer Fano", "Blake Miller", "Caleb Lomu",
+                   "Emmanuel Pregnon", "Monroe Freeling", "Kadyn Proctor",
+                   "Chase Bisontis", "Aamil Wagner", "Austin Barber") ~ "OT",
+    pos_group == "IOL" ~ "IOL",
     TRUE ~ pos_group
   ))
 ngs_historical <- read_csv("output/v2/ngs_historical_matched.csv", show_col_types = FALSE)
@@ -1277,6 +1294,39 @@ av_lm_r2 <- summary(av_lm)$r.squared
 
 # Add predictions to test data for examples
 test_data$pred_av <- lm_test_pred
+
+# Surplus value models — separate for QB, premium (EDGE/OT/WR), and non-premium
+# Each group has fundamentally different surplus mechanics
+pr_train <- train_data %>% filter(!is.na(player_return))
+pr_test <- test_data %>% filter(!is.na(player_return))
+
+pr_lm_qb <- lm(player_return ~ cmbn_score + log(pick),
+                data = pr_train %>% filter(pos_group == "QB"))
+pr_lm_prem <- lm(player_return ~ cmbn_score + log(pick) + pos_group,
+                  data = pr_train %>% filter(pos_group %in% c("EDGE", "OT", "WR")))
+pr_lm_nonprem <- lm(player_return ~ cmbn_score + log(pick) + pos_group,
+                     data = pr_train %>% filter(!pos_group %in% c("QB", "EDGE", "OT", "WR")))
+
+# Helper: pick the right model based on position
+predict_pr <- function(newdata) {
+  preds <- numeric(nrow(newdata))
+  is_qb <- newdata$pos_group == "QB"
+  is_prem <- newdata$pos_group %in% c("EDGE", "OT", "WR")
+  if(any(is_qb)) preds[is_qb] <- predict(pr_lm_qb, newdata = newdata[is_qb, ])
+  if(any(is_prem)) preds[is_prem] <- predict(pr_lm_prem, newdata = newdata[is_prem, ])
+  if(any(!is_qb & !is_prem)) preds[!is_qb & !is_prem] <- predict(pr_lm_nonprem, newdata = newdata[!is_qb & !is_prem, ])
+  preds
+}
+
+# Model fit stats
+pr_qb_r2 <- summary(pr_lm_qb)$r.squared
+pr_prem_r2 <- summary(pr_lm_prem)$r.squared
+pr_nonprem_r2 <- summary(pr_lm_nonprem)$r.squared
+
+# Test performance (out-of-time: 2020-2022)
+pr_test_pred <- predict_pr(pr_test)
+pr_test_r2 <- 1 - sum((pr_test$player_return - pr_test_pred)^2) /
+  sum((pr_test$player_return - mean(pr_train$player_return))^2)
 ```
 
 ```{r career-av-coefficients, results='asis'}
@@ -1499,7 +1549,7 @@ cat(paste0(
 
 ### The Negative-Sharpe Picks: What Teams Left on the Table
 
-The Sharpe ratio flags specific position-tier combinations as negative — plays the model says teams shouldn't make. Since 2010, **135 first-round picks** went to non-premium positions at tiers where the Sharpe ratio was negative. What if those teams had taken a positive-Sharpe position instead? The "What If" column shows the average career AV, hit rate, and elite rate across all positive-Sharpe positions at the same tier — the pool of alternatives the model says they should have picked from.
+The Sharpe ratio flags specific position-tier combinations as negative — plays the model says teams shouldn't make. Since 2010, **135 first-round picks** went to non-premium positions at tiers where the Sharpe ratio was negative. But what actually happened to the next premium player taken? Instead of a theoretical counterfactual, we tracked the real one: for each negative-Sharpe pick, we found the actual next QB, EDGE, OT, or WR drafted in the same year and compared outcomes.
 
 ```{r non-premium-picks}
 premium_pos <- c("QB", "EDGE", "OT", "WR")
@@ -1514,93 +1564,105 @@ neg_combos <- sharpe %>%
          !pos_group %in% premium_pos) %>%
   select(pos_group, tier)
 
-# Identify positive-Sharpe combos (the alternatives)
-pos_combos <- sharpe %>%
-  filter(tier %in% c("Top 10", "Late 1st"), sharpe_elite >= 0) %>%
-  select(pos_group, tier)
-
-# Players in each group
+# Players at negative-Sharpe combos
 neg_players <- all_r1 %>% semi_join(neg_combos, by = c("pos_group", "tier"))
-pos_players <- all_r1 %>% semi_join(pos_combos, by = c("pos_group", "tier"))
-
 n_neg <- nrow(neg_players)
-n_total <- nrow(all_r1 %>% filter(tier %in% c("Top 10", "Late 1st")))
 
-# Counterfactual: avg outcomes of positive-Sharpe positions by tier
-cf_by_tier <- pos_players %>%
-  group_by(tier) %>%
-  summarise(
-    cf_avg_av = mean(car_av, na.rm = TRUE),
-    cf_hit_rate = mean(is_hit, na.rm = TRUE) * 100,
-    cf_elite_rate = mean(is_blue_chip, na.rm = TRUE) * 100,
-    .groups = "drop"
-  )
+# For each negative-Sharpe pick, find the ACTUAL next premium-position player taken
+neg_with_next <- map_dfr(1:nrow(neg_players), function(i) {
+  row <- neg_players[i, ]
+  candidate <- all_r1 %>%
+    filter(season == row$season, pick > row$pick,
+           pos_group %in% premium_pos) %>%
+    arrange(pick) %>%
+    slice_head(n = 1)
+  if (nrow(candidate) > 0) {
+    row %>% mutate(
+      next_prem_name = candidate$pfr_player_name,
+      next_prem_pos = candidate$pos_group,
+      next_prem_pick = candidate$pick,
+      next_prem_av = candidate$car_av,
+      next_prem_hit = candidate$is_hit,
+      next_prem_elite = candidate$is_blue_chip,
+      next_prem_pr = candidate$player_return
+    )
+  } else {
+    row %>% mutate(
+      next_prem_name = NA_character_, next_prem_pos = NA_character_,
+      next_prem_pick = NA_real_, next_prem_av = NA_real_,
+      next_prem_hit = NA_real_, next_prem_elite = NA_real_,
+      next_prem_pr = NA_real_
+    )
+  }
+})
 
-# Actual outcomes + tier-weighted counterfactual per position
-neg_by_pos_tier <- neg_players %>%
-  group_by(pos_group, tier) %>%
-  summarise(n_tier = n(), .groups = "drop")
+neg_with_next <- neg_with_next %>% filter(!is.na(next_prem_av))
+n_matched <- nrow(neg_with_next)
 
-neg_cf <- neg_by_pos_tier %>%
-  left_join(cf_by_tier, by = "tier") %>%
-  group_by(pos_group) %>%
-  summarise(
-    cf_avg_av = round(weighted.mean(cf_avg_av, n_tier), 1),
-    cf_hit_rate = round(weighted.mean(cf_hit_rate, n_tier), 1),
-    cf_elite_rate = round(weighted.mean(cf_elite_rate, n_tier), 1),
-    .groups = "drop"
-  )
-
-non_prem_summary <- neg_players %>%
+# Summary by position: actual outcomes vs actual next premium player taken
+non_prem_summary <- neg_with_next %>%
   group_by(pos_group) %>%
   summarise(
     n = n(),
     avg_pick = round(mean(pick), 1),
     avg_car_av = round(mean(car_av, na.rm = TRUE), 1),
+    avg_pr = round(mean(player_return, na.rm = TRUE) * salary_cap, 1),
     hit_rate = round(mean(is_hit, na.rm = TRUE) * 100, 1),
     elite_rate = round(mean(is_blue_chip, na.rm = TRUE) * 100, 1),
+    cf_avg_av = round(mean(next_prem_av, na.rm = TRUE), 1),
+    cf_avg_pr = round(mean(next_prem_pr, na.rm = TRUE) * salary_cap, 1),
+    cf_hit_rate = round(mean(next_prem_hit, na.rm = TRUE) * 100, 1),
+    cf_elite_rate = round(mean(next_prem_elite, na.rm = TRUE) * 100, 1),
     .groups = "drop"
   ) %>%
-  left_join(neg_cf, by = "pos_group") %>%
+  mutate(pr_diff = round(avg_pr - cf_avg_pr, 1)) %>%
   arrange(desc(n))
 
 # Overall averages
-overall_actual_av <- round(mean(neg_players$car_av, na.rm = TRUE), 0)
-overall_tier_dist <- neg_players %>% count(tier)
-overall_cf <- overall_tier_dist %>%
-  left_join(cf_by_tier, by = "tier") %>%
-  summarise(
-    cf_av = round(weighted.mean(cf_avg_av, n), 0),
-    cf_hit = round(weighted.mean(cf_hit_rate, n), 1),
-    cf_elite = round(weighted.mean(cf_elite_rate, n), 1)
-  )
+overall_actual_av <- round(mean(neg_with_next$car_av, na.rm = TRUE), 0)
+overall_actual_pr <- round(mean(neg_with_next$player_return, na.rm = TRUE) * salary_cap, 1)
+overall_cf_av <- round(mean(neg_with_next$next_prem_av, na.rm = TRUE), 0)
+overall_cf_pr <- round(mean(neg_with_next$next_prem_pr, na.rm = TRUE) * salary_cap, 1)
+overall_cf_hit <- round(mean(neg_with_next$next_prem_hit, na.rm = TRUE) * 100, 1)
+overall_cf_elite <- round(mean(neg_with_next$next_prem_elite, na.rm = TRUE) * 100, 1)
+overall_pr_diff <- round(overall_actual_pr - overall_cf_pr, 1)
 ```
 
 ```{r non-premium-table}
 non_prem_summary %>%
+  filter(pos_group != "DL") %>%
   gt() %>%
   cols_label(
     pos_group = "Position", n = "Picks", avg_pick = "Avg Pick",
-    avg_car_av = "Career AV", hit_rate = "Hit %",
-    elite_rate = "Elite %",
-    cf_avg_av = "Career AV", cf_hit_rate = "Hit %",
-    cf_elite_rate = "Elite %"
+    avg_car_av = "Career AV", avg_pr = "Surplus ($M)",
+    hit_rate = "Hit %", elite_rate = "Elite %",
+    cf_avg_av = "Career AV", cf_avg_pr = "Surplus ($M)",
+    cf_hit_rate = "Hit %", cf_elite_rate = "Elite %",
+    pr_diff = "Surplus Δ ($M)"
   ) %>%
-  tab_spanner(label = "What They Got", columns = c(avg_car_av, hit_rate, elite_rate)) %>%
-  tab_spanner(label = "What If: Positive-Sharpe Position (Tier Avg)",
-              columns = c(cf_avg_av, cf_hit_rate, cf_elite_rate)) %>%
+  tab_spanner(label = "What They Got", columns = c(avg_car_av, avg_pr, hit_rate, elite_rate)) %>%
+  tab_spanner(label = "Next Premium Player Taken",
+              columns = c(cf_avg_av, cf_avg_pr, cf_hit_rate, cf_elite_rate)) %>%
   tab_header(
     title = md("**Negative-Sharpe First-Round Picks (2010-2022)**"),
-    subtitle = md("135 picks at negative-Sharpe combos vs avg outcome of positive-Sharpe positions at the same tier")
+    subtitle = md(paste0(n_matched, " picks at negative-Sharpe combos vs the actual next QB/EDGE/OT/WR drafted"))
   ) %>%
   tab_style(
     style = cell_fill(color = "#e3f2fd"),
     locations = cells_body(rows = pos_group == "RB")
   ) %>%
   tab_style(
+    style = cell_text(color = "#c62828", weight = "bold"),
+    locations = cells_body(columns = pr_diff, rows = pr_diff < 0)
+  ) %>%
+  tab_style(
+    style = cell_text(color = "#2e7d32", weight = "bold"),
+    locations = cells_body(columns = pr_diff, rows = pr_diff > 0)
+  ) %>%
+  tab_style(
     style = cell_text(weight = "bold"),
     locations = cells_body(
-      columns = c(cf_avg_av, cf_hit_rate, cf_elite_rate),
+      columns = c(cf_avg_av, cf_avg_pr),
       rows = cf_avg_av > avg_car_av
     )
   ) %>%
@@ -1612,58 +1674,43 @@ rb_row <- non_prem_summary %>% filter(pos_group == "RB")
 cat(paste0(
   "Since 2010, **", n_neg, " first-round picks** went to position-tier combos where the ",
   "Sharpe ratio was negative — plays Article 1's model explicitly flags as bad bets. ",
-  "Those picks averaged **", overall_actual_av, "** career AV. If those teams had instead ",
-  "taken the next positive-Sharpe position available, the historical average was **",
-  overall_cf$cf_av, "** career AV, a **", overall_cf$cf_hit, "%** hit rate, and a **",
-  overall_cf$cf_elite, "%** elite rate.\n\n",
+  "For **", n_matched, "** of those, we found the actual next premium-position player (QB, EDGE, OT, or WR) ",
+  "taken in the same draft. Those negative-Sharpe picks averaged **", overall_actual_av, "** career AV ",
+  "and **$", overall_actual_pr, "M** in surplus value. ",
+  "The next premium player taken averaged **", overall_cf_av, "** career AV and **$",
+  overall_cf_pr, "M** in surplus — a gap of **",
+  if(overall_pr_diff < 0) "-$" else "+$", abs(overall_pr_diff), "M**.\n\n",
   "RB specifically: **", rb_row$n, " first-round RBs** at negative-Sharpe tiers, ",
-  "averaging **", rb_row$avg_car_av, "** career AV vs **", rb_row$cf_avg_av,
-  "** for the positive-Sharpe alternative. Their hit rate (",
-  rb_row$hit_rate, "%) trails the alternative (", rb_row$cf_hit_rate,
-  "%), but their elite rate (", rb_row$elite_rate,
-  "%) exceeds it (", rb_row$cf_elite_rate,
-  "%) — when first-round RBs hit, they hit big.\n\n",
-  "The model says these were all bad picks. The counterfactual says the gap is smaller than you'd think — ",
-  "and for some positions, the 'wrong' pick actually outperformed."
+  "averaging **$", rb_row$avg_pr, "M** in surplus vs **$", rb_row$cf_avg_pr,
+  "M** for the next premium player actually drafted (Δ = ",
+  if(rb_row$pr_diff < 0) "-$" else "+$", abs(rb_row$pr_diff),
+  "M). The surplus gap is the dagger: it's the value teams left on the table ",
+  "by taking the 'wrong' position. For RBs, ",
+  if(rb_row$pr_diff < 0) {
+    "the next premium player generated more surplus — confirming the Sharpe ratio's warning."
+  } else {
+    "the RBs actually generated *more* surplus — challenging the Sharpe ratio's blanket advice."
+  },
+  "\n\n",
+  "Why are these numbers so large? Surplus value is driven by the gap between a rookie contract and ",
+  "free-agent replacement cost, compounded over four years. Consider the 2018 draft: Saquon Barkley ",
+  "(pick 2) earned ~4.4% of the cap on his rookie deal, while a replacement RB costs ~6% — ",
+  "a savings of just ~$4M/yr. Sam Darnold (pick 3) earned ~4.3%, but a replacement QB costs ~14.6% — ",
+  "a savings of ~$26M/yr. Over four years, Darnold's rookie surplus alone (~$120M in today's cap terms) ",
+  "dwarfs Barkley's (~$19M), even though Darnold is widely considered a bust. ",
+  "The cost-controlled advantage at positions with expensive free-agent markets is so massive that ",
+  "even a mediocre QB outcome beats a great RB outcome in surplus terms.\n\n",
+  "This isn't a theoretical 'what if' — these are the actual outcomes of the next QB, EDGE, OT, or WR ",
+  "taken in the same draft. The real counterfactual shows how much value the Sharpe ratio's advice ",
+  "would have captured — or missed."
 ))
 ```
 
-### Love vs the 2026 Class: Who's the Better Pick?
+### Love's Fair Value: Where the Gamble Makes Sense
 
-The model lets us do something the raw averages can't: predict career value for *specific* prospects in *this* draft class. Instead of comparing Love to a historical average, we can plug in the actual top prospect at every position and ask: who does the model project highest at each pick?
+The model lets us do something the raw averages can't: predict career value for *specific* prospects in *this* draft class. Instead of comparing Love to a historical median, we plug in the actual top prospect at every position, predict their career AV, and ask: at what pick does Love become the better bet?
 
-```{r love-vs-class, fig.height=7, fig.width=8}
-# Dead zone calculation (used in verdict section)
-bc_rb_av <- blue_chip %>%
-  filter(pos_group == "RB", is_ngs_blue_chip == TRUE, !is.na(car_av))
-bc_median <- median(bc_rb_av$car_av)
-all_r1_av_fv <- blue_chip %>%
-  filter(pick <= 32, pos_group %in% key_positions, !is.na(car_av), season >= 2010)
-non_rb_line <- all_r1_av_fv %>%
-  filter(pos_group != "RB") %>%
-  group_by(pick) %>%
-  summarise(avg_av = mean(car_av, na.rm = TRUE), .groups = "drop") %>%
-  arrange(pick)
-smooth_line <- function(df, col = "avg_av") {
-  df <- df %>% arrange(pick) %>% filter(pick <= 32)
-  vals <- numeric(nrow(df))
-  for(i in seq_along(df$pick)) {
-    p <- df$pick[i]
-    window_data <- df %>% filter(pick >= p - 2, pick <= p + 2)
-    vals[i] <- mean(window_data[[col]], na.rm = TRUE)
-  }
-  df$smooth_av <- vals
-  df
-}
-non_rb_smooth <- smooth_line(non_rb_line)
-above <- non_rb_smooth$smooth_av > bc_median
-if(any(above)) {
-  dead_zone_start <- non_rb_smooth$pick[which(above)[1]]
-  first_false <- which(!above & non_rb_smooth$pick > dead_zone_start)
-  dead_zone_end <- if(length(first_false) > 0) non_rb_smooth$pick[first_false[1] - 1] else non_rb_smooth$pick[max(which(above))]
-} else { dead_zone_start <- 0; dead_zone_end <- 0 }
-fair_value_start <- dead_zone_end + 1
-
+```{r love-fair-value, fig.height=6, fig.width=8}
 # Top prospect at each position in the 2026 class
 # Note: NGS doesn't separately score EDGE or OT (mapped to DL and IOL)
 top_2026 <- ngs_prospects %>%
@@ -1673,7 +1720,7 @@ top_2026 <- ngs_prospects %>%
   ungroup() %>%
   select(player, pos_group, cmbn_score)
 
-# Predict career AV for each top prospect at each pick
+# For each pick, predict career AV and player return for each top prospect
 prospect_curves <- map_dfr(1:32, function(p) {
   map_dfr(1:nrow(top_2026), function(i) {
     row <- data.frame(
@@ -1682,80 +1729,161 @@ prospect_curves <- map_dfr(1:32, function(p) {
       pos_group = factor(top_2026$pos_group[i], levels = levels(model_data$pos_group))
     )
     tibble(
-      pick = p,
-      player = top_2026$player[i],
+      pick = p, player = top_2026$player[i],
       pos_group = top_2026$pos_group[i],
       cmbn_score = top_2026$cmbn_score[i],
-      pred_av = predict(av_lm, newdata = row)
+      pred_av = predict(av_lm, newdata = row),
+      pred_pr = predict_pr(row)
     )
   })
 })
 
-# Add Love separately (already in the data as RB, but we'll highlight him)
+# Love's curve
 love_curve <- prospect_curves %>% filter(player == "Jeremiyah Love")
-other_curves <- prospect_curves %>% filter(player != "Jeremiyah Love")
 
-# Create labels for the legend
-prospect_labels <- top_2026 %>%
-  mutate(label = paste0(player, " (", pos_group, ", ", round(cmbn_score, 1), ")")) %>%
-  arrange(desc(cmbn_score))
+# Premium positions (positive Sharpe) vs non-premium (excluding RB)
+premium_pos <- c("QB", "EDGE", "OT", "WR")
 
-# Use position colors, but make Love's line stand out
-other_curves <- other_curves %>%
-  mutate(label = paste0(player, " (", pos_group, ", ", round(cmbn_score, 1), ")"))
-love_curve <- love_curve %>%
-  mutate(label = paste0(player, " (", pos_group, ", ", round(cmbn_score, 1), ")"))
+premium_avg <- prospect_curves %>%
+  filter(pos_group %in% premium_pos) %>%
+  group_by(pick) %>%
+  summarise(avg_av = mean(pred_av), avg_pr = mean(pred_pr), .groups = "drop")
 
-# Plot all curves
+non_premium_avg <- prospect_curves %>%
+  filter(!pos_group %in% c(premium_pos, "RB")) %>%
+  group_by(pick) %>%
+  summarise(avg_av = mean(pred_av), avg_pr = mean(pred_pr), .groups = "drop")
+
+# Keep combined non-RB avg for backward compatibility
+non_rb_avg <- prospect_curves %>%
+  filter(pos_group != "RB") %>%
+  group_by(pick) %>%
+  summarise(avg_av = mean(pred_av), avg_pr = mean(pred_pr), .groups = "drop")
+
+# Find crossover: where Love's predicted AV drops below non-RB avg
+above <- non_rb_avg$avg_av > love_curve$pred_av
+if(any(above)) {
+  dead_zone_start <- non_rb_avg$pick[which(above)[1]]
+  first_false <- which(!above & non_rb_avg$pick > dead_zone_start)
+  dead_zone_end <- if(length(first_false) > 0) non_rb_avg$pick[first_false[1] - 1] else non_rb_avg$pick[max(which(above))]
+} else {
+  dead_zone_start <- 0; dead_zone_end <- 0
+}
+fair_value_start <- dead_zone_end + 1
+
+# Historical non-RB top prospects (2018-2022): predict their career AV at each pick
+hist_top_av <- ngs_historical %>%
+  filter(season >= 2018, season <= 2022, !is.na(cmbn_score),
+         pos_group %in% key_positions, pos_group != "RB") %>%
+  group_by(season, pos_group) %>%
+  slice_max(cmbn_score, n = 1) %>%
+  ungroup()
+
+hist_av_curves <- map_dfr(1:32, function(p) {
+  map_dfr(1:nrow(hist_top_av), function(i) {
+    row <- data.frame(
+      cmbn_score = hist_top_av$cmbn_score[i],
+      pick = p,
+      pos_group = factor(hist_top_av$pos_group[i], levels = levels(model_data$pos_group))
+    )
+    tibble(pick = p, pos_group = hist_top_av$pos_group[i],
+           pred_av = predict(av_lm, newdata = row))
+  })
+})
+
+hist_non_rb <- hist_av_curves %>%
+  group_by(pick) %>%
+  summarise(hist_av = mean(pred_av), .groups = "drop")
+
+# Plot: Image 13 style
+no_dead_zone <- dead_zone_end == 0
+has_dead_zone <- dead_zone_end > 0 && dead_zone_end < 32
+
 ggplot() +
-  # Other prospect lines (thinner, by position color)
-  geom_line(data = other_curves,
-            aes(x = pick, y = pred_av, color = pos_group, group = player),
-            linewidth = 0.8, alpha = 0.6) +
-  # Love's line (thick, highlighted)
-  geom_line(data = love_curve,
-            aes(x = pick, y = pred_av), color = "#377EB8", linewidth = 1.5) +
-  # Label each line at pick 32
-  geom_text_repel(data = other_curves %>% filter(pick == 32),
-                  aes(x = pick, y = pred_av, label = paste0(player, "\n(", pos_group, ")"),
-                      color = pos_group),
-                  size = 2.5, hjust = 0, nudge_x = 0.5, direction = "y",
-                  segment.size = 0.3, show.legend = FALSE, fontface = "bold") +
-  geom_text_repel(data = love_curve %>% filter(pick == 32),
-                  aes(x = pick, y = pred_av),
-                  label = "Love\n(RB)", color = "#377EB8",
-                  size = 3, hjust = 0, nudge_x = 0.5, fontface = "bold",
-                  segment.size = 0.3) +
-  # Mark pick 10
-  geom_point(data = love_curve %>% filter(pick == 10),
-             aes(x = pick, y = pred_av), color = "#377EB8", size = 3) +
-  scale_color_manual(values = pos_colors, guide = "none") +
-  scale_x_continuous(breaks = seq(1, 32, 2), expand = expansion(mult = c(0.02, 0.12))) +
+  # Shading
+  { if(has_dead_zone)
+    annotate("rect", xmin = 0.5, xmax = dead_zone_end + 0.5,
+             ymin = -Inf, ymax = Inf, fill = "#ffcdd2", alpha = 0.3) } +
+  { if(has_dead_zone)
+    annotate("rect", xmin = dead_zone_end + 0.5, xmax = 32.5,
+             ymin = -Inf, ymax = Inf, fill = "#c8e6c9", alpha = 0.15) } +
+  { if(no_dead_zone)
+    annotate("rect", xmin = 0.5, xmax = 32.5,
+             ymin = -Inf, ymax = Inf, fill = "#c8e6c9", alpha = 0.15) } +
+  # Historical non-RB avg (gray dashed line)
+  geom_line(data = hist_non_rb, aes(x = pick, y = hist_av),
+            color = "gray50", linewidth = 1, linetype = "dashed") +
+  # 2026 non-premium avg (orange line)
+  geom_line(data = non_premium_avg, aes(x = pick, y = avg_av),
+            color = "#E67E22", linewidth = 1.2) +
+  # 2026 premium avg (red line)
+  geom_line(data = premium_avg, aes(x = pick, y = avg_av),
+            color = "#c62828", linewidth = 1.5) +
+  # Love's predicted AV (blue line)
+  geom_line(data = love_curve, aes(x = pick, y = pred_av),
+            color = "#377EB8", linewidth = 1.5) +
+  # Labels at right edge
+  annotate("text", x = 32.5, y = love_curve$pred_av[32],
+           label = "Love (predicted)", color = "#377EB8",
+           fontface = "bold", size = 3.2, hjust = 0) +
+  annotate("text", x = 32.5, y = premium_avg$avg_av[32],
+           label = "2026 premium avg", color = "#c62828",
+           fontface = "bold", size = 3.2, hjust = 0) +
+  annotate("text", x = 32.5, y = non_premium_avg$avg_av[32],
+           label = "2026 non-premium avg", color = "#E67E22",
+           fontface = "bold", size = 3.2, hjust = 0) +
+  annotate("text", x = 32.5, y = hist_non_rb$hist_av[nrow(hist_non_rb)],
+           label = "Historical avg", color = "gray50",
+           fontface = "bold", size = 3.2, hjust = 0) +
+  # Zone labels
+  { if(has_dead_zone)
+    annotate("text", x = (dead_zone_start + dead_zone_end) / 2,
+             y = max(premium_avg$avg_av, love_curve$pred_av) * 0.95,
+             label = paste0("Dead zone (", dead_zone_start, "-", dead_zone_end, ")"),
+             color = "#c62828", fontface = "bold", size = 4) } +
+  { if(has_dead_zone)
+    annotate("text", x = (fair_value_start + 32) / 2,
+             y = max(premium_avg$avg_av, love_curve$pred_av) * 0.95,
+             label = paste0("Fair value (", fair_value_start, "+)"),
+             color = "#2e7d32", fontface = "bold", size = 4) } +
+  { if(no_dead_zone)
+    annotate("text", x = 16, y = max(love_curve$pred_av) * 0.95,
+             label = "Love projects higher at every pick",
+             color = "#2e7d32", fontface = "bold", size = 4) } +
+  scale_x_continuous(breaks = seq(1, 32, 2),
+                     expand = expansion(mult = c(0.02, 0.25))) +
   labs(
-    title = "2026 Draft: Predicted Career AV by Prospect and Pick",
-    subtitle = "Each line = top prospect at that position | Love highlighted in blue",
-    x = "Draft Pick", y = "Predicted Weighted Career AV"
+    title = "Love's Fair Value: Where the Gamble Makes Sense",
+    subtitle = "Premium = QB/EDGE/OT/WR | Non-premium = TE/IOL/DL/LB/CB/S",
+    x = "Pick Number", y = "Predicted Career AV"
   ) +
   theme_minimal(base_size = 13)
 ```
 
 ```{r love-vs-class-table, results='asis'}
-# Table: predicted AV at picks 5, 10, 15, 20 for each prospect
+# Table: predicted AV and player return at key picks for each prospect
 pick_slices <- c(5, 10, 15, 20)
 prospect_table <- prospect_curves %>%
   filter(pick %in% pick_slices) %>%
-  mutate(pred_av = round(pred_av, 0)) %>%
-  select(player, pos_group, cmbn_score, pick, pred_av) %>%
-  pivot_wider(names_from = pick, values_from = pred_av, names_prefix = "pick_") %>%
+  mutate(pred_av = round(pred_av, 0),
+         pred_pr = round(pred_pr * salary_cap, 1)) %>%
+  select(player, pos_group, cmbn_score, pick, pred_av, pred_pr) %>%
+  pivot_wider(names_from = pick,
+              values_from = c(pred_av, pred_pr),
+              names_sep = "_") %>%
   arrange(desc(cmbn_score))
 
 prospect_table %>%
   gt() %>%
   cols_label(
     player = "Prospect", pos_group = "Pos", cmbn_score = "Score",
-    pick_5 = "Pick 5", pick_10 = "Pick 10", pick_15 = "Pick 15", pick_20 = "Pick 20"
+    pred_av_5 = "Pick 5", pred_av_10 = "Pick 10",
+    pred_av_15 = "Pick 15", pred_av_20 = "Pick 20",
+    pred_pr_5 = "Pick 5", pred_pr_10 = "Pick 10",
+    pred_pr_15 = "Pick 15", pred_pr_20 = "Pick 20"
   ) %>%
-  tab_spanner(label = "Predicted Career AV at Pick", columns = starts_with("pick_")) %>%
+  tab_spanner(label = "Predicted Career AV", columns = starts_with("pred_av_")) %>%
+  tab_spanner(label = "Predicted Surplus Value ($M)", columns = starts_with("pred_pr_")) %>%
   tab_style(
     style = cell_fill(color = "#e3f2fd"),
     locations = cells_body(rows = player == "Jeremiyah Love")
@@ -1765,45 +1893,130 @@ prospect_table %>%
     locations = cells_body(rows = player == "Jeremiyah Love")
   ) %>%
   tab_header(
-    title = md("**2026 Draft Class: Predicted Career AV by Pick**"),
+    title = md("**2026 Draft Class: Predicted Career AV & Surplus Value by Pick**"),
     subtitle = "Top prospect at each position | Prospect Score drives the prediction"
   ) %>%
   tab_options(table.font.size = px(12))
 ```
 
-```{r love-vs-class-narrative, results='asis'}
-love_at_10 <- prospect_curves %>% filter(player == "Jeremiyah Love", pick == 10) %>% pull(pred_av)
+### The Surplus Value View
 
-# Who beats Love at pick 10?
-beats_love_10 <- prospect_curves %>%
-  filter(pick == 10, pred_av > love_at_10, player != "Jeremiyah Love") %>%
-  arrange(desc(pred_av))
+Career AV tells us how good a player becomes. But Article 1's Sharpe ratio doesn't use career AV — it uses **surplus value** (player return), the total value a draft pick generates beyond replacement. The formula:
 
-# Who does Love beat at pick 10?
-love_beats_10 <- prospect_curves %>%
-  filter(pick == 10, pred_av <= love_at_10, player != "Jeremiyah Love") %>%
-  arrange(desc(pred_av))
+> **Surplus Value** = Rookie Surplus + Second Contract APY (as % of cap)
+
+Where rookie surplus = snap ratio × (FA replacement cost − rookie deal APY) × 4 years. A QB on a rookie deal saves ~10% of the cap per year vs free agency; an RB saves ~1.6%. Over four years, that difference alone is worth ~$90M in today's terms — before we even get to second contracts.
+
+Because these groups have fundamentally different surplus mechanics, we trained three separate models — one for QBs (R² = `r round(pr_qb_r2, 3)`), one for premium positions (EDGE/OT/WR, R² = `r round(pr_prem_r2, 3)`), and one for non-premium positions (R² = `r round(pr_nonprem_r2, 3)`). Same features as before (Prospect Score + log(pick) + position), but separate slopes and intercepts for each group. Combined out-of-sample R² = `r round(pr_test_r2, 3)`. Translated to the 2026 salary cap ($275M), this gives us concrete dollar figures for what each draft pick is worth in surplus.
+
+```{r love-player-return, fig.height=6, fig.width=8}
+# Historical non-RB top prospects (2018-2022): predict their player return at each pick
+hist_top <- ngs_historical %>%
+  filter(season >= 2018, season <= 2022, !is.na(cmbn_score),
+         pos_group %in% key_positions, pos_group != "RB") %>%
+  group_by(season, pos_group) %>%
+  slice_max(cmbn_score, n = 1) %>%
+  ungroup()
+
+hist_pr_curves <- map_dfr(1:32, function(p) {
+  map_dfr(1:nrow(hist_top), function(i) {
+    row <- data.frame(
+      cmbn_score = hist_top$cmbn_score[i],
+      pick = p,
+      pos_group = factor(hist_top$pos_group[i], levels = levels(model_data$pos_group))
+    )
+    tibble(pick = p, pos_group = hist_top$pos_group[i],
+           pred_pr = predict_pr(row))
+  })
+})
+
+hist_pr_premium <- hist_pr_curves %>%
+  filter(pos_group %in% premium_pos) %>%
+  group_by(pick) %>%
+  summarise(avg_pr = mean(pred_pr), .groups = "drop")
+
+hist_pr_nonprem <- hist_pr_curves %>%
+  filter(!pos_group %in% premium_pos) %>%
+  group_by(pick) %>%
+  summarise(avg_pr = mean(pred_pr), .groups = "drop")
+
+ggplot() +
+  # Historical lines (gray dashed)
+  geom_line(data = hist_pr_premium, aes(x = pick, y = avg_pr * salary_cap),
+            color = "gray50", linewidth = 1, linetype = "dashed") +
+  geom_line(data = hist_pr_nonprem, aes(x = pick, y = avg_pr * salary_cap),
+            color = "gray70", linewidth = 1, linetype = "dashed") +
+  # 2026 non-premium avg (orange line)
+  geom_line(data = non_premium_avg, aes(x = pick, y = avg_pr * salary_cap),
+            color = "#E67E22", linewidth = 1.2) +
+  # 2026 premium avg (red line)
+  geom_line(data = premium_avg, aes(x = pick, y = avg_pr * salary_cap),
+            color = "#c62828", linewidth = 1.5) +
+  # Love's predicted player return (blue line)
+  geom_line(data = love_curve, aes(x = pick, y = pred_pr * salary_cap),
+            color = "#377EB8", linewidth = 1.5) +
+  # Labels at right edge
+  annotate("text", x = 32.5, y = love_curve$pred_pr[32] * salary_cap,
+           label = "Love", color = "#377EB8",
+           fontface = "bold", size = 3.2, hjust = 0) +
+  annotate("text", x = 32.5, y = premium_avg$avg_pr[32] * salary_cap,
+           label = "2026 premium", color = "#c62828",
+           fontface = "bold", size = 3.2, hjust = 0) +
+  annotate("text", x = 32.5, y = non_premium_avg$avg_pr[32] * salary_cap,
+           label = "2026 non-prem", color = "#E67E22",
+           fontface = "bold", size = 3.2, hjust = 0) +
+  annotate("text", x = 32.5, y = hist_pr_premium$avg_pr[32] * salary_cap,
+           label = "Hist. premium", color = "gray50",
+           fontface = "bold", size = 3.2, hjust = 0) +
+  annotate("text", x = 32.5, y = hist_pr_nonprem$avg_pr[32] * salary_cap,
+           label = "Hist. non-prem", color = "gray70",
+           fontface = "bold", size = 3.2, hjust = 0) +
+  scale_x_continuous(breaks = seq(1, 32, 2),
+                     expand = expansion(mult = c(0.02, 0.25))) +
+  scale_y_continuous(labels = function(x) paste0("$", x, "M")) +
+  labs(
+    title = "Surplus Value: The Metric That Drives the Sharpe Ratio",
+    subtitle = "Premium = QB/EDGE/OT/WR | Non-premium = TE/IOL/DL/LB/CB/S",
+    x = "Pick Number", y = "Predicted Surplus Value ($M)"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+```{r love-fair-value-narrative, results='asis'}
+love_at_10_av <- love_curve %>% filter(pick == 10) %>% pull(pred_av)
+love_at_10_pr <- love_curve %>% filter(pick == 10) %>% pull(pred_pr)
+prem_at_10_av <- premium_avg %>% filter(pick == 10) %>% pull(avg_av)
+prem_at_10_pr <- premium_avg %>% filter(pick == 10) %>% pull(avg_pr)
+nonprem_at_10_av <- non_premium_avg %>% filter(pick == 10) %>% pull(avg_av)
+nonprem_at_10_pr <- non_premium_avg %>% filter(pick == 10) %>% pull(avg_pr)
 
 cat(paste0(
-  "At pick 10, the model projects Love at **", round(love_at_10, 0), "** career AV. ",
-  if (nrow(beats_love_10) > 0) {
-    paste0("Only **", nrow(beats_love_10), "** prospect",
-           if(nrow(beats_love_10) > 1) "s" else "", " project higher: ",
-           paste0(beats_love_10$player, " (", beats_love_10$pos_group, ", ",
-                  round(beats_love_10$pred_av, 0), ")", collapse = ", "), ". ")
+  "Two metrics, two views of the same question.\n\n",
+  "**Career AV** projects Love at **", round(love_at_10_av, 0),
+  "** weighted career AV at pick 10 — above the premium position average (**", round(prem_at_10_av, 0),
+  "**) and well above non-premium (**", round(nonprem_at_10_av, 0),
+  "**). ",
+  if(dead_zone_end > 0) {
+    paste0("The crossover with premium positions lands at **pick ", fair_value_start,
+           "** — before that, premium alternatives project higher career value. ",
+           "After it, Love is the better bet on career production alone.\n\n")
   } else {
-    "No other prospect in the class projects higher. "
+    "Love projects higher career value than even the premium position average at every pick.\n\n"
   },
-  "Love outprojects **", nrow(love_beats_10), "** of the remaining top prospects, including ",
-  "every premium-position leader.\n\n",
-  "The Sharpe ratio says 'take a premium position.' But in 2026, **no premium-position prospect ",
-  "(QB, WR) grades Elite (90+) on Prospect Score**. The best QB (Mendoza, 86.7) and the best WR ",
-  "(Tyson, 86.2) are solid Good-tier prospects — but the model projects Love above both at every pick. ",
-  "The opportunity cost argument assumes elite alternatives exist. This year, they don't.\n\n",
-  "This doesn't eliminate the rookie surplus concern. A team still gets cheap production from a Day 2 RB. ",
-  "But the question isn't 'can you find *a* running back later?' — it's 'can you find *this* running back ",
-  "later?' Love's 94.3 Prospect Score says no. The gap between Love and RB2 in this class is 17 points. ",
-  "The surplus argument assumes fungibility. Love breaks that assumption."
+  "**Surplus value** — the metric that actually feeds Article 1's Sharpe ratio — ",
+  "tells a different story. ",
+  "Love's predicted surplus at pick 10 is **$", round(love_at_10_pr * salary_cap, 1),
+  "M** vs **$", round(prem_at_10_pr * salary_cap, 1), "M** for the premium position average. ",
+  "The gap is **$", round((prem_at_10_pr - love_at_10_pr) * salary_cap, 1),
+  "M** — and it's persistent. Even when career production is comparable, ",
+  "premium positions generate more total surplus through larger second contracts and cheaper replacement costs. ",
+  "This is why the Sharpe ratio says never draft an RB: the surplus math penalizes the position ",
+  "regardless of the individual player.\n\n",
+  "This is the Sharpe ratio's blind spot made visible. Career AV says Love is the best prospect in ",
+  "the class. Surplus value says premium positions still generate more efficient returns. Both are true. ",
+  "The question isn't which metric is right — it's which one your team cares about. ",
+  "A team building for the next decade wants career production. A team optimizing cap efficiency wants surplus. ",
+  "Love is the rare prospect where the career value argument is strong enough to challenge the surplus math."
 ))
 ```
 
@@ -1961,9 +2174,9 @@ Then we stress-tested it. And the model held up -- mostly. The positional hierar
 
 3. **Not all prospects are average.** Love's 94.3 Prospect Score ranks 5th among all RB prospects since 2010. Historical elite RBs with scores like his became great at dramatically higher rates than the position average. The model averages over all RBs. Love isn't average.
 
-4. **Pre-draft models confirm the exception.** A logistic regression and a linear regression — both trained on 2010-2019 and validated out-of-time on 2020-2022 — agree: Love's Prospect Score profile predicts a meaningfully higher probability of an elite career than the positional average. His predicted career AV at pick 10 exceeds or approaches the historical non-RB alternative at that slot. The rookie surplus argument assumes all RBs are interchangeable. Love's predicted career trajectory says otherwise.
+4. **Pre-draft models confirm the exception.** Three models — all trained on 2010-2019 and validated out-of-time on 2020-2022 — agree: Love's Prospect Score profile predicts a meaningfully higher probability of an elite career than the positional average. His predicted career AV at pick 10 exceeds every non-RB prospect in the 2026 class. Even the risk-adjusted predicted Sharpe ratio — which penalizes RB for positional variance — shows a crossover point where Love becomes the better bet. The rookie surplus argument assumes all RBs are interchangeable. Love's predicted career trajectory says otherwise.
 
-And then the number that ties it together: the fair value crossover lands at **pick 10** -- the exact pick from Part 1's opening question. The model's own math says that's where the gamble starts to make sense.
+And then the numbers that tie it together: the career AV crossover shows Love outprojects every non-RB prospect in the 2026 class, while the risk-adjusted Sharpe crossover lands at the exact pick range where the gamble starts to make sense. Two views of the same question -- and both say the opportunity cost argument breaks down when the alternative prospects are this far below Love's grade.
 
 The wildest scenario? Minnesota at pick 18, with Aaron Jones turning 32 and no long-term answer behind him. If Love is still on the board at 10 -- or slides past it -- the Vikings have every reason to trade up. They have the need, the pick falls in the fair value zone, and the 2026 class gives them no alternative. Every counter-argument in this article points at MIN.
 
@@ -1999,7 +2212,7 @@ The counter-arguments didn't destroy the model. They sharpened it. Here's what s
 
 **Roster needs:** A position is "filled" if the team had a starter who played above the hit threshold, earned a second contract above the free-agent replacement cost for the position, and was not on an expiring deal. A position is a "need" if it wasn't filled.
 
-**Predictive models:** Two models trained on players drafted 2010-2019 with Prospect Scores and career outcomes, validated out-of-time on the 2020-2022 classes. Features: Prospect Score, log(draft pick), and position group. Draft pick is log-transformed because draft value declines non-linearly. (1) Logistic regression predicting P(top 10% career AV). (2) Linear regression predicting weighted career AV. Athlete Score and Production Score (sub-components of Prospect Score) were tested but excluded — neither was significant when the composite Prospect Score was already in the model. Love's predictions use his Prospect Score with hypothetical pick positions.
+**Predictive models:** Three models trained on players drafted 2010-2019 with Prospect Scores and career outcomes, validated out-of-time on the 2020-2022 classes. Features: Prospect Score, log(draft pick), and position group. Draft pick is log-transformed because draft value declines non-linearly. (1) Logistic regression predicting P(top 10% career AV). (2) Linear regression predicting weighted career AV. (3) Linear regression predicting snap-based player return (used to compute predicted Sharpe ratios). Athlete Score and Production Score (sub-components of Prospect Score) were tested but excluded — neither was significant when the composite Prospect Score was already in the model. Predicted Sharpe ratios combine model-predicted player return and P(elite) with historical positional variance and replacement values from Article 1.
 
 **Part 1:** Full methodology and interactive charts at [stranger9977.github.io/draft-sharpe-analysis](https://stranger9977.github.io/draft-sharpe-analysis/)
 
