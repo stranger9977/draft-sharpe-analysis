@@ -92,7 +92,7 @@ r1_picks <- r1_picks %>% mutate(tier = factor(tier, levels = tier_order))
 
 ---
 
-## The Model Was Right. And Incomplete.
+## The Sharpe Ratio Was Incomplete.
 
 In [Part 1](https://stranger9977.github.io/draft-sharpe-analysis/), we built a quasi-Sharpe ratio for NFL draft picks. The math was clean. The conclusion was clear: **RB shows negative returns across all tiers -- never draft one in round 1.**
 
