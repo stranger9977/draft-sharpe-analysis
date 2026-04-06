@@ -1699,7 +1699,7 @@ ggplot() +
   coord_cartesian(ylim = c(max(bc_min - 5, 0), bc_median + 30)) +
   labs(
     title = "Love's Fair Value: Where the Gamble Makes Sense",
-    subtitle = "Red = non-RB positions (all) | Blue = Elite RB median",
+    subtitle = "Red = avg non-RB career AV by pick | Blue = elite RB median (historical top 10% NGS)",
     x = "Pick Number", y = "Weighted Career AV"
   ) +
   theme_minimal(base_size = 13)
@@ -1881,6 +1881,8 @@ Then we stress-tested it. And the model held up -- mostly. The positional hierar
 
 3. **Not all prospects are average.** Love's 94.3 NGS Combined Score ranks 5th among all RB prospects since 2010. Historical elite RBs with scores like his became great at dramatically higher rates than the position average. The model averages over all RBs. Love isn't average.
 
+4. **Pre-draft models confirm the exception.** A logistic regression and a gradient-boosted model — both trained on 2010-2019 and validated out-of-time on 2020-2022 — agree: Love's NGS profile predicts a meaningfully higher probability of an elite career than the positional average. His predicted career AV at pick 10 exceeds or approaches the historical non-RB alternative at that slot. The rookie surplus argument assumes all RBs are interchangeable. Love's predicted career trajectory says otherwise.
+
 And then the number that ties it together: the fair value crossover lands at **pick 10** -- the exact pick from Part 1's opening question. The model's own math says that's where the gamble starts to make sense.
 
 The wildest scenario? Minnesota at pick 18, with Aaron Jones turning 32 and no long-term answer behind him. If Love is still on the board at 10 -- or slides past it -- the Vikings have every reason to trade up. They have the need, the pick falls in the fair value zone, and the 2026 class gives them no alternative. Every counter-argument in this article points at MIN.
@@ -1916,6 +1918,8 @@ The counter-arguments didn't destroy the model. They sharpened it. Here's what s
 **Class depth:** A class is "deep" if its count of Good+ prospects (NGS Combined Score >= 70) exceeds the position's median Good+ count across all years. "Thin" if below the median.
 
 **Roster needs:** A position is "filled" if the team had a starter who played above the hit threshold, earned a second contract above the free-agent replacement cost for the position, and was not on an expiring deal. A position is a "need" if it wasn't filled.
+
+**Predictive models:** Two models trained on players drafted 2010-2019 with NGS Combined Scores and career outcomes, validated out-of-time on the 2020-2022 classes. Features: NGS Combined Score, NGS Athlete Score, NGS Production Score, log(draft pick), and position group. Draft pick is log-transformed because draft value declines non-linearly. (1) Logistic regression predicting P(top 10% career AV). (2) Gradient-boosted trees (XGBoost, 200 rounds, max_depth=4) predicting weighted career AV. Love's predictions use his actual NGS scores with hypothetical pick positions.
 
 **Part 1:** Full methodology and interactive charts at [stranger9977.github.io/draft-sharpe-analysis](https://stranger9977.github.io/draft-sharpe-analysis/)
 
