@@ -1251,7 +1251,7 @@ if (length(pos_preds) > 0 && length(neg_preds) > 0) {
 test_brier <- mean((test_data$pred_elite - test_data$is_elite)^2)
 ```
 
-```{r p-elite-table, fig.height=5, fig.width=8}
+```{r p-elite-table, fig.height=5, fig.width=10}
 # Feature importance bar chart (odds ratios, log scale)
 elite_features <- elite_summary %>%
   filter(term != "(Intercept)") %>%
