@@ -1976,22 +1976,48 @@ nonprem_median <- prospect_curves %>%
   group_by(pick) %>%
   summarise(avg_rs = mean(pred_rs), .groups = "drop")
 
-# Offset labels to prevent overlap
-love_end <- love_range$q50[32] * salary_cap
-prem_end <- prem_median$avg_rs[32] * salary_cap
-nonprem_end <- nonprem_median$avg_rs[32] * salary_cap
-love_q90_end <- love_range$q90[32] * salary_cap
-love_q10_end <- love_range$q10[32] * salary_cap
+# Historical top prospects (2018-2022): median player return
+hist_top <- ngs_historical %>%
+  filter(season >= 2018, season <= 2022, !is.na(cmbn_score),
+         pos_group %in% key_positions, pos_group != "RB") %>%
+  group_by(season, pos_group) %>%
+  slice_max(cmbn_score, n = 1) %>%
+  ungroup()
 
-# Nudge overlapping labels
-label_y <- c(love_q90_end, prem_end, love_end, nonprem_end, love_q10_end)
-label_names <- c("Love Q90 (ceiling)", "2026 premium (median)",
-                 "Love Q50 (median)", "2026 non-premium (median)", "Love Q10 (floor)")
-label_colors <- c("#377EB8", "#c62828", "#377EB8", "#E67E22", "#377EB8")
-# Sort and spread if too close
-for(i in 2:length(label_y)) {
-  if(abs(label_y[i] - label_y[i-1]) < 2.5) {
-    label_y[i] <- label_y[i-1] - 2.5
+hist_curves <- map_dfr(1:32, function(p) {
+  map_dfr(1:nrow(hist_top), function(i) {
+    row <- data.frame(
+      cmbn_score = hist_top$cmbn_score[i], pick = p,
+      pos_group = factor(hist_top$pos_group[i], levels = levels(model_data$pos_group)))
+    tibble(pick = p, pos_group = hist_top$pos_group[i],
+           pred_rs = predict_rs(row))
+  })
+})
+
+hist_prem <- hist_curves %>%
+  filter(pos_group %in% premium_pos) %>%
+  group_by(pick) %>% summarise(avg_rs = mean(pred_rs), .groups = "drop")
+
+hist_nonprem <- hist_curves %>%
+  filter(!pos_group %in% premium_pos) %>%
+  group_by(pick) %>% summarise(avg_rs = mean(pred_rs), .groups = "drop")
+
+# Build label data — collect all end values, sort descending, spread apart
+labels_df <- tibble(
+  y_raw = c(love_range$q90[32], hist_prem$avg_rs[32], prem_median$avg_rs[32],
+            love_range$q50[32], hist_nonprem$avg_rs[32], nonprem_median$avg_rs[32],
+            love_range$q10[32]) * salary_cap,
+  label = c("Love ceiling (Q90)", "Hist. premium", "2026 premium",
+            "Love median (Q50)", "Hist. non-premium", "2026 non-premium",
+            "Love floor (Q10)"),
+  color = c("#377EB8", "gray50", "#c62828", "#377EB8", "gray70", "#E67E22", "#377EB8")
+) %>% arrange(desc(y_raw))
+
+# Spread labels so they don't overlap (min 3M gap)
+labels_df$y <- labels_df$y_raw
+for(i in 2:nrow(labels_df)) {
+  if(labels_df$y[i] > labels_df$y[i-1] - 3) {
+    labels_df$y[i] <- labels_df$y[i-1] - 3
   }
 }
 
@@ -2009,29 +2035,28 @@ ggplot() +
   # Love Q50 median (solid)
   geom_line(data = love_range, aes(x = pick, y = q50 * salary_cap),
             color = "#377EB8", linewidth = 1.5) +
+  # Historical lines (gray dashed)
+  geom_line(data = hist_prem, aes(x = pick, y = avg_rs * salary_cap),
+            color = "gray50", linewidth = 1, linetype = "dashed") +
+  geom_line(data = hist_nonprem, aes(x = pick, y = avg_rs * salary_cap),
+            color = "gray70", linewidth = 1, linetype = "dashed") +
   # 2026 premium avg median (red)
   geom_line(data = prem_median, aes(x = pick, y = avg_rs * salary_cap),
             color = "#c62828", linewidth = 1.5) +
   # 2026 non-premium avg median (orange)
   geom_line(data = nonprem_median, aes(x = pick, y = avg_rs * salary_cap),
             color = "#E67E22", linewidth = 1.2) +
-  # Labels
-  annotate("text", x = 32.5, y = label_y[1], label = label_names[1],
-           color = label_colors[1], fontface = "bold", size = 3, hjust = 0) +
-  annotate("text", x = 32.5, y = label_y[2], label = label_names[2],
-           color = label_colors[2], fontface = "bold", size = 3, hjust = 0) +
-  annotate("text", x = 32.5, y = label_y[3], label = label_names[3],
-           color = label_colors[3], fontface = "bold", size = 3, hjust = 0) +
-  annotate("text", x = 32.5, y = label_y[4], label = label_names[4],
-           color = label_colors[4], fontface = "bold", size = 3, hjust = 0) +
-  annotate("text", x = 32.5, y = label_y[5], label = label_names[5],
-           color = label_colors[5], fontface = "bold", size = 3, hjust = 0) +
+  # Labels — dynamically positioned to avoid overlap
+  {lapply(1:nrow(labels_df), function(i)
+    annotate("text", x = 32.5, y = labels_df$y[i], label = labels_df$label[i],
+             color = labels_df$color[i], fontface = "bold", size = 2.8, hjust = 0)
+  )} +
   scale_x_continuous(breaks = seq(1, 32, 2),
                      expand = expansion(mult = c(0.02, 0.30))) +
   scale_y_continuous(labels = function(x) paste0("$", round(x), "M")) +
   labs(
     title = "Love's Projected Player Return: Floor to Ceiling",
-    subtitle = "Blue band = Love's Q10-Q90 range | Red = 2026 premium median | Orange = 2026 non-premium median",
+    subtitle = "Blue band = Love Q10-Q90 | Solid = 2026 class | Dashed = historical (2018-2022)",
     x = "Pick Number", y = "Projected Player Return ($M)"
   ) +
   theme_minimal(base_size = 13)
