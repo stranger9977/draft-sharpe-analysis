@@ -136,7 +136,7 @@ Weighted career AV strips out the market layer entirely. When we ran Part 1's Sh
 
 For this article, we need a metric that measures production, not market sentiment. That's career AV.
 
-We define a **blue-chip outcome** as finishing in the **top 10% of weighted career AV at their position** (90th percentile). This is a much stricter bar than Part 1's snap-based "hit" -- it doesn't just ask whether a player became a starter, but whether they became *great*.
+We define an **elite outcome** as finishing in the **top 10% of weighted career AV at their position** (90th percentile). This is a much stricter bar than Part 1's snap-based "hit" -- it doesn't just ask whether a player became a starter, but whether they became *great*.
 
 ---
 
@@ -424,7 +424,7 @@ cat(paste0(
   "That 17-point gap to RB2 isn't just a Love story; it's a class story. If you pass on Love, ",
   "the next RB option is a significant downgrade.\n\n",
   "QB is thin too, but for QB the bar is different: Good isn't good enough. ",
-  "QB is the one position where only blue-chip prospects (Elite tier) reliably return value in the top 10 — ",
+  "QB is the one position where only elite prospects (Elite tier) reliably return value in the top 10 — ",
   "a Good QB prospect at pick 5 is a much bigger gamble than a Good OT or EDGE at the same spot. ",
   "For most other positions, Good is deep enough to find value.\n\n",
   "On the other end, **IOL** is loaded — ",
@@ -578,13 +578,13 @@ cat(paste0(
 
 The Sharpe ratio averages over all RB prospects. But we've already seen that not all classes are equal. The same logic applies to individual prospects: the model can't distinguish between an average back and a generational one.
 
-The challenge is defining "blue chip" without hindsight. [Career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) (AV) -- our retrospective measure -- tells us *who turned out* to be elite, but a GM can't use it on draft day. NGS Combined Scores can. They're published before the draft, combining athletic testing, college production, and size into a single number. It's the closest thing to a prospective blue-chip identifier that exists.
+The challenge is identifying elite prospects without hindsight. [Career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) (AV) -- our retrospective measure -- tells us *who turned out* to be elite, but a GM can't use it on draft day. NGS Combined Scores can. They're published before the draft, combining athletic testing, college production, and size into a single number. It's the closest thing to a prospective elite-prospect identifier that exists.
 
 **Definitions for this section:**
 
-- **Pre-draft blue chip:** Top 10% of NGS Combined Score at the position (knowable before the draft)
-- **Career blue chip:** Top 10% of [career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) at the position (only knowable in hindsight)
-- **Hit (outcome measure):** Article 1's snap-based starter threshold — a player who plays above 75% of baseline snaps at their position. This is our outcome metric for comparing blue-chip categories because it's independent of weighted career AV (which defines the career blue-chip group).
+- **Pre-draft elite:** Top 10% of NGS Combined Score at the position (knowable before the draft)
+- **Career elite:** Top 10% of [career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) at the position (only knowable in hindsight)
+- **Hit (outcome measure):** Article 1's snap-based starter threshold — a player who plays above 75% of baseline snaps at their position. This is our outcome metric for comparing elite categories because it's independent of weighted career AV (which defines the career elite group).
 
 ### NGS Scores and Career Outcomes
 
@@ -595,11 +595,11 @@ ngs_with_outcomes <- blue_chip %>%
          pos_group %in% key_positions, season <= 2022)
 ```
 
-### Pre-Draft Blue Chips vs Career Blue Chips
+### Pre-Draft Elite vs Career Elite
 
-We can define "blue chip" two ways: retrospectively (top 10% of weighted career AV at the position) and prospectively (top 10% of NGS Combined Score at the position). How much do they overlap -- and does it differ by position?
+We can define "elite" two ways: retrospectively (top 10% of weighted career AV at the position) and prospectively (top 10% of NGS Combined Score at the position). How much do they overlap -- and does it differ by position?
 
-If high NGS scores actually predict career success, the top-scoring prospects should cluster toward the top of the career value axis. Here's every RB with an NGS score — the pre-draft blue chips (top 10% NGS) are highlighted:
+If high NGS scores actually predict career success, the top-scoring prospects should cluster toward the top of the career value axis. Here's every RB with an NGS score — the pre-draft elite prospects (top 10% NGS) are highlighted:
 
 ```{r ngs-bc-scatter-rb, fig.height=6, fig.width=8}
 rb_scatter <- ngs_with_outcomes %>%
@@ -609,7 +609,7 @@ rb_scatter <- ngs_with_outcomes %>%
 rb_lm <- lm(car_av ~ cmbn_score, data = rb_scatter)
 rb_r2 <- summary(rb_lm)$r.squared
 
-# Label blue chips + top career AV non-blue-chips
+# Label elite prospects + top career AV non-elite prospects
 rb_labeled <- rb_scatter %>% filter(is_bc | car_av >= quantile(car_av, 0.9))
 
 ggplot(rb_scatter, aes(x = cmbn_score, y = car_av)) +
@@ -629,7 +629,7 @@ ggplot(rb_scatter, aes(x = cmbn_score, y = car_av)) +
   scale_color_manual(values = c("TRUE" = "#377EB8", "FALSE" = "gray50")) +
   labs(
     title = "RB: Do Pre-Draft Scores Predict Career Value?",
-    subtitle = "Blue = pre-draft blue chip (top 10% NGS) | Gray = everyone else",
+    subtitle = "Blue = pre-draft elite (top 10% NGS) | Gray = everyone else",
     x = "NGS Combined Score (pre-draft)", y = "Weighted Career AV"
   ) +
   theme_minimal(base_size = 14)
@@ -640,15 +640,15 @@ rb_bc <- rb_scatter %>% filter(is_bc)
 rb_nonbc <- rb_scatter %>% filter(!is_bc)
 
 cat(paste0(
-  "The pre-draft blue chips (blue dots) cluster toward the upper right — high NGS scores ",
-  "mapping to high career value. Pre-draft blue chip RBs averaged **",
+  "The pre-draft elite prospects (blue dots) cluster toward the upper right — high NGS scores ",
+  "mapping to high career value. Pre-draft elite RBs averaged **",
   round(mean(rb_bc$car_av, na.rm = TRUE), 1),
   "** career AV, vs **", round(mean(rb_nonbc$car_av, na.rm = TRUE), 1),
   "** for everyone else. They became starters at **",
   round(mean(rb_bc$is_hit, na.rm = TRUE) * 100, 1),
   "%** vs **", round(mean(rb_nonbc$is_hit, na.rm = TRUE) * 100, 1),
   "%**.\n\n",
-  "Not every pre-draft blue chip panned out — Jahvid Best and LaMichael James scored elite on NGS but busted. ",
+  "Not every pre-draft elite prospect panned out — Jahvid Best and LaMichael James scored elite on NGS but busted. ",
   "But the signal is clear: the top of the NGS distribution produces starters at dramatically higher rates."
 ))
 ```
@@ -663,14 +663,14 @@ all_scatter <- ngs_with_outcomes %>%
     pos_group = factor(pos_group, levels = key_positions)
   )
 
-# Label the top blue chips in each position
+# Label the top elite prospects in each position
 bc_labels <- all_scatter %>%
   filter(is_bc) %>%
   group_by(pos_group) %>%
   slice_max(car_av, n = 3) %>%
   ungroup()
 
-# Label interesting gray dots: non-blue-chips with top career AV (the model misses)
+# Label interesting gray dots: non-elite prospects with top career AV (the model misses)
 gray_labels <- all_scatter %>%
   filter(!is_bc) %>%
   group_by(pos_group) %>%
@@ -692,7 +692,7 @@ ggplot(all_scatter, aes(x = cmbn_score, y = car_av)) +
   facet_wrap(~pos_group, scales = "free", ncol = 3) +
   labs(
     title = "Pre-Draft Score vs Career Value: All Positions",
-    subtitle = "Blue = pre-draft blue chip (top 10% NGS) | Top 3 blue chips labeled per position",
+    subtitle = "Blue = pre-draft elite (top 10% NGS) | Top 3 elite prospects labeled per position",
     x = "NGS Combined Score", y = "Weighted Career AV"
   ) +
   theme_minimal(base_size = 12) +
@@ -706,7 +706,7 @@ bc_all <- all_scatter %>% filter(is_bc)
 nonbc_all <- all_scatter %>% filter(!is_bc)
 
 cat(paste0(
-  "Across all positions, pre-draft blue chips became starters at **",
+  "Across all positions, pre-draft elite prospects became starters at **",
   round(mean(bc_all$is_hit, na.rm = TRUE) * 100, 1),
   "%** vs **", round(mean(nonbc_all$is_hit, na.rm = TRUE) * 100, 1),
   "%** for everyone else. The trend line slopes upward at every position — the pre-draft signal ",
@@ -719,7 +719,7 @@ cat(paste0(
 Who were the highest-graded pre-draft prospects at each position, and did they deliver? Here we use the stricter bar: **top 10% of weighted career AV** at their position — not just a starter, but a *great* player. Starting with RB:
 
 ```{r ngs-elite-rb-big, fig.height=5, fig.width=8}
-# Compute career AV blue chip threshold per position
+# Compute career AV elite threshold per position
 av_thresholds <- ngs_with_outcomes %>%
   group_by(pos_group) %>%
   summarise(av_90 = quantile(car_av, 0.9, na.rm = TRUE), .groups = "drop")
@@ -1089,7 +1089,7 @@ cat(paste0(
   ") and #2 -- a **", round(biggest_gap$gap, 1),
   "-point** chasm. Meanwhile, **", smallest_gap$pos_group,
   "** is the tightest race, with just a **", round(smallest_gap$gap, 1),
-  "-point** gap at the top. Where a prospect is clearly separated, the blue-chip argument ",
+  "-point** gap at the top. Where a prospect is clearly separated, the elite-prospect argument ",
   "gets stronger. Where the class is tightly bunched, the model's average-case advice holds.",
   elite_note
 ))
@@ -1189,12 +1189,85 @@ cat(paste0(
 ))
 ```
 
+### The Other 27%: Non-Premium First-Round Picks
+
+The Sharpe ratio analysis tells us what positions teams *should* draft in round one. But what actually happened when teams drafted non-premium positions? Since 2010, a meaningful share of first-round picks went to RB, IOL, DL, LB, CB, S, and TE — the positions the model flags as inefficient. Here's how those picks actually performed.
+
+```{r non-premium-picks}
+premium_pos <- c("QB", "EDGE", "OT", "WR")
+
+non_prem_r1 <- blue_chip %>%
+  filter(pick <= 32, season >= 2010, season <= 2022,
+         !is.na(car_av), pos_group %in% key_positions) %>%
+  mutate(is_premium = pos_group %in% premium_pos)
+
+# Weighted avg Sharpe by position (across R1 tiers only)
+pos_sharpe <- sharpe %>%
+  filter(tier %in% c("Top 10", "Late 1st")) %>%
+  group_by(pos_group) %>%
+  summarise(avg_sharpe = round(weighted.mean(sharpe_elite, n, na.rm = TRUE), 3), .groups = "drop")
+
+non_prem_summary <- non_prem_r1 %>%
+  filter(!is_premium) %>%
+  group_by(pos_group) %>%
+  summarise(
+    n = n(),
+    avg_pick = round(mean(pick), 1),
+    avg_car_av = round(mean(car_av, na.rm = TRUE), 1),
+    hit_rate = round(mean(is_hit, na.rm = TRUE) * 100, 1),
+    elite_rate = round(mean(is_blue_chip, na.rm = TRUE) * 100, 1),
+    .groups = "drop"
+  ) %>%
+  left_join(pos_sharpe, by = "pos_group") %>%
+  arrange(desc(n))
+
+prem_avg_av <- non_prem_r1 %>% filter(is_premium) %>% pull(car_av) %>% mean(na.rm = TRUE)
+nonprem_avg_av <- non_prem_r1 %>% filter(!is_premium) %>% pull(car_av) %>% mean(na.rm = TRUE)
+n_nonprem <- sum(!non_prem_r1$is_premium)
+n_total <- nrow(non_prem_r1)
+```
+
+```{r non-premium-table}
+non_prem_summary %>%
+  gt() %>%
+  cols_label(
+    pos_group = "Position", n = "R1 Picks", avg_pick = "Avg Pick",
+    avg_car_av = "Avg Career AV", hit_rate = "Hit Rate %",
+    elite_rate = "Elite Rate %", avg_sharpe = "Avg Sharpe (R1)"
+  ) %>%
+  tab_header(
+    title = md("**The Other 27%: Non-Premium First-Round Picks (2010-2022)**"),
+    subtitle = "Premium = QB, EDGE, OT, WR. How did everyone else do?"
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "#e3f2fd"),
+    locations = cells_body(rows = pos_group == "RB")
+  ) %>%
+  tab_options(table.font.size = px(12))
+```
+
+```{r non-premium-narrative, results='asis'}
+rb_row <- non_prem_summary %>% filter(pos_group == "RB")
+cat(paste0(
+  "Since 2010, **", n_nonprem, " of ", n_total, " first-round picks (",
+  round(n_nonprem/n_total*100), "%)** went to non-premium positions — the picks ",
+  "that Article 1's Sharpe ratio says teams shouldn't make. Those picks averaged **",
+  round(nonprem_avg_av, 0), "** career AV, vs **", round(prem_avg_av, 0),
+  "** for premium positions.\n\n",
+  "RB specifically: **", rb_row$n, " first-round RBs**, averaging pick ",
+  rb_row$avg_pick, " and **", rb_row$avg_car_av, "** career AV. Their hit rate (",
+  rb_row$hit_rate, "%) trails the premium positions, but their elite rate (",
+  rb_row$elite_rate, "%) tells a different story — when first-round RBs hit, they hit big.\n\n",
+  "The model says these were all bad picks. The career outcomes say it's more complicated than that."
+))
+```
+
 ### Love's Fair Value in This Draft
 
-The dumbbell chart shows the historical gamble. But what pick makes the gamble worth it? The Sharpe ratio's opportunity cost assumes every class is average, with equal depth at every position. In 2026, that assumption breaks down. **RB supply is scarce** (Love is the only Elite-tier RB, with a 17-point gap to RB2) while **premium position supply is deep** (IOL, CB, and WR are loaded with Good+ prospects). When premium positions are deep, you can find that EDGE or OT in round 2 or 3. When RB is thin, you can't. The effective opportunity cost of drafting Love is lower than the historical average suggests because what you're "giving up" will still be there later.
+The dumbbell chart shows the historical gamble. But what pick makes the gamble worth it? The Sharpe ratio's opportunity cost assumes every class is average, with equal depth at every position. In 2026, that assumption breaks down. **RB supply is scarce** (Love is the only Elite-tier RB, with a 17-point gap to RB2) while **non-RB supply is deep** (IOL, CB, and WR are loaded with Good+ prospects — and even EDGE and OT have enough depth to find value in round 2). When non-RB positions are deep, you can find that EDGE or OT later. When RB is thin, you can't. The effective opportunity cost of drafting Love is lower than the historical average suggests because what you're "giving up" will still be there later.
 
 ```{r love-fair-value, fig.height=6, fig.width=8}
-# Blue-chip RB career AV (all NGS top-10% RBs)
+# Elite RB career AV (all NGS top-10% RBs)
 bc_rb_av <- blue_chip %>%
   filter(pos_group == "RB", is_ngs_blue_chip == TRUE, !is.na(car_av))
 
@@ -1231,8 +1304,8 @@ smooth_line <- function(df, col = "avg_av") {
 
 non_rb_smooth <- smooth_line(non_rb_line)
 
-# Find where non-RB line first drops below BC RB median (the crossover point)
-# This marks the end of the dead zone - where non-RB talent no longer outproduces BC RBs
+# Find where non-RB line first drops below elite RB median (the crossover point)
+# This marks the end of the dead zone - where non-RB talent no longer outproduces elite RBs
 above <- non_rb_smooth$smooth_av > bc_median
 
 # Find the first contiguous stretch where non-RB > median
@@ -1254,7 +1327,7 @@ if(any(above)) {
 fair_value_start <- dead_zone_end + 1
 
 ggplot() +
-  # Dead zone (where non-RB > BC RB median)
+  # Dead zone (where non-RB > elite RB median)
   annotate("rect", xmin = dead_zone_start - 0.5, xmax = dead_zone_end + 0.5,
            ymin = -Inf, ymax = Inf, fill = "#c62828", alpha = 0.06) +
   annotate("text", x = (dead_zone_start + dead_zone_end) / 2, y = bc_median + 25,
@@ -1269,11 +1342,11 @@ ggplot() +
   # Non-RB line
   geom_line(data = non_rb_smooth, aes(x = pick, y = smooth_av),
             color = "#c62828", linewidth = 1.2) +
-  # BC RB median
+  # Elite RB median
   geom_hline(yintercept = bc_median, color = "#377EB8", linewidth = 1.2, linetype = "solid") +
   # Labels
   annotate("text", x = 32, y = bc_median + 2,
-           label = paste0("BC RB median: ", round(bc_median, 0)),
+           label = paste0("Elite RB median: ", round(bc_median, 0)),
            color = "#377EB8", hjust = 1, size = 3.2, fontface = "bold") +
   annotate("text", x = 4, y = non_rb_smooth$smooth_av[non_rb_smooth$pick == 4] + 4,
            label = "Non-RB avg", color = "#c62828", hjust = 0.5, size = 3.5, fontface = "bold") +
@@ -1281,7 +1354,7 @@ ggplot() +
   coord_cartesian(ylim = c(max(bc_min - 5, 0), bc_median + 30)) +
   labs(
     title = "Love's Fair Value: Where the Gamble Makes Sense",
-    subtitle = "Red = non-RB positions (all) | Blue = BC RB median",
+    subtitle = "Red = non-RB positions (all) | Blue = Elite RB median",
     x = "Pick Number", y = "Weighted Career AV"
   ) +
   theme_minimal(base_size = 13)
@@ -1289,19 +1362,19 @@ ggplot() +
 
 ```{r love-fair-value-narrative, results='asis'}
 cat(paste0(
-  "The blue line is the median weighted career AV across all historical blue-chip RBs (top 10% NGS Combined Score): **",
+  "The blue line is the median weighted career AV across all historical elite RBs (top 10% NGS Combined Score): **",
   round(bc_median, 0), "**. The red line is the average career AV of all non-RB first-rounders at each pick, smoothed over a 5-pick rolling window.\n\n",
   "The dead zone is **picks ", dead_zone_start, "-", dead_zone_end,
   "** -- and that number should jump off the page. Part 1 opened with the question: *Should you draft Jeremiah Love at 10?* ",
-  "The career AV data just answered it. The crossover point -- where blue-chip RB value starts to exceed the average non-RB pick -- ",
+  "The career AV data just answered it. The crossover point -- where elite RB value starts to exceed the average non-RB pick -- ",
   "is **pick ", fair_value_start, "**. Part 1's question and the career AV breaking point land on the exact same number.\n\n",
-  "In the dead zone, the average non-RB pick outproduces even the median blue-chip RB. The opportunity cost is too high. ",
+  "In the dead zone, the average non-RB pick outproduces even the median elite RB. The opportunity cost is too high. ",
   "**After pick ", dead_zone_end, "**, non-RB talent thins out and the calculus flips.\n\n",
   "Now layer in what we've built:\n\n",
   "- **Roster needs:** If a team already has its premium positions filled, the opportunity cost drops further.\n",
   "- **Class depth:** In 2026, the RB class is thin (Love is the only Elite). Pass on him and there's no comparable RB later. ",
   "Meanwhile, IOL and CB are loaded -- those positions will still be available in round 2+.\n",
-  "- **Prospect separation:** Love's NGS profile puts him in the top tier of historical BC RBs, so his expected value is likely *above* the median line, not on it.\n",
+  "- **Prospect separation:** Love's NGS profile puts him in the top tier of historical elite RBs, so his expected value is likely *above* the median line, not on it.\n",
   "- **No elite premium prospects:** In a typical year, picks ", dead_zone_start, "-", dead_zone_end,
   " are rich with elite EDGE, OT, and WR talent. In 2026, not a single premium-position prospect grades Elite (90+) on NGS. ",
   "The opportunity cost of taking Love isn't as high as the historical average suggests -- because the alternatives aren't as good as usual.\n\n",
@@ -1435,7 +1508,7 @@ cat(paste0(
 cat(paste0(
   "---\n\n",
   "**The bottom line:** The model says the dead zone ends at pick ", dead_zone_end,
-  ". Every team above that line pays a premium in opportunity cost that even a blue-chip RB can't offset. ",
+  ". Every team above that line pays a premium in opportunity cost that even an elite RB can't offset. ",
   "Below it, the math flips.\n\n",
   if(nrow(best_fits) > 0) paste0(
     "The best fits are **", paste(paste0(best_fits$team, " (", best_fits$pick, ")"), collapse = ", "),
@@ -1461,7 +1534,7 @@ Then we stress-tested it. And the model held up -- mostly. The positional hierar
 
 2. **Class depth varies wildly.** The 2026 RB class is thin -- Love is the only Elite prospect. Pass on him and there's no comparable alternative in round 2 or 3. Meanwhile, IOL, CB, and WR are loaded. The positions the model says to take instead will still be available later. The RB won't be.
 
-3. **Not all prospects are average.** Love's 94.3 NGS Combined Score ranks 5th among all RB prospects since 2010. Historical blue-chip RBs with scores like his became great at dramatically higher rates than the position average. The model averages over all RBs. Love isn't average.
+3. **Not all prospects are average.** Love's 94.3 NGS Combined Score ranks 5th among all RB prospects since 2010. Historical elite RBs with scores like his became great at dramatically higher rates than the position average. The model averages over all RBs. Love isn't average.
 
 And then the number that ties it together: the fair value crossover lands at **pick 10** -- the exact pick from Part 1's opening question. The model's own math says that's where the gamble starts to make sense.
 
@@ -1489,9 +1562,9 @@ The counter-arguments didn't destroy the model. They sharpened it. Here's what s
 
 **Hit definition (Article 1):** Snap-based quality measure. A "hit" is a player who plays above the positional snap threshold (75% of baseline snaps for their position). This measures whether a player became a starter.
 
-**Blue-chip outcome measure:** For comparing blue-chip categories, we use Article 1's snap-based hit rate as the outcome (independent of career AV, which defines the career blue-chip group). [Weighted Career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) (weighted career AV) from Pro Football Reference — which weights toward peak seasons — is used for defining career blue chips (top 10% at position) and for individual player comparisons in the dumbbell chart.
+**Elite outcome measure:** For comparing elite categories, we use Article 1's snap-based hit rate as the outcome (independent of career AV, which defines the career elite group). [Weighted Career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm) (weighted career AV) from Pro Football Reference — which weights toward peak seasons — is used for defining career elite prospects (top 10% at position) and for individual player comparisons in the dumbbell chart.
 
-**Blue-chip classification:** Two definitions used. Retrospective: top 10% of weighted career AV within each position group. Prospective: top 10% of NGS Combined Score within each position group. Players meeting both criteria had the highest elite outcome rates.
+**Elite classification:** Two definitions used. Retrospective: top 10% of weighted career AV within each position group. Prospective: top 10% of NGS Combined Score within each position group. Players meeting both criteria had the highest elite outcome rates.
 
 **NGS Combined Score:** NFL Next Gen Stats composite prospect score combining athletic testing, college production, and size metrics. Published pre-draft. Historical scores matched to draft records via normalized name and position group.
 
