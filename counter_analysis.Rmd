@@ -1163,7 +1163,13 @@ The scatter plots show a pattern. Can we quantify it? We built a logistic regres
 
 ```{r p-elite-model}
 # Modeling dataset: 2010-2022 with NGS scores and career outcomes
+# Join rookie_surplus from parquet (not in blue_chip)
+rookie_surplus_data <- df %>%
+  select(pfr_player_id, season, rookie_surplus) %>%
+  filter(!is.na(pfr_player_id))
+
 model_data <- blue_chip %>%
+  left_join(rookie_surplus_data, by = c("pfr_player_id", "season")) %>%
   filter(season >= 2010, season <= 2022,
          !is.na(cmbn_score), !is.na(car_av), !is.na(is_hit),
          pos_group %in% key_positions) %>%
@@ -1295,38 +1301,38 @@ av_lm_r2 <- summary(av_lm)$r.squared
 # Add predictions to test data for examples
 test_data$pred_av <- lm_test_pred
 
-# Surplus value models — separate for QB, premium (EDGE/OT/WR), and non-premium
-# Each group has fundamentally different surplus mechanics
-pr_train <- train_data %>% filter(!is.na(player_return))
-pr_test <- test_data %>% filter(!is.na(player_return))
+# Rookie surplus models — separate for QB, premium (EDGE/OT/WR), and non-premium
+# Focuses on the cost-controlled advantage: the gap between rookie deal and FA replacement
+rs_train <- train_data %>% filter(!is.na(rookie_surplus))
+rs_test <- test_data %>% filter(!is.na(rookie_surplus))
 
-pr_lm_qb <- lm(player_return ~ cmbn_score + log(pick),
-                data = pr_train %>% filter(pos_group == "QB"))
-pr_lm_prem <- lm(player_return ~ cmbn_score + log(pick) + pos_group,
-                  data = pr_train %>% filter(pos_group %in% c("EDGE", "OT", "WR")))
-pr_lm_nonprem <- lm(player_return ~ cmbn_score + log(pick) + pos_group,
-                     data = pr_train %>% filter(!pos_group %in% c("QB", "EDGE", "OT", "WR")))
+rs_lm_qb <- lm(rookie_surplus ~ cmbn_score + log(pick),
+                data = rs_train %>% filter(pos_group == "QB"))
+rs_lm_prem <- lm(rookie_surplus ~ cmbn_score + log(pick) + pos_group,
+                  data = rs_train %>% filter(pos_group %in% c("EDGE", "OT", "WR")))
+rs_lm_nonprem <- lm(rookie_surplus ~ cmbn_score + log(pick) + pos_group,
+                     data = rs_train %>% filter(!pos_group %in% c("QB", "EDGE", "OT", "WR")))
 
 # Helper: pick the right model based on position
-predict_pr <- function(newdata) {
+predict_rs <- function(newdata) {
   preds <- numeric(nrow(newdata))
   is_qb <- newdata$pos_group == "QB"
   is_prem <- newdata$pos_group %in% c("EDGE", "OT", "WR")
-  if(any(is_qb)) preds[is_qb] <- predict(pr_lm_qb, newdata = newdata[is_qb, ])
-  if(any(is_prem)) preds[is_prem] <- predict(pr_lm_prem, newdata = newdata[is_prem, ])
-  if(any(!is_qb & !is_prem)) preds[!is_qb & !is_prem] <- predict(pr_lm_nonprem, newdata = newdata[!is_qb & !is_prem, ])
+  if(any(is_qb)) preds[is_qb] <- predict(rs_lm_qb, newdata = newdata[is_qb, ])
+  if(any(is_prem)) preds[is_prem] <- predict(rs_lm_prem, newdata = newdata[is_prem, ])
+  if(any(!is_qb & !is_prem)) preds[!is_qb & !is_prem] <- predict(rs_lm_nonprem, newdata = newdata[!is_qb & !is_prem, ])
   preds
 }
 
 # Model fit stats
-pr_qb_r2 <- summary(pr_lm_qb)$r.squared
-pr_prem_r2 <- summary(pr_lm_prem)$r.squared
-pr_nonprem_r2 <- summary(pr_lm_nonprem)$r.squared
+rs_qb_r2 <- summary(rs_lm_qb)$r.squared
+rs_prem_r2 <- summary(rs_lm_prem)$r.squared
+rs_nonprem_r2 <- summary(rs_lm_nonprem)$r.squared
 
 # Test performance (out-of-time: 2020-2022)
-pr_test_pred <- predict_pr(pr_test)
-pr_test_r2 <- 1 - sum((pr_test$player_return - pr_test_pred)^2) /
-  sum((pr_test$player_return - mean(pr_train$player_return))^2)
+rs_test_pred <- predict_rs(rs_test)
+rs_test_r2 <- 1 - sum((rs_test$rookie_surplus - rs_test_pred)^2) /
+  sum((rs_test$rookie_surplus - mean(rs_train$rookie_surplus))^2)
 ```
 
 ```{r career-av-coefficients, results='asis'}
@@ -1733,7 +1739,7 @@ prospect_curves <- map_dfr(1:32, function(p) {
       pos_group = top_2026$pos_group[i],
       cmbn_score = top_2026$cmbn_score[i],
       pred_av = predict(av_lm, newdata = row),
-      pred_pr = predict_pr(row)
+      pred_rs = predict_rs(row)
     )
   })
 })
@@ -1747,18 +1753,18 @@ premium_pos <- c("QB", "EDGE", "OT", "WR")
 premium_avg <- prospect_curves %>%
   filter(pos_group %in% premium_pos) %>%
   group_by(pick) %>%
-  summarise(avg_av = mean(pred_av), avg_pr = mean(pred_pr), .groups = "drop")
+  summarise(avg_av = mean(pred_av), avg_rs = mean(pred_rs), .groups = "drop")
 
 non_premium_avg <- prospect_curves %>%
   filter(!pos_group %in% c(premium_pos, "RB")) %>%
   group_by(pick) %>%
-  summarise(avg_av = mean(pred_av), avg_pr = mean(pred_pr), .groups = "drop")
+  summarise(avg_av = mean(pred_av), avg_rs = mean(pred_rs), .groups = "drop")
 
 # Keep combined non-RB avg for backward compatibility
 non_rb_avg <- prospect_curves %>%
   filter(pos_group != "RB") %>%
   group_by(pick) %>%
-  summarise(avg_av = mean(pred_av), avg_pr = mean(pred_pr), .groups = "drop")
+  summarise(avg_av = mean(pred_av), avg_rs = mean(pred_rs), .groups = "drop")
 
 # Find crossover: where Love's predicted AV drops below non-RB avg
 above <- non_rb_avg$avg_av > love_curve$pred_av
@@ -1866,10 +1872,10 @@ pick_slices <- c(5, 10, 15, 20)
 prospect_table <- prospect_curves %>%
   filter(pick %in% pick_slices) %>%
   mutate(pred_av = round(pred_av, 0),
-         pred_pr = round(pred_pr * salary_cap, 1)) %>%
-  select(player, pos_group, cmbn_score, pick, pred_av, pred_pr) %>%
+         pred_rs = round(pred_rs * salary_cap, 1)) %>%
+  select(player, pos_group, cmbn_score, pick, pred_av, pred_rs) %>%
   pivot_wider(names_from = pick,
-              values_from = c(pred_av, pred_pr),
+              values_from = c(pred_av, pred_rs),
               names_sep = "_") %>%
   arrange(desc(cmbn_score))
 
@@ -1879,11 +1885,11 @@ prospect_table %>%
     player = "Prospect", pos_group = "Pos", cmbn_score = "Score",
     pred_av_5 = "Pick 5", pred_av_10 = "Pick 10",
     pred_av_15 = "Pick 15", pred_av_20 = "Pick 20",
-    pred_pr_5 = "Pick 5", pred_pr_10 = "Pick 10",
-    pred_pr_15 = "Pick 15", pred_pr_20 = "Pick 20"
+    pred_rs_5 = "Pick 5", pred_rs_10 = "Pick 10",
+    pred_rs_15 = "Pick 15", pred_rs_20 = "Pick 20"
   ) %>%
   tab_spanner(label = "Predicted Career AV", columns = starts_with("pred_av_")) %>%
-  tab_spanner(label = "Predicted Surplus Value ($M)", columns = starts_with("pred_pr_")) %>%
+  tab_spanner(label = "Rookie Surplus ($M)", columns = starts_with("pred_rs_")) %>%
   tab_style(
     style = cell_fill(color = "#e3f2fd"),
     locations = cells_body(rows = player == "Jeremiyah Love")
@@ -1893,7 +1899,7 @@ prospect_table %>%
     locations = cells_body(rows = player == "Jeremiyah Love")
   ) %>%
   tab_header(
-    title = md("**2026 Draft Class: Predicted Career AV & Surplus Value by Pick**"),
+    title = md("**2026 Draft Class: Predicted Career AV & Rookie Surplus by Pick**"),
     subtitle = "Top prospect at each position | Prospect Score drives the prediction"
   ) %>%
   tab_options(table.font.size = px(12))
@@ -1907,7 +1913,7 @@ Career AV tells us how good a player becomes. But Article 1's Sharpe ratio doesn
 
 Where rookie surplus = snap ratio × (FA replacement cost − rookie deal APY) × 4 years. A QB on a rookie deal saves ~10% of the cap per year vs free agency; an RB saves ~1.6%. Over four years, that difference alone is worth ~$90M in today's terms — before we even get to second contracts.
 
-Because these groups have fundamentally different surplus mechanics, we trained three separate models — one for QBs (R² = `r round(pr_qb_r2, 3)`), one for premium positions (EDGE/OT/WR, R² = `r round(pr_prem_r2, 3)`), and one for non-premium positions (R² = `r round(pr_nonprem_r2, 3)`). Same features as before (Prospect Score + log(pick) + position), but separate slopes and intercepts for each group. Combined out-of-sample R² = `r round(pr_test_r2, 3)`. Translated to the 2026 salary cap ($275M), this gives us concrete dollar figures for what each draft pick is worth in surplus.
+Because these groups have fundamentally different surplus mechanics, we trained three separate models to predict rookie surplus — one for QBs (R² = `r round(rs_qb_r2, 3)`), one for premium positions (EDGE/OT/WR, R² = `r round(rs_prem_r2, 3)`), and one for non-premium positions (R² = `r round(rs_nonprem_r2, 3)`). Same features as before (Prospect Score + log(pick) + position), but separate slopes and intercepts for each group. Combined out-of-sample R² = `r round(rs_test_r2, 3)`. Translated to the 2026 salary cap ($275M), this gives us concrete dollar figures for the cost-controlled advantage at each pick.
 
 ```{r love-player-return, fig.height=6, fig.width=8}
 # Historical non-RB top prospects (2018-2022): predict their player return at each pick
@@ -1926,69 +1932,69 @@ hist_pr_curves <- map_dfr(1:32, function(p) {
       pos_group = factor(hist_top$pos_group[i], levels = levels(model_data$pos_group))
     )
     tibble(pick = p, pos_group = hist_top$pos_group[i],
-           pred_pr = predict_pr(row))
+           pred_rs = predict_rs(row))
   })
 })
 
 hist_pr_premium <- hist_pr_curves %>%
   filter(pos_group %in% premium_pos) %>%
   group_by(pick) %>%
-  summarise(avg_pr = mean(pred_pr), .groups = "drop")
+  summarise(avg_rs = mean(pred_rs), .groups = "drop")
 
 hist_pr_nonprem <- hist_pr_curves %>%
   filter(!pos_group %in% premium_pos) %>%
   group_by(pick) %>%
-  summarise(avg_pr = mean(pred_pr), .groups = "drop")
+  summarise(avg_rs = mean(pred_rs), .groups = "drop")
 
 ggplot() +
   # Historical lines (gray dashed)
-  geom_line(data = hist_pr_premium, aes(x = pick, y = avg_pr * salary_cap),
+  geom_line(data = hist_pr_premium, aes(x = pick, y = avg_rs * salary_cap),
             color = "gray50", linewidth = 1, linetype = "dashed") +
-  geom_line(data = hist_pr_nonprem, aes(x = pick, y = avg_pr * salary_cap),
+  geom_line(data = hist_pr_nonprem, aes(x = pick, y = avg_rs * salary_cap),
             color = "gray70", linewidth = 1, linetype = "dashed") +
   # 2026 non-premium avg (orange line)
-  geom_line(data = non_premium_avg, aes(x = pick, y = avg_pr * salary_cap),
+  geom_line(data = non_premium_avg, aes(x = pick, y = avg_rs * salary_cap),
             color = "#E67E22", linewidth = 1.2) +
   # 2026 premium avg (red line)
-  geom_line(data = premium_avg, aes(x = pick, y = avg_pr * salary_cap),
+  geom_line(data = premium_avg, aes(x = pick, y = avg_rs * salary_cap),
             color = "#c62828", linewidth = 1.5) +
   # Love's predicted player return (blue line)
-  geom_line(data = love_curve, aes(x = pick, y = pred_pr * salary_cap),
+  geom_line(data = love_curve, aes(x = pick, y = pred_rs * salary_cap),
             color = "#377EB8", linewidth = 1.5) +
   # Labels at right edge
-  annotate("text", x = 32.5, y = love_curve$pred_pr[32] * salary_cap,
+  annotate("text", x = 32.5, y = love_curve$pred_rs[32] * salary_cap,
            label = "Love", color = "#377EB8",
            fontface = "bold", size = 3.2, hjust = 0) +
-  annotate("text", x = 32.5, y = premium_avg$avg_pr[32] * salary_cap,
+  annotate("text", x = 32.5, y = premium_avg$avg_rs[32] * salary_cap,
            label = "2026 premium", color = "#c62828",
            fontface = "bold", size = 3.2, hjust = 0) +
-  annotate("text", x = 32.5, y = non_premium_avg$avg_pr[32] * salary_cap,
+  annotate("text", x = 32.5, y = non_premium_avg$avg_rs[32] * salary_cap,
            label = "2026 non-prem", color = "#E67E22",
            fontface = "bold", size = 3.2, hjust = 0) +
-  annotate("text", x = 32.5, y = hist_pr_premium$avg_pr[32] * salary_cap,
+  annotate("text", x = 32.5, y = hist_pr_premium$avg_rs[32] * salary_cap,
            label = "Hist. premium", color = "gray50",
            fontface = "bold", size = 3.2, hjust = 0) +
-  annotate("text", x = 32.5, y = hist_pr_nonprem$avg_pr[32] * salary_cap,
+  annotate("text", x = 32.5, y = hist_pr_nonprem$avg_rs[32] * salary_cap,
            label = "Hist. non-prem", color = "gray70",
            fontface = "bold", size = 3.2, hjust = 0) +
   scale_x_continuous(breaks = seq(1, 32, 2),
                      expand = expansion(mult = c(0.02, 0.25))) +
   scale_y_continuous(labels = function(x) paste0("$", x, "M")) +
   labs(
-    title = "Surplus Value: The Metric That Drives the Sharpe Ratio",
+    title = "Rookie Contract Surplus: The Cost-Controlled Advantage",
     subtitle = "Premium = QB/EDGE/OT/WR | Non-premium = TE/IOL/DL/LB/CB/S",
-    x = "Pick Number", y = "Predicted Surplus Value ($M)"
+    x = "Pick Number", y = "Predicted Rookie Surplus ($M)"
   ) +
   theme_minimal(base_size = 13)
 ```
 
 ```{r love-fair-value-narrative, results='asis'}
 love_at_10_av <- love_curve %>% filter(pick == 10) %>% pull(pred_av)
-love_at_10_pr <- love_curve %>% filter(pick == 10) %>% pull(pred_pr)
+love_at_10_rs <- love_curve %>% filter(pick == 10) %>% pull(pred_rs)
 prem_at_10_av <- premium_avg %>% filter(pick == 10) %>% pull(avg_av)
-prem_at_10_pr <- premium_avg %>% filter(pick == 10) %>% pull(avg_pr)
+prem_at_10_rs <- premium_avg %>% filter(pick == 10) %>% pull(avg_rs)
 nonprem_at_10_av <- non_premium_avg %>% filter(pick == 10) %>% pull(avg_av)
-nonprem_at_10_pr <- non_premium_avg %>% filter(pick == 10) %>% pull(avg_pr)
+nonprem_at_10_rs <- non_premium_avg %>% filter(pick == 10) %>% pull(avg_rs)
 
 cat(paste0(
   "Two metrics, two views of the same question.\n\n",
@@ -2003,13 +2009,13 @@ cat(paste0(
   } else {
     "Love projects higher career value than even the premium position average at every pick.\n\n"
   },
-  "**Surplus value** — the metric that actually feeds Article 1's Sharpe ratio — ",
+  "**Rookie contract surplus** — the cost-controlled advantage that drives Article 1's Sharpe ratio — ",
   "tells a different story. ",
-  "Love's predicted surplus at pick 10 is **$", round(love_at_10_pr * salary_cap, 1),
-  "M** vs **$", round(prem_at_10_pr * salary_cap, 1), "M** for the premium position average. ",
-  "The gap is **$", round((prem_at_10_pr - love_at_10_pr) * salary_cap, 1),
+  "Love's predicted rookie surplus at pick 10 is **$", round(love_at_10_rs * salary_cap, 1),
+  "M** vs **$", round(prem_at_10_rs * salary_cap, 1), "M** for the premium position average. ",
+  "The gap is **$", round((prem_at_10_rs - love_at_10_rs) * salary_cap, 1),
   "M** — and it's persistent. Even when career production is comparable, ",
-  "premium positions generate more total surplus through larger second contracts and cheaper replacement costs. ",
+  "premium positions generate more rookie surplus because free-agent replacements cost so much more. ",
   "This is why the Sharpe ratio says never draft an RB: the surplus math penalizes the position ",
   "regardless of the individual player.\n\n",
   "This is the Sharpe ratio's blind spot made visible. Career AV says Love is the best prospect in ",
