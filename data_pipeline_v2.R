@@ -530,10 +530,12 @@ ngs_prospects <- read_csv("data/ngs_prospect_scores_2025.csv", show_col_types = 
   mutate(
     CmbnScr = as.numeric(CmbnScr),
     AthleteScr = as.numeric(AthleteScr),
-    ProdScr = as.numeric(ProdScr)
+    ProdScr = as.numeric(ProdScr),
+    SizeScr = as.numeric(SizeScr)
   ) |>
   select(player = playerFullName, position, college = College,
-         cmbn_score = CmbnScr, athlete_score = AthleteScr, prod_score = ProdScr) |>
+         cmbn_score = CmbnScr, athlete_score = AthleteScr, prod_score = ProdScr,
+         size_score = SizeScr) |>
   mutate(
     # Normalize names using the same strategy as Article 1 pipeline
     name_norm = normalize_name(player),
@@ -563,10 +565,12 @@ ngs_historical <- read_csv("data/ngs_historical_scores.csv", show_col_types = FA
   mutate(
     CmbnScr = as.numeric(CmbnScr),
     AthleteScr = as.numeric(AthleteScr),
-    ProdScr = suppressWarnings(as.numeric(ProdScr))
+    ProdScr = suppressWarnings(as.numeric(ProdScr)),
+    SizeScr = suppressWarnings(as.numeric(SizeScr))
   ) |>
   select(player = playerFullName, position, college = College,
-         cmbn_score = CmbnScr, athlete_score = AthleteScr, prod_score = ProdScr) |>
+         cmbn_score = CmbnScr, athlete_score = AthleteScr, prod_score = ProdScr,
+         size_score = SizeScr) |>
   mutate(
     name_norm = normalize_name(player),
     pos_group = case_when(
@@ -624,7 +628,7 @@ cat(sprintf("  NGS blue chips: %d of %d matched players\n",
 blue_chip <- blue_chip |>
   left_join(
     ngs_blue_chip |>
-      select(pfr_player_id, cmbn_score, athlete_score, prod_score,
+      select(pfr_player_id, cmbn_score, athlete_score, prod_score, size_score,
              ngs_pctl, is_ngs_blue_chip),
     by = "pfr_player_id"
   )
