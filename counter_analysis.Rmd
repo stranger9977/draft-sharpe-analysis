@@ -1196,14 +1196,12 @@ Before we build models, it's worth understanding the inputs. NFL Next Gen Stats 
 
 The Prospect Score combines all three into a single number from 0 to 100. It's published before the draft, making it one of the few rigorous, position-adjusted prospect evaluations available to GMs in real time.
 
-### What Makes an Elite Prospect? A Pre-Draft Model
+### Predicting Career Value
 
-The scatter plots show a pattern. Can we quantify it? We built a logistic regression predicting whether a drafted player becomes elite (top 10% career AV at their position) using only information available before the draft: the Prospect Score, draft position, and position group.
+The scatter plots show a pattern. Can we quantify it? We trained a linear regression predicting weighted career AV from only information available before the draft: the Prospect Score, draft position, and position group. All models are trained on 2010-2019 and validated out-of-time on 2020-2022.
 
-```{r p-elite-model}
+```{r model-data-prep}
 # Modeling dataset: 2010-2022 with NGS scores and career outcomes
-# Join rookie_surplus from parquet (not in blue_chip)
-# Join component columns from parquet (not in blue_chip)
 parquet_components <- df %>%
   select(pfr_player_id, season, rookie_surplus, snap_ratio,
          second_apy_cap_pct, rookie_apy_cap_pct, fa_median_apy_cap_pct) %>%
@@ -1222,123 +1220,7 @@ model_data <- blue_chip %>%
 # Out-of-time split: train on 2010-2019, test on 2020-2022
 train_data <- model_data %>% filter(season <= 2019)
 test_data <- model_data %>% filter(season >= 2020)
-
-# Logistic regression: P(elite) from pre-draft features
-# Use log(pick) — draft value declines non-linearly
-elite_glm <- glm(is_elite ~ cmbn_score + log(pick) + pos_group,
-                  data = train_data, family = binomial)
-
-elite_summary <- broom::tidy(elite_glm) %>%
-  mutate(
-    odds_ratio = exp(estimate),
-    p_star = case_when(p.value < 0.001 ~ "***", p.value < 0.01 ~ "**",
-                       p.value < 0.05 ~ "*", TRUE ~ "")
-  )
-
-# Out-of-time test performance
-test_data$pred_elite <- predict(elite_glm, newdata = test_data, type = "response")
-
-# AUC via concordance
-pos_preds <- test_data$pred_elite[test_data$is_elite == 1]
-neg_preds <- test_data$pred_elite[test_data$is_elite == 0]
-if (length(pos_preds) > 0 && length(neg_preds) > 0) {
-  test_auc <- mean(outer(pos_preds, neg_preds, ">") + 0.5 * outer(pos_preds, neg_preds, "=="))
-} else {
-  test_auc <- NA
-}
-
-# Brier score
-test_brier <- mean((test_data$pred_elite - test_data$is_elite)^2)
 ```
-
-```{r p-elite-table, fig.height=5, fig.width=10}
-# Feature importance bar chart (odds ratios, log scale)
-elite_features <- elite_summary %>%
-  filter(term != "(Intercept)") %>%
-  mutate(
-    feature = str_replace(term, "pos_group", "") %>%
-      str_replace("cmbn_score", "Prospect Score") %>%
-      str_replace("log\\(pick\\)", "Log(Draft Pick)"),
-    feature = fct_reorder(feature, odds_ratio),
-    significant = p.value < 0.05,
-    direction = if_else(odds_ratio >= 1, "Increases odds", "Decreases odds")
-  )
-
-ggplot(elite_features, aes(x = odds_ratio, y = feature, fill = direction)) +
-  geom_col(alpha = 0.85, width = 0.7) +
-  geom_vline(xintercept = 1, linetype = "dashed", color = "gray40") +
-  geom_text(aes(label = paste0(round(odds_ratio, 2), "x",
-                                if_else(p.value < 0.001, " ***",
-                                  if_else(p.value < 0.01, " **",
-                                    if_else(p.value < 0.05, " *", ""))))),
-            hjust = if_else(elite_features$odds_ratio >= 1, -0.1, 1.1),
-            size = 3, fontface = "bold") +
-  scale_fill_manual(values = c("Increases odds" = "#2e7d32", "Decreases odds" = "#c62828")) +
-  scale_x_continuous(expand = expansion(mult = c(0.05, 0.15))) +
-  labs(
-    title = "What Predicts an Elite Career?",
-    subtitle = paste0("Odds ratios from logistic regression | Train: 2010-2019 | Test AUC: ",
-                      round(test_auc, 3), " | Brier: ", round(test_brier, 3)),
-    x = "Odds Ratio (1 = no effect)", y = NULL, fill = NULL
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(legend.position = "top")
-```
-
-```{r p-elite-love}
-# Love's features
-love_row <- data.frame(
-  cmbn_score = 94.3,
-  pick = 10,
-  pos_group = factor("RB", levels = levels(model_data$pos_group))
-)
-
-love_p_elite <- predict(elite_glm, newdata = love_row, type = "response")
-
-# P(elite) at each pick
-love_by_pick <- map_dfr(1:32, function(p) {
-  row <- love_row
-  row$pick <- p
-  tibble(pick = p, p_elite = predict(elite_glm, newdata = row, type = "response"))
-})
-```
-
-```{r p-elite-love-chart, fig.height=5, fig.width=8}
-ggplot(love_by_pick, aes(x = pick, y = p_elite)) +
-  geom_line(color = "#377EB8", linewidth = 1.2) +
-  geom_point(data = love_by_pick %>% filter(pick == 10),
-             color = "#377EB8", size = 4) +
-  geom_text(data = love_by_pick %>% filter(pick == 10),
-            aes(label = paste0(round(p_elite * 100, 1), "%")),
-            vjust = -1.5, color = "#377EB8", fontface = "bold", size = 4) +
-  scale_y_continuous(labels = percent_format()) +
-  scale_x_continuous(breaks = seq(1, 32, 2)) +
-  labs(
-    title = "Love's Predicted Probability of an Elite Career",
-    subtitle = "Logistic model: Prospect Score + log(draft pick) + position | Trained on 2010-2019",
-    x = "Draft Pick", y = "P(Elite)"
-  ) +
-  theme_minimal(base_size = 13)
-```
-
-```{r p-elite-narrative, results='asis'}
-cmbn_or <- elite_summary %>% filter(term == "cmbn_score") %>% pull(odds_ratio)
-cat(paste0(
-  "The logistic model — trained on 2010-2019 and validated on the 2020-2022 draft classes ",
-  "(AUC: ", round(test_auc, 3), ") — confirms what the scatter plots suggested: the Prospect Score and draft capital ",
-  "are the strongest predictors of elite career outcomes. Each additional point of Prospect Score ",
-  "multiplies the odds of an elite career by **", round(cmbn_or, 2),
-  "x**. Each pick later in the draft reduces them.\n\n",
-  "At pick 10, Love's predicted probability of an elite career is **",
-  round(love_by_pick$p_elite[love_by_pick$pick == 10] * 100, 1),
-  "%**. That's ", round(love_by_pick$p_elite[love_by_pick$pick == 10] / mean(model_data$is_elite), 1),
-  "x the base rate across all drafted players with NGS scores."
-))
-```
-
-### Predicting Career Value
-
-The logistic model tells us *whether* a player becomes elite. But how much career value can we expect? We trained a linear regression on the same pre-draft features — Prospect Score, log(draft pick), and position — to predict weighted career AV directly.
 
 ```{r career-av-model}
 # Linear model — uses log(pick) for non-linear draft value decay
@@ -2423,7 +2305,7 @@ Then we stress-tested it. And the model held up -- mostly. The positional hierar
 
 3. **Not all prospects are average.** Love's 94.3 Prospect Score ranks 5th among all RB prospects since 2010. Historical elite RBs with scores like his became great at dramatically higher rates than the position average. The model averages over all RBs. Love isn't average.
 
-4. **Pre-draft models confirm the exception.** Three models — all trained on 2010-2019 and validated out-of-time on 2020-2022 — agree: Love's Prospect Score profile predicts a meaningfully higher probability of an elite career than the positional average. His predicted career AV at pick 10 exceeds every non-RB prospect in the 2026 class. Even the risk-adjusted predicted Sharpe ratio — which penalizes RB for positional variance — shows a crossover point where Love becomes the better bet. The rookie surplus argument assumes all RBs are interchangeable. Love's predicted career trajectory says otherwise.
+4. **Pre-draft models confirm the exception.** Two models — both trained on 2010-2019 and validated out-of-time on 2020-2022 — agree: Love's Prospect Score profile predicts meaningfully higher career value than the positional average. His predicted career AV at pick 10 exceeds every non-RB prospect in the 2026 class. The component-based surplus model — which penalizes RB for positional variance — shows a crossover point where Love's upside beats premium alternatives. The rookie surplus argument assumes all RBs are interchangeable. Love's predicted career trajectory says otherwise.
 
 And then the numbers that tie it together: the career AV crossover shows Love outprojects every non-RB prospect in the 2026 class, while the surplus value model reveals a second crossover — Love's 90th-percentile outcome (a Gurley/CMC-level career) beats the premium position average starting at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`. That's the upside case: teams drafting after that point can bet on Love's ceiling and win the surplus math too.
 
@@ -2465,7 +2347,7 @@ The counter-arguments didn't destroy the model. They sharpened it. Here's what s
 
 **Roster needs:** A position is "filled" if the team had a starter who played above the hit threshold, earned a second contract above the free-agent replacement cost for the position, and was not on an expiring deal. A position is a "need" if it wasn't filled.
 
-**Predictive models:** Three models trained on players drafted 2010-2019 with Prospect Scores and career outcomes, validated out-of-time on the 2020-2022 classes. Features: Prospect Score, log(draft pick), and position group. Draft pick is log-transformed because draft value declines non-linearly. (1) Logistic regression predicting P(top 10% career AV). (2) Linear regression predicting weighted career AV. (3) Linear regression predicting snap-based player return (used to compute predicted Sharpe ratios). Athlete Score and Production Score (sub-components of Prospect Score) were tested but excluded — neither was significant when the composite Prospect Score was already in the model. Predicted Sharpe ratios combine model-predicted player return and P(elite) with historical positional variance and replacement values from Article 1.
+**Predictive models:** Two models trained on players drafted 2010-2019 with Prospect Scores and career outcomes, validated out-of-time on the 2020-2022 classes. Features: Prospect Score, log(draft pick), and position group. Draft pick is log-transformed because draft value declines non-linearly. (1) Linear regression predicting weighted career AV. (2) Component-based player return model using quantile regression (10th/50th/90th percentiles) for snap ratio and second contract value, combined with known FA replacement costs and CBA rookie wage scale. Athlete Score and Production Score (sub-components of Prospect Score) were tested but excluded — neither was significant when the composite Prospect Score was already in the model.
 
 **Part 1:** Full methodology and interactive charts at [stranger9977.github.io/draft-sharpe-analysis](https://stranger9977.github.io/draft-sharpe-analysis/)
 
