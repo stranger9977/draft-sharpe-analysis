@@ -25,6 +25,7 @@ library(nflplotR)
 library(nflreadr)
 library(ggrepel)
 library(gridExtra)
+library(quantreg)
 
 pos_colors <- c(
   "QB" = "#E41A1C", "RB" = "#377EB8", "WR" = "#4DAF4A", "TE" = "#984EA3",
@@ -1164,12 +1165,14 @@ The scatter plots show a pattern. Can we quantify it? We built a logistic regres
 ```{r p-elite-model}
 # Modeling dataset: 2010-2022 with NGS scores and career outcomes
 # Join rookie_surplus from parquet (not in blue_chip)
-rookie_surplus_data <- df %>%
-  select(pfr_player_id, season, rookie_surplus) %>%
+# Join component columns from parquet (not in blue_chip)
+parquet_components <- df %>%
+  select(pfr_player_id, season, rookie_surplus, snap_ratio,
+         second_apy_cap_pct, rookie_apy_cap_pct, fa_median_apy_cap_pct) %>%
   filter(!is.na(pfr_player_id))
 
 model_data <- blue_chip %>%
-  left_join(rookie_surplus_data, by = c("pfr_player_id", "season")) %>%
+  left_join(parquet_components, by = c("pfr_player_id", "season")) %>%
   filter(season >= 2010, season <= 2022,
          !is.na(cmbn_score), !is.na(car_av), !is.na(is_hit),
          pos_group %in% key_positions) %>%
@@ -1301,38 +1304,62 @@ av_lm_r2 <- summary(av_lm)$r.squared
 # Add predictions to test data for examples
 test_data$pred_av <- lm_test_pred
 
-# Rookie surplus models — separate for QB, premium (EDGE/OT/WR), and non-premium
-# Focuses on the cost-controlled advantage: the gap between rookie deal and FA replacement
-rs_train <- train_data %>% filter(!is.na(rookie_surplus))
-rs_test <- test_data %>% filter(!is.na(rookie_surplus))
+# Component-based player return model
+# Instead of predicting player_return directly, we assemble it from components:
+#   Player Return = Snap Ratio × (FA Cost - Rookie APY) × 4 + Second Contract
+# Two pieces are modeled (quantile regression), two are known.
 
-rs_lm_qb <- lm(rookie_surplus ~ cmbn_score + log(pick),
-                data = rs_train %>% filter(pos_group == "QB"))
-rs_lm_prem <- lm(rookie_surplus ~ cmbn_score + log(pick) + pos_group,
-                  data = rs_train %>% filter(pos_group %in% c("EDGE", "OT", "WR")))
-rs_lm_nonprem <- lm(rookie_surplus ~ cmbn_score + log(pick) + pos_group,
-                     data = rs_train %>% filter(!pos_group %in% c("QB", "EDGE", "OT", "WR")))
+# Known: FA replacement cost by position (from Article 1)
+fa_costs <- df %>%
+  filter(season >= 2010) %>%
+  group_by(pos_group) %>%
+  summarise(fa_cost = mean(fa_median_apy_cap_pct, na.rm = TRUE), .groups = "drop") %>%
+  deframe()
 
-# Helper: pick the right model based on position
-predict_rs <- function(newdata) {
-  preds <- numeric(nrow(newdata))
-  is_qb <- newdata$pos_group == "QB"
-  is_prem <- newdata$pos_group %in% c("EDGE", "OT", "WR")
-  if(any(is_qb)) preds[is_qb] <- predict(rs_lm_qb, newdata = newdata[is_qb, ])
-  if(any(is_prem)) preds[is_prem] <- predict(rs_lm_prem, newdata = newdata[is_prem, ])
-  if(any(!is_qb & !is_prem)) preds[!is_qb & !is_prem] <- predict(rs_lm_nonprem, newdata = newdata[!is_qb & !is_prem, ])
-  preds
+# Known: Rookie APY by pick (CBA-driven, averaged 2018+)
+rookie_apy <- df %>%
+  filter(season >= 2018, pick <= 32) %>%
+  group_by(pick) %>%
+  summarise(apy = mean(rookie_apy_cap_pct), .groups = "drop") %>%
+  deframe()
+
+# Quantile regression models at 10th, 50th, 90th percentiles
+taus <- c(0.1, 0.5, 0.9)
+sr_train <- train_data %>% filter(!is.na(snap_ratio))
+sc_train <- train_data %>% filter(!is.na(second_apy_cap_pct))
+
+# Snap ratio models
+sr_qr <- lapply(taus, function(t)
+  rq(snap_ratio ~ cmbn_score + log(pick) + pos_group, data = sr_train, tau = t))
+names(sr_qr) <- paste0("q", taus * 100)
+
+# Second contract models
+sc_qr <- lapply(taus, function(t)
+  rq(second_apy_cap_pct ~ cmbn_score + log(pick) + pos_group, data = sc_train, tau = t))
+names(sc_qr) <- paste0("q", taus * 100)
+
+# OLS snap ratio for R² reporting
+sr_lm <- lm(snap_ratio ~ cmbn_score + log(pick) + pos_group, data = sr_train)
+sr_r2 <- summary(sr_lm)$r.squared
+
+# Helper: assemble player return from components at a given quantile
+predict_pr_at <- function(newdata, quantile = "q50") {
+  snap_pred <- pmax(predict(sr_qr[[quantile]], newdata = newdata), 0)
+  sc_pred <- pmax(predict(sc_qr[[quantile]], newdata = newdata), 0)
+  fa <- fa_costs[as.character(newdata$pos_group)]
+  rk <- rookie_apy[as.character(newdata$pick)]
+  rookie_surplus <- snap_pred * (fa - rk) * 4
+  rookie_surplus + sc_pred
 }
 
-# Model fit stats
-rs_qb_r2 <- summary(rs_lm_qb)$r.squared
-rs_prem_r2 <- summary(rs_lm_prem)$r.squared
-rs_nonprem_r2 <- summary(rs_lm_nonprem)$r.squared
+# Default helper uses median
+predict_rs <- function(newdata) predict_pr_at(newdata, "q50")
 
-# Test performance (out-of-time: 2020-2022)
+# Test performance (out-of-time: 2020-2022, median)
+rs_test <- test_data %>% filter(!is.na(player_return), !is.na(snap_ratio), !is.na(second_apy_cap_pct))
 rs_test_pred <- predict_rs(rs_test)
-rs_test_r2 <- 1 - sum((rs_test$rookie_surplus - rs_test_pred)^2) /
-  sum((rs_test$rookie_surplus - mean(rs_train$rookie_surplus))^2)
+rs_test_r2 <- 1 - sum((rs_test$player_return - rs_test_pred)^2, na.rm = TRUE) /
+  sum((rs_test$player_return - mean(train_data$player_return, na.rm = TRUE))^2, na.rm = TRUE)
 ```
 
 ```{r career-av-coefficients, results='asis'}
@@ -1913,88 +1940,107 @@ Career AV tells us how good a player becomes. But Article 1's Sharpe ratio doesn
 
 Where rookie surplus = snap ratio × (FA replacement cost − rookie deal APY) × 4 years. A QB on a rookie deal saves ~10% of the cap per year vs free agency; an RB saves ~1.6%. Over four years, that difference alone is worth ~$90M in today's terms — before we even get to second contracts.
 
-Because these groups have fundamentally different surplus mechanics, we trained three separate models to predict rookie surplus — one for QBs (R² = `r round(rs_qb_r2, 3)`), one for premium positions (EDGE/OT/WR, R² = `r round(rs_prem_r2, 3)`), and one for non-premium positions (R² = `r round(rs_nonprem_r2, 3)`). Same features as before (Prospect Score + log(pick) + position), but separate slopes and intercepts for each group. Combined out-of-sample R² = `r round(rs_test_r2, 3)`. Translated to the 2026 salary cap ($275M), this gives us concrete dollar figures for the cost-controlled advantage at each pick.
+Instead of predicting player return as a single number, we decompose it into its components — two modeled, two known:
 
-```{r love-player-return, fig.height=6, fig.width=8}
-# Historical non-RB top prospects (2018-2022): predict their player return at each pick
-hist_top <- ngs_historical %>%
-  filter(season >= 2018, season <= 2022, !is.na(cmbn_score),
-         pos_group %in% key_positions, pos_group != "RB") %>%
-  group_by(season, pos_group) %>%
-  slice_max(cmbn_score, n = 1) %>%
-  ungroup()
+1. **Snap ratio** (quantile regression) — predicts how much a player will play from Prospect Score, draft position, and position. OLS R² = `r round(sr_r2, 3)`. This is what scouting grades should actually predict.
+2. **Second contract value** (quantile regression) — predicts the market's verdict after the rookie deal.
+3. **FA replacement cost** — known by position (QB = 14.6% of cap, RB = 6.0%, EDGE = 9.1%).
+4. **Rookie deal APY** — known by pick from the CBA rookie wage scale.
 
-hist_pr_curves <- map_dfr(1:32, function(p) {
-  map_dfr(1:nrow(hist_top), function(i) {
-    row <- data.frame(
-      cmbn_score = hist_top$cmbn_score[i],
-      pick = p,
-      pos_group = factor(hist_top$pos_group[i], levels = levels(model_data$pos_group))
-    )
-    tibble(pick = p, pos_group = hist_top$pos_group[i],
-           pred_rs = predict_rs(row))
-  })
+We use quantile regression at the 10th, 50th, and 90th percentiles for both modeled components. This lets us assemble floor, median, and ceiling outcomes for any prospect:
+
+> *Player Return = Snap Ratio × (FA Cost − Rookie APY) × 4 + Second Contract*
+
+Combined median out-of-sample R² = `r round(rs_test_r2, 3)`. Translated to the 2026 salary cap ($275M):
+
+```{r love-player-return, fig.height=7, fig.width=9}
+# Love's curve at 10th, 50th, 90th percentile outcomes
+love_range <- map_dfr(1:32, function(p) {
+  row <- data.frame(cmbn_score = 94.3, pick = p,
+                    pos_group = factor("RB", levels = levels(model_data$pos_group)))
+  tibble(pick = p,
+         q10 = predict_pr_at(row, "q10"),
+         q50 = predict_pr_at(row, "q50"),
+         q90 = predict_pr_at(row, "q90"))
 })
 
-hist_pr_premium <- hist_pr_curves %>%
+# 2026 premium avg (median outcomes for each prospect, then average)
+prem_median <- prospect_curves %>%
   filter(pos_group %in% premium_pos) %>%
   group_by(pick) %>%
   summarise(avg_rs = mean(pred_rs), .groups = "drop")
 
-hist_pr_nonprem <- hist_pr_curves %>%
-  filter(!pos_group %in% premium_pos) %>%
+# 2026 non-premium avg (median outcomes, excluding RB)
+nonprem_median <- prospect_curves %>%
+  filter(!pos_group %in% c(premium_pos, "RB")) %>%
   group_by(pick) %>%
   summarise(avg_rs = mean(pred_rs), .groups = "drop")
 
+# Offset labels to prevent overlap
+love_end <- love_range$q50[32] * salary_cap
+prem_end <- prem_median$avg_rs[32] * salary_cap
+nonprem_end <- nonprem_median$avg_rs[32] * salary_cap
+love_q90_end <- love_range$q90[32] * salary_cap
+love_q10_end <- love_range$q10[32] * salary_cap
+
+# Nudge overlapping labels
+label_y <- c(love_q90_end, prem_end, love_end, nonprem_end, love_q10_end)
+label_names <- c("Love Q90 (ceiling)", "2026 premium (median)",
+                 "Love Q50 (median)", "2026 non-premium (median)", "Love Q10 (floor)")
+label_colors <- c("#377EB8", "#c62828", "#377EB8", "#E67E22", "#377EB8")
+# Sort and spread if too close
+for(i in 2:length(label_y)) {
+  if(abs(label_y[i] - label_y[i-1]) < 2.5) {
+    label_y[i] <- label_y[i-1] - 2.5
+  }
+}
+
 ggplot() +
-  # Historical lines (gray dashed)
-  geom_line(data = hist_pr_premium, aes(x = pick, y = avg_rs * salary_cap),
-            color = "gray50", linewidth = 1, linetype = "dashed") +
-  geom_line(data = hist_pr_nonprem, aes(x = pick, y = avg_rs * salary_cap),
-            color = "gray70", linewidth = 1, linetype = "dashed") +
-  # 2026 non-premium avg (orange line)
-  geom_line(data = non_premium_avg, aes(x = pick, y = avg_rs * salary_cap),
-            color = "#E67E22", linewidth = 1.2) +
-  # 2026 premium avg (red line)
-  geom_line(data = premium_avg, aes(x = pick, y = avg_rs * salary_cap),
-            color = "#c62828", linewidth = 1.5) +
-  # Love's predicted player return (blue line)
-  geom_line(data = love_curve, aes(x = pick, y = pred_rs * salary_cap),
+  # Love's range band (Q10-Q90)
+  geom_ribbon(data = love_range,
+              aes(x = pick, ymin = q10 * salary_cap, ymax = q90 * salary_cap),
+              fill = "#377EB8", alpha = 0.15) +
+  # Love Q10 floor (dashed)
+  geom_line(data = love_range, aes(x = pick, y = q10 * salary_cap),
+            color = "#377EB8", linewidth = 0.8, linetype = "dashed") +
+  # Love Q90 ceiling (dashed)
+  geom_line(data = love_range, aes(x = pick, y = q90 * salary_cap),
+            color = "#377EB8", linewidth = 0.8, linetype = "dashed") +
+  # Love Q50 median (solid)
+  geom_line(data = love_range, aes(x = pick, y = q50 * salary_cap),
             color = "#377EB8", linewidth = 1.5) +
-  # Labels at right edge
-  annotate("text", x = 32.5, y = love_curve$pred_rs[32] * salary_cap,
-           label = "Love", color = "#377EB8",
-           fontface = "bold", size = 3.2, hjust = 0) +
-  annotate("text", x = 32.5, y = premium_avg$avg_rs[32] * salary_cap,
-           label = "2026 premium", color = "#c62828",
-           fontface = "bold", size = 3.2, hjust = 0) +
-  annotate("text", x = 32.5, y = non_premium_avg$avg_rs[32] * salary_cap,
-           label = "2026 non-prem", color = "#E67E22",
-           fontface = "bold", size = 3.2, hjust = 0) +
-  annotate("text", x = 32.5, y = hist_pr_premium$avg_rs[32] * salary_cap,
-           label = "Hist. premium", color = "gray50",
-           fontface = "bold", size = 3.2, hjust = 0) +
-  annotate("text", x = 32.5, y = hist_pr_nonprem$avg_rs[32] * salary_cap,
-           label = "Hist. non-prem", color = "gray70",
-           fontface = "bold", size = 3.2, hjust = 0) +
+  # 2026 premium avg median (red)
+  geom_line(data = prem_median, aes(x = pick, y = avg_rs * salary_cap),
+            color = "#c62828", linewidth = 1.5) +
+  # 2026 non-premium avg median (orange)
+  geom_line(data = nonprem_median, aes(x = pick, y = avg_rs * salary_cap),
+            color = "#E67E22", linewidth = 1.2) +
+  # Labels
+  annotate("text", x = 32.5, y = label_y[1], label = label_names[1],
+           color = label_colors[1], fontface = "bold", size = 3, hjust = 0) +
+  annotate("text", x = 32.5, y = label_y[2], label = label_names[2],
+           color = label_colors[2], fontface = "bold", size = 3, hjust = 0) +
+  annotate("text", x = 32.5, y = label_y[3], label = label_names[3],
+           color = label_colors[3], fontface = "bold", size = 3, hjust = 0) +
+  annotate("text", x = 32.5, y = label_y[4], label = label_names[4],
+           color = label_colors[4], fontface = "bold", size = 3, hjust = 0) +
+  annotate("text", x = 32.5, y = label_y[5], label = label_names[5],
+           color = label_colors[5], fontface = "bold", size = 3, hjust = 0) +
   scale_x_continuous(breaks = seq(1, 32, 2),
-                     expand = expansion(mult = c(0.02, 0.25))) +
-  scale_y_continuous(labels = function(x) paste0("$", x, "M")) +
+                     expand = expansion(mult = c(0.02, 0.30))) +
+  scale_y_continuous(labels = function(x) paste0("$", round(x), "M")) +
   labs(
-    title = "Rookie Contract Surplus: The Cost-Controlled Advantage",
-    subtitle = "Premium = QB/EDGE/OT/WR | Non-premium = TE/IOL/DL/LB/CB/S",
-    x = "Pick Number", y = "Predicted Rookie Surplus ($M)"
+    title = "Love's Projected Player Return: Floor to Ceiling",
+    subtitle = "Blue band = Love's Q10-Q90 range | Red = 2026 premium median | Orange = 2026 non-premium median",
+    x = "Pick Number", y = "Projected Player Return ($M)"
   ) +
   theme_minimal(base_size = 13)
 ```
 
 ```{r love-fair-value-narrative, results='asis'}
 love_at_10_av <- love_curve %>% filter(pick == 10) %>% pull(pred_av)
-love_at_10_rs <- love_curve %>% filter(pick == 10) %>% pull(pred_rs)
 prem_at_10_av <- premium_avg %>% filter(pick == 10) %>% pull(avg_av)
-prem_at_10_rs <- premium_avg %>% filter(pick == 10) %>% pull(avg_rs)
 nonprem_at_10_av <- non_premium_avg %>% filter(pick == 10) %>% pull(avg_av)
-nonprem_at_10_rs <- non_premium_avg %>% filter(pick == 10) %>% pull(avg_rs)
 
 cat(paste0(
   "Two metrics, two views of the same question.\n\n",
@@ -2009,13 +2055,13 @@ cat(paste0(
   } else {
     "Love projects higher career value than even the premium position average at every pick.\n\n"
   },
-  "**Rookie contract surplus** — the cost-controlled advantage that drives Article 1's Sharpe ratio — ",
+  "**Player return** — the assembled surplus value that drives Article 1's Sharpe ratio — ",
   "tells a different story. ",
-  "Love's predicted rookie surplus at pick 10 is **$", round(love_at_10_rs * salary_cap, 1),
-  "M** vs **$", round(prem_at_10_rs * salary_cap, 1), "M** for the premium position average. ",
-  "The gap is **$", round((prem_at_10_rs - love_at_10_rs) * salary_cap, 1),
+  "Love's median projected return at pick 10 is **$", round(love_range$q50[10] * salary_cap, 1),
+  "M** vs **$", round(prem_median$avg_rs[10] * salary_cap, 1), "M** for the premium position average. ",
+  "The gap is **$", round((prem_median$avg_rs[10] - love_range$q50[10]) * salary_cap, 1),
   "M** — and it's persistent. Even when career production is comparable, ",
-  "premium positions generate more rookie surplus because free-agent replacements cost so much more. ",
+  "premium positions generate more surplus because free-agent replacements cost so much more. ",
   "This is why the Sharpe ratio says never draft an RB: the surplus math penalizes the position ",
   "regardless of the individual player.\n\n",
   "This is the Sharpe ratio's blind spot made visible. Career AV says Love is the best prospect in ",
