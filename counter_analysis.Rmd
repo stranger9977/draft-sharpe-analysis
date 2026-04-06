@@ -2227,11 +2227,101 @@ teams_needing_rb_2026 <- rb_table %>% filter(status == "Need") %>% pull(team)
 
 Everything we've built in this article converges on a single question. Which teams are in the best position to draft Jeremiyah Love?
 
-There's one more factor the surplus math can't see: **RBs peak early and decline fast.** The typical RB age curve peaks around 24-26 — earlier than any other offensive position. That's a double-edged sword. On one hand, you get immediate production on the rookie deal. On the other, the window is short. Teams picking in the top 10 are usually rebuilding. By the time they're competitive, the RB's best years may already be behind him. Teams picking later in the first round are closer to contention — they can put Love's peak years to use immediately. This is another reason the math points to pick `r if(!is.na(upside_fair_value)) upside_fair_value else 14` and beyond.
+There's one more factor the surplus math can't see: **RBs peak early and decline fast.**
+
+```{r rb-age-curve, fig.height=5, fig.width=9, message=FALSE, warning=FALSE}
+# Build age curves from snap count data
+library(nflreadr)
+
+rosters_age <- load_rosters(2012:2024) %>%
+  select(season, pfr_id, full_name, position, birth_date) %>%
+  distinct() %>%
+  filter(!is.na(birth_date), !is.na(pfr_id)) %>%
+  mutate(age = floor(as.numeric(difftime(as.Date(paste0(season, "-09-01")), birth_date, units = "days")) / 365.25))
+
+season_snaps <- load_snap_counts(2012:2024) %>%
+  filter(game_type == "REG") %>%
+  group_by(pfr_player_id, player, position, season) %>%
+  summarise(avg_off_pct = mean(offense_pct, na.rm = TRUE),
+            avg_def_pct = mean(defense_pct, na.rm = TRUE),
+            games = n(), .groups = "drop") %>%
+  rename(snap_position = position)
+
+snap_pos_map <- c("RB" = "RB", "FB" = "RB", "WR" = "WR", "QB" = "QB", "TE" = "TE",
+                  "T" = "OT", "G" = "IOL", "C" = "IOL",
+                  "DE" = "EDGE", "OLB" = "EDGE", "DT" = "DL", "NT" = "DL",
+                  "CB" = "CB", "DB" = "CB", "SS" = "S", "FS" = "S", "S" = "S",
+                  "ILB" = "LB", "MLB" = "LB", "LB" = "LB")
+
+snap_joined <- season_snaps %>%
+  inner_join(rosters_age %>% select(season, pfr_id, age),
+             by = c("pfr_player_id" = "pfr_id", "season"),
+             relationship = "many-to-many") %>%
+  distinct(pfr_player_id, season, .keep_all = TRUE) %>%
+  mutate(pos_group = snap_pos_map[snap_position]) %>%
+  filter(!is.na(pos_group), age >= 22, age <= 33, games >= 4) %>%
+  mutate(snap_pct = if_else(pos_group %in% c("RB", "WR", "QB", "TE", "OT", "IOL"),
+                            avg_off_pct, avg_def_pct))
+
+# Filter to players who were starters at some point
+ever_starter <- snap_joined %>%
+  group_by(pfr_player_id, pos_group) %>%
+  filter(max(snap_pct) >= 0.6) %>%
+  ungroup()
+
+# Normalize each player to their own peak
+peak_data <- ever_starter %>%
+  group_by(pfr_player_id) %>%
+  mutate(peak_snap = max(snap_pct), pct_of_peak = snap_pct / peak_snap) %>%
+  ungroup()
+
+show_positions <- c("RB", "WR", "QB", "OT", "EDGE")
+age_curves <- peak_data %>%
+  filter(pos_group %in% show_positions) %>%
+  group_by(pos_group, age) %>%
+  summarise(avg_pct_peak = mean(pct_of_peak, na.rm = TRUE), n = n(), .groups = "drop") %>%
+  filter(n >= 20)
+
+# Find peak age per position
+peak_ages <- age_curves %>% group_by(pos_group) %>% slice_max(avg_pct_peak, n = 1)
+
+pos_colors <- c("RB" = "#377EB8", "WR" = "#E67E22", "QB" = "#c62828",
+                "OT" = "#66BB6A", "EDGE" = "#9C27B0")
+
+ggplot(age_curves, aes(x = age, y = avg_pct_peak, color = pos_group)) +
+  geom_line(linewidth = 1.5) +
+  geom_point(data = peak_ages, size = 4) +
+  scale_color_manual(values = pos_colors, name = "Position") +
+  scale_y_continuous(labels = scales::percent, limits = c(0.55, 1.0)) +
+  scale_x_continuous(breaks = 22:33) +
+  labs(
+    title = "The RB Clock: Playing Time Relative to Peak, by Position",
+    subtitle = "NFL starters 2012-2024 | Each player normalized to their own peak season",
+    x = "Age", y = "% of Peak Playing Time"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top")
+```
+
+```{r rb-age-narrative, results='asis'}
+fair_value_pick <- if(!is.na(upside_fair_value)) upside_fair_value else 32
+
+rb_peak <- peak_ages %>% filter(pos_group == "RB") %>% pull(age)
+wr_peak <- peak_ages %>% filter(pos_group == "WR") %>% pull(age)
+qb_peak <- peak_ages %>% filter(pos_group == "QB") %>% pull(age)
+
+cat(paste0(
+  "RBs peak at **", rb_peak, "** and fall off a cliff. ",
+  "QBs and WRs sustain their playing time deep into their late 20s and early 30s. ",
+  "This creates a draft timing problem: teams picking in the top 10 are usually rebuilding. ",
+  "Draft an RB at 22 when your team isn't competitive, and by the time you're contending, ",
+  "you've burned the best years. Teams picking later — **pick ", fair_value_pick,
+  " and beyond** — are closer to contention. They can put Love's peak years to use immediately. ",
+  "That's not just a surplus argument. It's a roster construction argument."
+))
+```
 
 ```{r love-verdict, results='asis'}
-# The upside fair value (pick where Q90 crosses premium surplus) is the key cutoff
-fair_value_pick <- if(!is.na(upside_fair_value)) upside_fair_value else 32
 
 # Combine: teams that need RB + their draft pick + fair value zone
 love_fits <- rb_table %>%
@@ -2242,46 +2332,46 @@ love_fits <- rb_table %>%
   ) %>%
   arrange(desc(in_fair_zone), pick)
 
-# Best fits: need RB AND at/after the upside crossover
 best_fits <- love_fits %>% filter(in_fair_zone)
 early_fits <- love_fits %>% filter(!in_fair_zone)
 
 cat(paste0(
-  "Love's 90th-percentile surplus outcome — a Gurley/CMC-level career — crosses the premium position ",
-  "average at **pick ", fair_value_pick, "**. Before that, the surplus math favors premium positions even ",
-  "against Love's ceiling. After it, Love's upside beats premium alternatives on the Sharpe ratio's own terms.\n\n",
-  "We score each first-round team on three factors:\n\n",
-  "1. **Roster need:** Does the team lack a starter-level RB?\n",
-  "2. **Pick value:** Is their pick at or after **pick ", fair_value_pick, "**, where Love's upside case beats premium surplus?\n",
-  "3. **Class context:** 2026 is a thin RB class with Love as the only Elite prospect.\n\n"
+  "So the picture comes into focus. Love's ceiling crosses the premium surplus line at **pick ",
+  fair_value_pick, "**. RBs peak early and decline fast. And nine teams need a running back.\n\n"
 ))
 
 if(nrow(best_fits) > 0) {
-  cat(paste0("**Best fits (need RB + pick ", fair_value_pick, "+):**\n\n"))
+  cat(paste0(
+    "**The sweet spot — teams that need an RB and pick at ", fair_value_pick, " or later:**\n\n"
+  ))
   for(i in 1:nrow(best_fits)) {
     cat(paste0("- **", best_fits$team[i], " (pick ", best_fits$pick[i], "):** ",
-               "RB room: ", best_fits$rb1[i], ", ", best_fits$rb2[i], ", ", best_fits$rb3[i], "\n"))
+               best_fits$rb1[i], ", ", best_fits$rb2[i], ", ", best_fits$rb3[i], "\n"))
   }
-  cat("\n")
+  cat(paste0(
+    "\nThese teams check every box. They need a back, they pick where the upside math works, ",
+    "and they're close enough to contention to use Love's peak years.\n\n"
+  ))
 }
 
 if(nrow(early_fits) > 0) {
-  cat(paste0("**Need RB but picking before ", fair_value_pick, ":**\n\n"))
-  for(i in 1:nrow(early_fits)) {
-    r <- early_fits[i, ]
-    cat(paste0("- **", r$team, " (pick ", r$pick, "):** Surplus math favors premium positions here. ",
-               "The model says take EDGE/OT/WR — but Love's career AV still projects above the premium average. ",
-               "RB room: ", r$rb1, ", ", r$rb2, ", ", r$rb3, "\n"))
-  }
-  cat("\n")
+  early_teams <- paste0(early_fits$team, " (", early_fits$pick, ")")
+  cat(paste0(
+    "**The harder call — ", paste(early_teams, collapse = ", "), ":**\n\n",
+    "These teams need an RB but pick before ", fair_value_pick,
+    ", where the surplus math still favors premium positions. Love's career AV projects above ",
+    "the premium average at every pick — but the Sharpe ratio's framework says the opportunity cost ",
+    "of passing on EDGE/OT/WR talent is too high this early. If you're picking here, you're betting ",
+    "on career production over cap efficiency. It's defensible. But it's a bet.\n\n"
+  ))
 }
 
 # Teams that DON'T need RB
 filled_r1 <- rb_table %>%
   filter(!str_detect(status, "Need"), !is.na(pick))
 cat(paste0(
-  "**Everyone else:** ", nrow(filled_r1), " first-round teams already have a productive RB. ",
-  "For them, the Sharpe model's advice stands — draft a premium position.\n"
+  "The other ", nrow(filled_r1), " first-round teams already have a productive RB. ",
+  "For them, the Sharpe model's advice is unchanged: draft a premium position."
 ))
 ```
 
