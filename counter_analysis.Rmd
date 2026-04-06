@@ -2230,89 +2230,76 @@ Everything we've built in this article converges on a single question. Which tea
 There's one more factor the surplus math can't see: **RBs peak early and decline fast.**
 
 ```{r rb-age-curve, fig.height=5, fig.width=9, message=FALSE, warning=FALSE}
-# Build experience curves from snap count data + draft year from parquet
+# Build production curves from fantasy points per game (skill positions)
 library(nflreadr)
 
-season_snaps <- load_snap_counts(2012:2024) %>%
-  filter(game_type == "REG") %>%
-  group_by(pfr_player_id, player, position, season) %>%
-  summarise(avg_off_pct = mean(offense_pct, na.rm = TRUE),
-            avg_def_pct = mean(defense_pct, na.rm = TRUE),
-            games = n(), .groups = "drop") %>%
-  rename(snap_position = position)
+# Seasonal fantasy points per game
+season_fp <- load_player_stats(2012:2024) %>%
+  filter(season_type == "REG", position_group %in% c("QB", "RB", "WR", "TE")) %>%
+  group_by(player_id, player_display_name, position, position_group, season) %>%
+  summarise(total_fp = sum(fantasy_points, na.rm = TRUE),
+            games = n_distinct(week), .groups = "drop") %>%
+  filter(games >= 4) %>%
+  mutate(fp_per_game = total_fp / games)
 
-snap_pos_map <- c("RB" = "RB", "FB" = "RB", "WR" = "WR", "QB" = "QB", "TE" = "TE",
-                  "T" = "OT", "G" = "IOL", "C" = "IOL",
-                  "DE" = "EDGE", "OLB" = "EDGE", "DT" = "DL", "NT" = "DL",
-                  "CB" = "CB", "DB" = "CB", "SS" = "S", "FS" = "S", "S" = "S",
-                  "ILB" = "LB", "MLB" = "LB", "LB" = "LB")
+# Map to our pos groups
+fp_pos_map <- c("QB" = "QB", "RB" = "RB", "WR" = "WR", "TE" = "TE")
+season_fp <- season_fp %>%
+  mutate(pos_group = fp_pos_map[position])
 
-# Get draft year + round from parquet
+# Get draft year + round — join via gsis_id (player_id in nflreadr = gsis_id)
 draft_info <- df %>%
-  select(pfr_player_id, season, round) %>%
+  select(gsis_id, season, round) %>%
   rename(draft_season = season, draft_round = round) %>%
-  filter(!is.na(pfr_player_id)) %>%
-  distinct(pfr_player_id, .keep_all = TRUE)
+  filter(!is.na(gsis_id)) %>%
+  distinct(gsis_id, .keep_all = TRUE)
 
-snap_joined <- season_snaps %>%
-  inner_join(draft_info, by = "pfr_player_id") %>%
-  mutate(
-    pos_group = snap_pos_map[snap_position],
-    years_exp = season - draft_season + 1  # Year 1 = rookie season
-  ) %>%
-  filter(!is.na(pos_group), years_exp >= 1, years_exp <= 12, games >= 4) %>%
-  mutate(snap_pct = if_else(pos_group %in% c("RB", "WR", "QB", "TE", "OT", "IOL"),
-                            avg_off_pct, avg_def_pct))
+fp_joined <- season_fp %>%
+  inner_join(draft_info, by = c("player_id" = "gsis_id")) %>%
+  mutate(years_exp = season - draft_season + 1) %>%
+  filter(years_exp >= 1, years_exp <= 12)
 
-# Filter to players who were starters at some point
-ever_starter <- snap_joined %>%
-  group_by(pfr_player_id, pos_group) %>%
-  filter(max(snap_pct) >= 0.6) %>%
+# Filter to players who were productive at some point (top-24 weekly scorer at least once)
+ever_productive <- fp_joined %>%
+  group_by(player_id, pos_group) %>%
+  filter(max(fp_per_game) >= 8) %>%  # ~starter-level production
+
   ungroup()
 
-# Normalize each player to their own peak
-peak_data <- ever_starter %>%
-  group_by(pfr_player_id) %>%
-  mutate(peak_snap = max(snap_pct), pct_of_peak = snap_pct / peak_snap) %>%
+# Normalize each player to their own peak FP/G season
+peak_data <- ever_productive %>%
+  group_by(player_id) %>%
+  mutate(peak_fpg = max(fp_per_game), pct_of_peak = fp_per_game / peak_fpg) %>%
   ungroup()
 
-# Group positions: QB, Premium (EDGE/OT/WR), Non-Premium (all others except RB/QB), RB
+# All positions chart
 grouped_curves <- peak_data %>%
-  filter(!is.na(pos_group)) %>%
-  mutate(pos_bucket = case_when(
-    pos_group == "QB" ~ "QB",
-    pos_group == "RB" ~ "RB",
-    pos_group %in% c("EDGE", "OT", "WR") ~ "Premium (EDGE/OT/WR)",
-    TRUE ~ "Non-Premium (CB/DL/IOL/LB/S/TE)"
-  )) %>%
-  group_by(pos_bucket, years_exp) %>%
+  group_by(pos_group, years_exp) %>%
   summarise(avg_pct_peak = mean(pct_of_peak, na.rm = TRUE), n = n(), .groups = "drop") %>%
-  filter(n >= 15)
+  filter(n >= 10)
 
-peak_yrs <- grouped_curves %>% group_by(pos_bucket) %>% slice_max(avg_pct_peak, n = 1)
+peak_yrs <- grouped_curves %>% group_by(pos_group) %>% slice_max(avg_pct_peak, n = 1)
 
-bucket_colors <- c("QB" = "#c62828", "RB" = "#377EB8",
-                    "Premium (EDGE/OT/WR)" = "#4CAF50",
-                    "Non-Premium (CB/DL/IOL/LB/S/TE)" = "#9E9E9E")
+pos_colors_curve <- c("QB" = "#c62828", "RB" = "#377EB8", "WR" = "#4CAF50", "TE" = "#984EA3")
 
-ggplot(grouped_curves, aes(x = years_exp, y = avg_pct_peak, color = pos_bucket)) +
+ggplot(grouped_curves, aes(x = years_exp, y = avg_pct_peak, color = pos_group)) +
   geom_line(linewidth = 1.8) +
   geom_point(data = peak_yrs, size = 5) +
-  scale_color_manual(values = bucket_colors, name = "") +
-  scale_y_continuous(labels = scales::percent, limits = c(0.55, 1.0)) +
+  scale_color_manual(values = pos_colors_curve, name = "") +
+  scale_y_continuous(labels = scales::percent, limits = c(0.4, 1.0)) +
   scale_x_continuous(breaks = 1:12) +
   labs(
-    title = "The RB Clock: Playing Time Relative to Peak",
-    subtitle = "NFL starters drafted 2010-2022 | Each player normalized to their own peak season",
-    x = "Years of Experience", y = "% of Peak Playing Time"
+    title = "The RB Clock: Production Relative to Peak",
+    subtitle = "Fantasy points per game, normalized to each player's peak | Drafted 2010-2022, min 4 games/season",
+    x = "Years of Experience", y = "% of Peak Production"
   ) +
   theme_minimal(base_size = 13) +
   theme(legend.position = "top",
-        legend.text = element_text(size = 11))
+        legend.text = element_text(size = 12))
 ```
 
 ```{r rb-age-curve-by-round, fig.height=9, fig.width=10, message=FALSE, warning=FALSE}
-# Facet by draft round using years of experience
+# Facet by draft round
 peak_with_round <- peak_data %>%
   mutate(
     round_label = case_when(
@@ -2321,57 +2308,48 @@ peak_with_round <- peak_data %>%
       draft_round == 3 ~ "Round 3",
       TRUE ~ "Rounds 4-7"
     ),
-    round_label = factor(round_label, levels = c("Round 1", "Round 2", "Round 3", "Rounds 4-7")),
-    pos_bucket = case_when(
-      pos_group == "QB" ~ "QB",
-      pos_group == "RB" ~ "RB",
-      pos_group %in% c("EDGE", "OT", "WR") ~ "Premium",
-      TRUE ~ "Non-Premium"
-    )
+    round_label = factor(round_label, levels = c("Round 1", "Round 2", "Round 3", "Rounds 4-7"))
   )
 
 curves_by_round <- peak_with_round %>%
-  group_by(pos_bucket, round_label, years_exp) %>%
+  group_by(pos_group, round_label, years_exp) %>%
   summarise(avg_pct_peak = mean(pct_of_peak, na.rm = TRUE), n = n(), .groups = "drop") %>%
   filter(n >= 5)
 
 peaks_by_round <- curves_by_round %>%
-  group_by(pos_bucket, round_label) %>%
+  group_by(pos_group, round_label) %>%
   slice_max(avg_pct_peak, n = 1)
-
-round_bucket_colors <- c("QB" = "#c62828", "RB" = "#377EB8",
-                          "Premium" = "#4CAF50", "Non-Premium" = "#9E9E9E")
 
 # Round 1 — large hero chart
 r1_data <- curves_by_round %>% filter(round_label == "Round 1")
 r1_peaks <- peaks_by_round %>% filter(round_label == "Round 1")
 
-p_r1 <- ggplot(r1_data, aes(x = years_exp, y = avg_pct_peak, color = pos_bucket)) +
+p_r1 <- ggplot(r1_data, aes(x = years_exp, y = avg_pct_peak, color = pos_group)) +
   geom_line(linewidth = 1.8) +
   geom_point(data = r1_peaks, size = 5) +
-  scale_color_manual(values = round_bucket_colors, name = "") +
-  scale_y_continuous(labels = scales::percent, limits = c(0.4, 1.0)) +
+  scale_color_manual(values = pos_colors_curve, name = "") +
+  scale_y_continuous(labels = scales::percent, limits = c(0.3, 1.0)) +
   scale_x_continuous(breaks = 1:12) +
   labs(
     title = "Round 1 Picks: RBs Peak Early, Decline Fast",
-    subtitle = "Playing time relative to peak | First-round picks only",
-    x = NULL, y = "% of Peak Playing Time"
+    subtitle = "Fantasy points per game relative to peak | First-round picks only",
+    x = NULL, y = "% of Peak Production"
   ) +
   theme_minimal(base_size = 13) +
-  theme(legend.position = "top", legend.text = element_text(size = 11))
+  theme(legend.position = "top", legend.text = element_text(size = 12))
 
 # Rounds 2-3 and 4-7 — smaller panels below
 later_data <- curves_by_round %>% filter(round_label != "Round 1")
 later_peaks <- peaks_by_round %>% filter(round_label != "Round 1")
 
-p_later <- ggplot(later_data, aes(x = years_exp, y = avg_pct_peak, color = pos_bucket)) +
+p_later <- ggplot(later_data, aes(x = years_exp, y = avg_pct_peak, color = pos_group)) +
   geom_line(linewidth = 1.2) +
   geom_point(data = later_peaks, size = 3) +
   facet_wrap(~round_label, ncol = 3) +
-  scale_color_manual(values = round_bucket_colors, name = "") +
-  scale_y_continuous(labels = scales::percent, limits = c(0.4, 1.0)) +
+  scale_color_manual(values = pos_colors_curve, name = "") +
+  scale_y_continuous(labels = scales::percent, limits = c(0.3, 1.0)) +
   scale_x_continuous(breaks = seq(1, 12, 2)) +
-  labs(x = "Years of Experience", y = "% of Peak Playing Time") +
+  labs(x = "Years of Experience", y = "% of Peak Production") +
   theme_minimal(base_size = 11) +
   theme(legend.position = "none",
         strip.text = element_text(face = "bold", size = 11))
@@ -2382,13 +2360,13 @@ gridExtra::grid.arrange(p_r1, p_later, nrow = 2, heights = c(2, 1))
 ```{r rb-age-narrative, results='asis'}
 fair_value_pick <- if(!is.na(upside_fair_value)) upside_fair_value else 32
 
-rb_peak_yr <- peak_yrs %>% filter(pos_bucket == "RB") %>% pull(years_exp)
-qb_peak_yr <- peak_yrs %>% filter(pos_bucket == "QB") %>% pull(years_exp)
-prem_peak_yr <- peak_yrs %>% filter(pos_bucket == "Premium (EDGE/OT/WR)") %>% pull(years_exp)
+rb_peak_yr <- peak_yrs %>% filter(pos_group == "RB") %>% pull(years_exp)
+qb_peak_yr <- peak_yrs %>% filter(pos_group == "QB") %>% pull(years_exp)
+wr_peak_yr <- peak_yrs %>% filter(pos_group == "WR") %>% pull(years_exp)
 
 cat(paste0(
   "RBs peak in **year ", rb_peak_yr, "** and fall off a cliff. ",
-  "QBs and premium positions sustain their playing time well past year ", prem_peak_yr, ". ",
+  "QBs and WRs sustain production well past year ", wr_peak_yr, ". ",
   "This creates a draft timing problem: teams picking in the top 10 are usually rebuilding. ",
   "Draft an RB when your team isn't competitive, and by the time you're contending, ",
   "you've burned the best years. Teams picking later — **pick ", fair_value_pick,
