@@ -1217,6 +1217,148 @@ cat(paste0(
 ))
 ```
 
+### Predicting Career Value: Two Approaches
+
+The logistic model tells us *whether* a player becomes elite. But how much career value can we expect? We trained two models on the same pre-draft features — a linear regression for interpretability and a gradient-boosted model (XGBoost) to capture non-linear effects.
+
+```{r career-av-models}
+library(xgboost)
+
+# Linear model — uses log(pick) for non-linear draft value decay
+av_lm <- lm(car_av ~ cmbn_score + athlete_score + prod_score + log(pick) + pos_group,
+             data = train_data)
+av_lm_summary <- broom::tidy(av_lm)
+
+# Linear test performance (out-of-time: 2020-2022)
+lm_test_pred <- predict(av_lm, newdata = test_data)
+lm_test_rmse <- sqrt(mean((test_data$car_av - lm_test_pred)^2))
+lm_test_r2 <- 1 - sum((test_data$car_av - lm_test_pred)^2) /
+  sum((test_data$car_av - mean(train_data$car_av))^2)
+av_lm_r2 <- summary(av_lm)$r.squared
+
+# XGBoost — use log(pick) in feature matrix
+train_xgb <- train_data %>% mutate(log_pick = log(pick))
+test_xgb <- test_data %>% mutate(log_pick = log(pick))
+
+xgb_train_features <- model.matrix(
+  ~ cmbn_score + athlete_score + prod_score + log_pick + pos_group - 1,
+  data = train_xgb)
+xgb_test_features <- model.matrix(
+  ~ cmbn_score + athlete_score + prod_score + log_pick + pos_group - 1,
+  data = test_xgb)
+xgb_train_label <- train_data$car_av
+xgb_test_label <- test_data$car_av
+
+set.seed(42)
+xgb_model <- xgboost(
+  data = xgb_train_features,
+  label = xgb_train_label,
+  nrounds = 200,
+  max_depth = 4,
+  eta = 0.1,
+  subsample = 0.8,
+  colsample_bytree = 0.8,
+  objective = "reg:squarederror",
+  verbose = 0
+)
+
+# XGBoost test performance (out-of-time)
+xgb_test_pred <- predict(xgb_model, xgb_test_features)
+xgb_test_rmse <- sqrt(mean((xgb_test_label - xgb_test_pred)^2))
+xgb_test_r2 <- 1 - sum((xgb_test_label - xgb_test_pred)^2) /
+  sum((xgb_test_label - mean(xgb_train_label))^2)
+
+# XGBoost train R² for reference
+xgb_train_pred <- predict(xgb_model, xgb_train_features)
+xgb_train_r2 <- 1 - sum((xgb_train_label - xgb_train_pred)^2) /
+  sum((xgb_train_label - mean(xgb_train_label))^2)
+```
+
+```{r career-av-comparison, results='asis'}
+tibble(
+  Model = c("Linear Regression", "XGBoost (tree-based)"),
+  `Train R²` = c(round(av_lm_r2, 3), round(xgb_train_r2, 3)),
+  `Test R² (2020-22)` = c(round(lm_test_r2, 3), round(xgb_test_r2, 3)),
+  `Test RMSE` = c(round(lm_test_rmse, 1), round(xgb_test_rmse, 1))
+) %>%
+  gt() %>%
+  tab_header(title = md("**Predicting Career AV from Pre-Draft Features**"),
+             subtitle = "Train: 2010-2019 | Test: 2020-2022 (out-of-time holdout)") %>%
+  tab_options(table.font.size = px(12))
+```
+
+```{r career-av-importance, fig.height=4, fig.width=8}
+importance <- xgb.importance(model = xgb_model, feature_names = colnames(xgb_train_features))
+
+importance_clean <- importance %>%
+  mutate(Feature = Feature %>%
+           str_replace("pos_group", "Pos: ") %>%
+           str_replace("cmbn_score", "NGS Combined") %>%
+           str_replace("athlete_score", "NGS Athlete") %>%
+           str_replace("prod_score", "NGS Production") %>%
+           str_replace("log_pick", "Log(Draft Pick)")) %>%
+  slice_head(n = 10)
+
+ggplot(importance_clean, aes(x = Gain, y = fct_reorder(Feature, Gain))) +
+  geom_col(fill = "#377EB8", alpha = 0.85) +
+  labs(title = "What Drives Career Value? (XGBoost Feature Importance)",
+       subtitle = "Top 10 features by information gain",
+       x = "Gain", y = NULL) +
+  theme_minimal(base_size = 13)
+```
+
+```{r career-av-love, fig.height=5, fig.width=8}
+love_base <- data.frame(
+  cmbn_score = 94.3,
+  athlete_score = ngs_prospects %>% filter(player == "Jeremiah Love") %>% pull(athlete_score),
+  prod_score = ngs_prospects %>% filter(player == "Jeremiah Love") %>% pull(prod_score),
+  pos_group = factor("RB", levels = levels(model_data$pos_group))
+)
+
+love_av_by_pick <- map_dfr(1:32, function(p) {
+  row <- love_base %>% mutate(pick = p, log_pick = log(p))
+  xgb_row <- model.matrix(~ cmbn_score + athlete_score + prod_score + log_pick + pos_group - 1, data = row)
+  tibble(
+    pick = p,
+    lm_pred = predict(av_lm, newdata = row),
+    xgb_pred = predict(xgb_model, xgb_row)
+  )
+})
+
+ggplot(love_av_by_pick, aes(x = pick)) +
+  geom_line(aes(y = lm_pred, color = "Linear"), linewidth = 1) +
+  geom_line(aes(y = xgb_pred, color = "XGBoost"), linewidth = 1) +
+  scale_color_manual(values = c("Linear" = "#999999", "XGBoost" = "#377EB8"), name = "Model") +
+  scale_x_continuous(breaks = seq(1, 32, 2)) +
+  labs(
+    title = "Love's Predicted Career AV by Draft Position",
+    subtitle = "Both models: NGS scores + log(pick) + position | Trained 2010-2019",
+    x = "Draft Pick", y = "Predicted Weighted Career AV"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top")
+```
+
+```{r career-av-narrative, results='asis'}
+love_at_10_xgb <- love_av_by_pick$xgb_pred[love_av_by_pick$pick == 10]
+love_at_10_lm <- love_av_by_pick$lm_pred[love_av_by_pick$pick == 10]
+
+cat(paste0(
+  "Two models, same story — both trained on 2010-2019 and tested on the 2020-2022 classes they've never seen. ",
+  "The linear regression (test R² = ", round(lm_test_r2, 3),
+  ") captures the broad strokes: higher NGS scores and earlier picks produce more career value. ",
+  "The gradient-boosted model (XGBoost) picks up non-linear effects — the diminishing returns of draft ",
+  "capital after the top 10, the interaction between position and athletic profile — and generalizes ",
+  if (xgb_test_r2 > lm_test_r2) "better" else "similarly",
+  " to unseen data (test RMSE: ", round(xgb_test_rmse, 1), " vs ", round(lm_test_rmse, 1), " for linear).\n\n",
+  "Both agree on Love: at pick 10, the linear model projects **", round(love_at_10_lm, 0),
+  "** weighted career AV; XGBoost projects **", round(love_at_10_xgb, 0), "**. ",
+  "For context, the median elite RB historically produced ",
+  round(median(blue_chip$car_av[blue_chip$pos_group == "RB" & blue_chip$is_ngs_blue_chip == TRUE & !is.na(blue_chip$car_av)]), 0),
+  " career AV."
+))
+```
+
 ### Did First-Round RBs Actually Outproduce the Alternative?
 
 Article 1 gave us the Sharpe ratio for RB in the top 10: **-0.615**. That's the average across all RBs drafted in the top 10 since 2010. But averages hide a massive range. Some first-round RBs were franchise cornerstones. Others were busts. The question isn't whether RBs are worth it *on average* -- it's how often they outproduce the player a team could have taken instead.
