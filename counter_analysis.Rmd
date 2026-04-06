@@ -2063,11 +2063,13 @@ ggplot() +
   scale_y_continuous(labels = function(x) paste0("$", round(x), "M")) +
   labs(
     title = "Love's Projected Player Return: Floor to Ceiling",
-    subtitle = "Blue band = Love Q10-Q90 | Solid = 2026 class | Dashed = historical (2018-2022)",
-    x = "Pick Number", y = "Projected Player Return ($M)"
+    subtitle = "Player Return = Salary Savings × Playing Time + Second Contract Value\nBlue band = Love Q10-Q90 | Solid = 2026 class | Dashed = historical (2018-2022)",
+    x = "Pick Number", y = "Total Surplus Value Over Rookie Deal ($M)"
   ) +
   theme_minimal(base_size = 13)
 ```
+
+**Reading this chart:** Each line shows the total value a player generates over their rookie deal — how much it would cost on the open market to replace the production they provide on a rookie contract, plus what they earn on their second deal. At pick 3, the average premium position prospect generates ~$107M in total surplus. That means over the life of the rookie deal, it would cost $107M more on the open market to get that level of production. The higher the line, the bigger the bargain.
 
 ```{r non-premium-economics, results='asis'}
 # Illustrate the economics: why non-premium return rises at later picks
