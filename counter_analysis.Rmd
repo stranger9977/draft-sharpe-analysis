@@ -87,7 +87,7 @@ r1_picks <- r1_picks %>% mutate(tier = factor(tier, levels = tier_order))
 
 ## TL;DR
 
-In [Part 1](https://stranger9977.github.io/draft-sharpe-analysis/), we built a model that said **never draft an RB in round 1**. That was the takeaway from our initial analysis. But if we break down the key assumptions and approach this from a different angle, does it make sense to draft an RB early? We stress-test three assumptions: that roster context doesn't matter, that all draft classes are equal, and that snap-based quality tells the whole story. The answer: it depends on the team, the year, and the prospect.
+[Part 1](https://stranger9977.github.io/draft-sharpe-analysis/) said **never draft an RB in round 1**. We stress-tested that advice and found three blind spots: roster context matters (9 teams enter 2026 needing an RB), class depth varies wildly (2026 is the thinnest RB class in years — Jeremiyah Love is the only Elite prospect), and not all prospects are average (Love's 94.3 Prospect Score ranks 5th all-time among RBs). The model's positional hierarchy still holds — QB is king, and early picks are loaded with premium talent. But Love's 90th-percentile outcome crosses the premium surplus line at a mid-first-round pick, meaning teams drafting after that point who need a back can justify the gamble. It's a bet on a Gurley/CMC-level career. Love's pre-draft profile says the bet is worth making.
 
 ---
 
@@ -919,7 +919,7 @@ cat(paste0(
 
 ## The Love Question Revisited
 
-In Part 1, we asked: *Should you draft Jeremiah Love at 10?*
+In Part 1, we asked: *Should you draft Jeremiyah Love at 10?*
 
 The model said no. RB has a deeply negative Sharpe in the top 10. But we've now shown that the answer depends on things the model can't see: roster needs, class depth, and prospect separation. Love is the case that brings all three together.
 
@@ -1314,7 +1314,7 @@ av_features <- av_lm_summary %>%
 ggplot(av_features, aes(x = estimate, y = feature, fill = direction)) +
   geom_col(alpha = 0.85, width = 0.7) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray40") +
-  geom_text(aes(label = paste0(round(estimate, 1), p_star)),
+  geom_text(aes(label = round(estimate, 1)),
             hjust = if_else(av_features$estimate >= 0, -0.1, 1.1),
             size = 3, fontface = "bold") +
   scale_fill_manual(values = c("Positive" = "#2e7d32", "Negative" = "#c62828")) +
@@ -1738,12 +1738,12 @@ non_rb_avg <- prospect_curves %>%
   group_by(pick) %>%
   summarise(avg_av = mean(pred_av), avg_rs = mean(pred_rs), .groups = "drop")
 
-# Find crossover: where Love's predicted AV drops below non-RB avg
-above <- non_rb_avg$avg_av > love_curve$pred_av
+# Find crossover: where premium avg exceeds Love's predicted AV
+above <- premium_avg$avg_av > love_curve$pred_av
 if(any(above)) {
-  dead_zone_start <- non_rb_avg$pick[which(above)[1]]
-  first_false <- which(!above & non_rb_avg$pick > dead_zone_start)
-  dead_zone_end <- if(length(first_false) > 0) non_rb_avg$pick[first_false[1] - 1] else non_rb_avg$pick[max(which(above))]
+  dead_zone_start <- premium_avg$pick[which(above)[1]]
+  first_false <- which(!above & premium_avg$pick > dead_zone_start)
+  dead_zone_end <- if(length(first_false) > 0) premium_avg$pick[first_false[1] - 1] else premium_avg$pick[max(which(above))]
 } else {
   dead_zone_start <- 0; dead_zone_end <- 0
 }
@@ -1824,6 +1824,8 @@ ggplot() +
              y = max(premium_avg$avg_av, love_curve$pred_av) * 0.95,
              label = paste0("Fair value (", fair_value_start, "+)"),
              color = "#2e7d32", fontface = "bold", size = 4) } +
+  { if(has_dead_zone)
+    geom_vline(xintercept = dead_zone_end + 0.5, linetype = "dashed", color = "#c62828", linewidth = 0.8) } +
   { if(no_dead_zone)
     annotate("text", x = 16, y = max(love_curve$pred_av) * 0.95,
              label = "Love projects higher at every pick",
@@ -2220,7 +2222,7 @@ teams_needing_rb_2026 <- rb_table %>% filter(status == "Need") %>% pull(team)
 
 ### Putting It All Together: Who Should Draft Love?
 
-Everything we've built in this article converges on a single question. Which teams are in the best position to draft Jeremiah Love?
+Everything we've built in this article converges on a single question. Which teams are in the best position to draft Jeremiyah Love?
 
 ```{r love-verdict, results='asis'}
 # Combine: teams that need RB + their draft pick + fair value zone
@@ -2293,41 +2295,27 @@ cat(paste0(
 
 ---
 
-## What We Learned
+## What the Stress Test Found
 
-We built the Sharpe ratio to answer a simple question: which positions are worth drafting in round 1? The answer was clear -- QB, EDGE, OT, and WR. RB was dead last.
-
-Then we stress-tested it. And the model held up -- mostly. The positional hierarchy is real. But we found three blind spots that turn "never draft RB in round 1" from a universal law into a conditional one:
+We built the Sharpe ratio to answer a simple question: which positions are worth drafting in round 1? The answer was clear — QB, EDGE, OT, and WR. RB was dead last. Then we stress-tested it. The positional hierarchy held up. But we found three blind spots that turn "never draft RB in round 1" from a universal law into a conditional one:
 
 1. **Roster context matters.** The Bills taught us that having a body at QB isn't the same as having Josh Allen. Nine teams enter 2026 without a long-term answer at RB. For them, the opportunity cost of *not* drafting one is higher than the model assumes.
 
-2. **Class depth varies wildly.** The 2026 RB class is thin -- Love is the only Elite prospect. Pass on him and there's no comparable alternative in round 2 or 3. Meanwhile, IOL, CB, and WR are loaded. The positions the model says to take instead will still be available later. The RB won't be.
+2. **Class depth varies wildly.** The 2026 RB class is thin — Love is the only Elite prospect. Pass on him and there's no comparable alternative in round 2 or 3. Meanwhile, IOL, CB, and WR are loaded. The positions the model says to take instead will still be available later. The RB won't be.
 
-3. **Not all prospects are average.** Love's 94.3 Prospect Score ranks 5th among all RB prospects since 2010. Historical elite RBs with scores like his became great at dramatically higher rates than the position average. The model averages over all RBs. Love isn't average.
+3. **Not all prospects are average.** Love's 94.3 Prospect Score ranks 5th among all RB prospects since 2010. Historical elite RBs with scores like his became great at dramatically higher rates than the position average. The model averages over all RBs. Love isn't average. Two pre-draft models — both validated out-of-time on 2020-2022 — confirm this: Love's predicted career AV exceeds every non-RB prospect in the 2026 class, and his 90th-percentile surplus outcome crosses the premium position average at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`.
 
-4. **Pre-draft models confirm the exception.** Two models — both trained on 2010-2019 and validated out-of-time on 2020-2022 — agree: Love's Prospect Score profile predicts meaningfully higher career value than the positional average. His predicted career AV at pick 10 exceeds every non-RB prospect in the 2026 class. The component-based surplus model — which penalizes RB for positional variance — shows a crossover point where Love's upside beats premium alternatives. The rookie surplus argument assumes all RBs are interchangeable. Love's predicted career trajectory says otherwise.
-
-And then the numbers that tie it together: the career AV crossover shows Love outprojects every non-RB prospect in the 2026 class, while the surplus value model reveals a second crossover — Love's 90th-percentile outcome (a Gurley/CMC-level career) beats the premium position average starting at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`. That's the upside case: teams drafting after that point can bet on Love's ceiling and win the surplus math too.
-
-But it IS a bet. Love's median outcome still trails premium positions in surplus terms at every pick. The upside case requires him to be a generational back — the kind that comes along once every few years. Teams that can't afford to gamble should follow the model. Teams that need an RB, pick late enough, and believe in the prospect have the math on their side — if Love hits his ceiling.
-
-The wildest scenario? Minnesota at pick 18, with Aaron Jones turning 32 and no long-term answer behind him. If Love is still on the board at 10 — or slides past it — the Vikings have every reason to trade up. They have the need, the pick falls past the upside crossover at `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`, and the 2026 class gives them no alternative. Every counter-argument in this article points at MIN.
-
----
-
-## What Survived the Stress Test
-
-The counter-arguments didn't destroy the model. They sharpened it. Here's what still holds:
+**What still holds:**
 
 - **QB is still king.** Nothing we found changes the top of the positional hierarchy. If you need a franchise QB and one is available, take him.
 
-- **The dead zone is real.** Picks 1-9 are loaded with non-RB talent. Even in 2026, with a weaker-than-usual premium class, the opportunity cost in the top 10 is steep. Love at 3 is a different conversation than Love at 10.
+- **The dead zone is real.** Picks `r dead_zone_start`-`r dead_zone_end` are where premium position talent projects higher career value than Love. Even in 2026, the opportunity cost at the top of the draft is steep. Love at 3 is a different conversation than Love at `r fair_value_start`.
 
 - **Day 2+ RBs are still the default.** When the class isn't thin and the top RB isn't separated, the model's advice stands. Most years, you can find a productive back in rounds 2-4.
 
-- **The Sharpe ratio is a compass, not a GPS.** It points you in the right direction. But the last mile — roster needs, class depth, prospect separation — requires judgment that no single metric can capture. The model tells you what to do on average. GMs don't draft on average. They draft in a specific year, for a specific team, at a specific pick. Context is the difference between a good process and a great one.
+- **The Sharpe ratio is a compass, not a GPS.** It points you in the right direction. But the last mile — roster needs, class depth, prospect separation — requires judgment that no single metric can capture. GMs don't draft on average. They draft in a specific year, for a specific team, at a specific pick.
 
-**The bottom line for Love:** Nine teams need a running back. The 2026 class is thin. Love is separated from every other RB prospect by 17 points. His median outcome still loses the surplus math to premium positions — but his ceiling case crosses the premium line at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`. Teams picking after that point who need an RB can justify the pick, but they're betting on a Todd Gurley / Christian McCaffrey outcome. That's a bet worth making exactly once every few years, when the prospect grade says so. Love's 94.3 says so.
+**The bottom line for Love:** Nine teams need a running back. The 2026 class is thin. Love is separated from every other RB prospect by 17 points. His median outcome still loses the surplus math to premium positions — but his ceiling case crosses the premium line at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`. Teams picking after that point who need an RB can bet on Love's upside — but they're betting on a Todd Gurley / Christian McCaffrey outcome. That's a bet worth making exactly once every few years, when the prospect grade says so. Love's 94.3 says so.
 
 ---
 
