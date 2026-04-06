@@ -2275,7 +2275,7 @@ peak_data <- ever_starter %>%
   mutate(peak_snap = max(snap_pct), pct_of_peak = snap_pct / peak_snap) %>%
   ungroup()
 
-show_positions <- c("RB", "WR", "QB", "OT", "EDGE", "CB")
+show_positions <- c("RB", "WR", "QB", "OT", "EDGE", "CB", "IOL", "LB", "S")
 age_curves <- peak_data %>%
   filter(pos_group %in% show_positions) %>%
   group_by(pos_group, age) %>%
@@ -2286,7 +2286,8 @@ age_curves <- peak_data %>%
 peak_ages <- age_curves %>% group_by(pos_group) %>% slice_max(avg_pct_peak, n = 1)
 
 pos_colors <- c("RB" = "#377EB8", "WR" = "#E67E22", "QB" = "#c62828",
-                "OT" = "#66BB6A", "EDGE" = "#9C27B0", "CB" = "#FF9800")
+                "OT" = "#66BB6A", "EDGE" = "#9C27B0", "CB" = "#FF9800",
+                "IOL" = "#00897B", "LB" = "#795548", "S" = "#607D8B")
 
 ggplot(age_curves, aes(x = age, y = avg_pct_peak, color = pos_group)) +
   geom_line(linewidth = 1.5) +
