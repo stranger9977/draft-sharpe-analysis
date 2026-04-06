@@ -1103,9 +1103,9 @@ top_2025_all <- top_2025_all %>%
 
 ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tier, color = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85, show.legend = TRUE) +
-  geom_point(aes(x = cmbn_score), size = 5, shape = 21, stroke = 1.2, show.legend = FALSE) +
+  geom_point(aes(x = cmbn_score), size = 7, shape = 21, stroke = 1.5, show.legend = FALSE) +
   geom_text(aes(x = cmbn_score, label = round(cmbn_score, 1)),
-            color = "white", hjust = 0.5, size = 1.8, fontface = "bold", show.legend = FALSE) +
+            color = "white", hjust = 0.5, size = 2.2, fontface = "bold", show.legend = FALSE) +
   scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
