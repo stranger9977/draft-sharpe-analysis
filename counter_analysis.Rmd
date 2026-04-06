@@ -1168,8 +1168,8 @@ elite_summary %>%
 # Love's features
 love_row <- data.frame(
   cmbn_score = 94.3,
-  athlete_score = ngs_prospects %>% filter(player == "Jeremiah Love") %>% pull(athlete_score),
-  prod_score = ngs_prospects %>% filter(player == "Jeremiah Love") %>% pull(prod_score),
+  athlete_score = ngs_prospects %>% filter(player == "Jeremiyah Love") %>% pull(athlete_score),
+  prod_score = ngs_prospects %>% filter(player == "Jeremiyah Love") %>% pull(prod_score),
   pick = 10,
   pos_group = factor("RB", levels = levels(model_data$pos_group))
 )
@@ -1310,8 +1310,8 @@ ggplot(importance_clean, aes(x = Gain, y = fct_reorder(Feature, Gain))) +
 ```{r career-av-love, fig.height=5, fig.width=8}
 love_base <- data.frame(
   cmbn_score = 94.3,
-  athlete_score = ngs_prospects %>% filter(player == "Jeremiah Love") %>% pull(athlete_score),
-  prod_score = ngs_prospects %>% filter(player == "Jeremiah Love") %>% pull(prod_score),
+  athlete_score = ngs_prospects %>% filter(player == "Jeremiyah Love") %>% pull(athlete_score),
+  prod_score = ngs_prospects %>% filter(player == "Jeremiyah Love") %>% pull(prod_score),
   pos_group = factor("RB", levels = levels(model_data$pos_group))
 )
 
