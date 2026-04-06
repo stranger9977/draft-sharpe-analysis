@@ -1144,7 +1144,7 @@ The Prospect Score combines all three into a single number from 0 to 100. It's p
 
 ### What Makes an Elite Prospect? A Pre-Draft Model
 
-The scatter plots show a pattern. Can we quantify it? We built a logistic regression predicting whether a drafted player becomes elite (top 10% career AV at their position) using only information available before the draft: the Prospect Score, its sub-components (Athlete and Production scores), and draft position.
+The scatter plots show a pattern. Can we quantify it? We built a logistic regression predicting whether a drafted player becomes elite (top 10% career AV at their position) using only information available before the draft: the Prospect Score, draft position, and position group.
 
 ```{r p-elite-model}
 # Modeling dataset: 2010-2022 with NGS scores and career outcomes
@@ -1163,7 +1163,7 @@ test_data <- model_data %>% filter(season >= 2020)
 
 # Logistic regression: P(elite) from pre-draft features
 # Use log(pick) — draft value declines non-linearly
-elite_glm <- glm(is_elite ~ cmbn_score + athlete_score + prod_score + log(pick) + pos_group,
+elite_glm <- glm(is_elite ~ cmbn_score + log(pick) + pos_group,
                   data = train_data, family = binomial)
 
 elite_summary <- broom::tidy(elite_glm) %>%
@@ -1196,8 +1196,6 @@ elite_summary %>%
   mutate(
     term = str_replace(term, "pos_group", "") %>%
       str_replace("cmbn_score", "Prospect Score") %>%
-      str_replace("athlete_score", "Athlete Score") %>%
-      str_replace("prod_score", "Production Score") %>%
       str_replace("log\\(pick\\)", "Log(Draft Pick)"),
     odds_ratio = round(odds_ratio, 3),
     p.value = format.pval(p.value, digits = 2)
@@ -1215,8 +1213,6 @@ elite_summary %>%
 # Love's features
 love_row <- data.frame(
   cmbn_score = 94.3,
-  athlete_score = ngs_prospects %>% filter(player == "Jeremiyah Love") %>% pull(athlete_score),
-  prod_score = ngs_prospects %>% filter(player == "Jeremiyah Love") %>% pull(prod_score),
   pick = 10,
   pos_group = factor("RB", levels = levels(model_data$pos_group))
 )
@@ -1243,7 +1239,7 @@ ggplot(love_by_pick, aes(x = pick, y = p_elite)) +
   scale_x_continuous(breaks = seq(1, 32, 2)) +
   labs(
     title = "Love's Predicted Probability of an Elite Career",
-    subtitle = "Logistic model: Prospect Score + sub-scores + log(draft pick) + position | Trained on 2010-2019",
+    subtitle = "Logistic model: Prospect Score + log(draft pick) + position | Trained on 2010-2019",
     x = "Draft Pick", y = "P(Elite)"
   ) +
   theme_minimal(base_size = 13)
@@ -1266,11 +1262,11 @@ cat(paste0(
 
 ### Predicting Career Value
 
-The logistic model tells us *whether* a player becomes elite. But how much career value can we expect? We trained a linear regression on the same pre-draft features — Prospect Score, Athlete Score, Production Score, log(draft pick), and position — to predict weighted career AV directly.
+The logistic model tells us *whether* a player becomes elite. But how much career value can we expect? We trained a linear regression on the same pre-draft features — Prospect Score, log(draft pick), and position — to predict weighted career AV directly.
 
 ```{r career-av-model}
 # Linear model — uses log(pick) for non-linear draft value decay
-av_lm <- lm(car_av ~ cmbn_score + athlete_score + prod_score + log(pick) + pos_group,
+av_lm <- lm(car_av ~ cmbn_score + log(pick) + pos_group,
              data = train_data)
 av_lm_summary <- broom::tidy(av_lm)
 
@@ -1291,8 +1287,6 @@ av_lm_summary %>%
   mutate(
     term = str_replace(term, "pos_group", "") %>%
       str_replace("cmbn_score", "Prospect Score") %>%
-      str_replace("athlete_score", "Athlete Score") %>%
-      str_replace("prod_score", "Production Score") %>%
       str_replace("log\\(pick\\)", "Log(Draft Pick)"),
     estimate = round(estimate, 2),
     p.value = format.pval(p.value, digits = 2),
@@ -1312,44 +1306,60 @@ av_lm_summary %>%
 How well does this work in practice? Here are some players from the 2020-2022 test set — prospects the model never saw during training — with their predicted vs actual career AV:
 
 ```{r career-av-examples, results='asis'}
-# Pick interesting examples across positions: hits and misses
-examples <- test_data %>%
-  mutate(error = pred_av - car_av) %>%
-  group_by(pos_group) %>%
+# Mix of outcomes: stars who beat predictions, busts who missed, and close calls
+test_data <- test_data %>% mutate(error = pred_av - car_av)
+
+# Players who outperformed (model underpredicted)
+outperformed <- test_data %>%
+  filter(car_av > pred_av + 10) %>%
   arrange(desc(car_av)) %>%
-  slice_head(n = 1) %>%
-  ungroup() %>%
-  bind_rows(
-    # Also add a notable bust if available
-    test_data %>%
-      mutate(error = pred_av - car_av) %>%
-      filter(cmbn_score >= 85) %>%
-      arrange(car_av) %>%
-      slice_head(n = 2)
-  ) %>%
+  slice_head(n = 4)
+
+# Players who underperformed (model overpredicted)
+underperformed <- test_data %>%
+  filter(pred_av > car_av + 5, cmbn_score >= 75) %>%
+  arrange(desc(error)) %>%
+  slice_head(n = 3)
+
+# Close calls (model was roughly right)
+close_calls <- test_data %>%
+  filter(abs(error) <= 5, car_av >= 20) %>%
+  arrange(desc(car_av)) %>%
+  slice_head(n = 3)
+
+examples <- bind_rows(outperformed, underperformed, close_calls) %>%
   distinct(pfr_player_name, .keep_all = TRUE) %>%
   arrange(desc(car_av)) %>%
-  slice_head(n = 8) %>%
-  select(pfr_player_name, pos_group, season, pick, cmbn_score, car_av, pred_av) %>%
-  mutate(pred_av = round(pred_av, 0))
+  slice_head(n = 10) %>%
+  mutate(
+    pred_av = round(pred_av, 0),
+    diff = car_av - pred_av
+  ) %>%
+  select(pfr_player_name, pos_group, season, pick, cmbn_score, car_av, pred_av, diff)
 
 examples %>%
   gt() %>%
   cols_label(
     pfr_player_name = "Player", pos_group = "Pos", season = "Draft",
     pick = "Pick", cmbn_score = "Prospect Score",
-    car_av = "Actual AV", pred_av = "Predicted AV"
+    car_av = "Actual AV", pred_av = "Predicted AV", diff = "+/-"
+  ) %>%
+  tab_style(
+    style = cell_text(color = "#2e7d32", weight = "bold"),
+    locations = cells_body(columns = diff, rows = diff > 0)
+  ) %>%
+  tab_style(
+    style = cell_text(color = "#c62828", weight = "bold"),
+    locations = cells_body(columns = diff, rows = diff < 0)
   ) %>%
   tab_header(title = md("**Model Check: Predicted vs Actual (2020-2022 Test Set)**"),
-             subtitle = "Top performer per position + high-score misses") %>%
+             subtitle = "Mix of outperformers, busts, and close calls") %>%
   tab_options(table.font.size = px(12))
 ```
 
 ```{r career-av-love, fig.height=5, fig.width=8}
 love_base <- data.frame(
   cmbn_score = 94.3,
-  athlete_score = ngs_prospects %>% filter(player == "Jeremiyah Love") %>% pull(athlete_score),
-  prod_score = ngs_prospects %>% filter(player == "Jeremiyah Love") %>% pull(prod_score),
   pos_group = factor("RB", levels = levels(model_data$pos_group))
 )
 
@@ -1376,7 +1386,7 @@ ggplot(love_av_by_pick, aes(x = pick, y = predicted_av)) +
   scale_x_continuous(breaks = seq(1, 32, 2)) +
   labs(
     title = "Love's Predicted Career AV by Draft Position",
-    subtitle = "Linear model: Prospect Score + sub-scores + log(pick) + position | Trained 2010-2019",
+    subtitle = "Linear model: Prospect Score + log(pick) + position | Trained 2010-2019",
     x = "Draft Pick", y = "Predicted Weighted Career AV"
   ) +
   theme_minimal(base_size = 13)
@@ -1491,7 +1501,7 @@ cat(paste0(
 
 ### The Negative-Sharpe Picks: What Teams Left on the Table
 
-The Sharpe ratio flags specific position-tier combinations as negative — plays the model says teams shouldn't make. Since 2010, **135 first-round picks** went to non-premium positions at tiers where the Sharpe ratio was negative. But what if those teams had instead taken the next-best positive-Sharpe position available? Here's what actually happened vs what the model says they should have done.
+The Sharpe ratio flags specific position-tier combinations as negative — plays the model says teams shouldn't make. Since 2010, **135 first-round picks** went to non-premium positions at tiers where the Sharpe ratio was negative. What if those teams had taken a positive-Sharpe position instead? The "What If" column shows the average career AV, hit rate, and elite rate across all positive-Sharpe positions at the same tier — the pool of alternatives the model says they should have picked from.
 
 ```{r non-premium-picks}
 premium_pos <- c("QB", "EDGE", "OT", "WR")
@@ -1579,11 +1589,11 @@ non_prem_summary %>%
     cf_elite_rate = "Elite %"
   ) %>%
   tab_spanner(label = "What They Got", columns = c(avg_car_av, hit_rate, elite_rate)) %>%
-  tab_spanner(label = "What If: Next Positive-Sharpe Position",
+  tab_spanner(label = "What If: Positive-Sharpe Position (Tier Avg)",
               columns = c(cf_avg_av, cf_hit_rate, cf_elite_rate)) %>%
   tab_header(
     title = md("**Negative-Sharpe First-Round Picks (2010-2022)**"),
-    subtitle = md("135 picks at position-tier combos with negative Sharpe vs what positive-Sharpe alternatives produced")
+    subtitle = md("135 picks at negative-Sharpe combos vs avg outcome of positive-Sharpe positions at the same tier")
   ) %>%
   tab_style(
     style = cell_fill(color = "#e3f2fd"),
@@ -1628,29 +1638,27 @@ The model lets us do something the raw averages can't: predict career value for 
 premium_pos <- c("QB", "EDGE", "OT", "WR")
 
 # Average predicted career AV for premium vs non-premium prospects at each pick
-# Using the linear model's coefficients with average NGS scores per group
-prem_avg_scores <- model_data %>%
+# Using the linear model's coefficients with average Prospect Scores per group
+prem_avg_cmbn <- model_data %>%
   filter(pos_group %in% premium_pos) %>%
-  summarise(cmbn = mean(cmbn_score), ath = mean(athlete_score), prod = mean(prod_score))
+  pull(cmbn_score) %>% mean()
 
-nonprem_avg_scores <- model_data %>%
+nonprem_avg_cmbn <- model_data %>%
   filter(!pos_group %in% premium_pos) %>%
-  summarise(cmbn = mean(cmbn_score), ath = mean(athlete_score), prod = mean(prod_score))
+  pull(cmbn_score) %>% mean()
 
 # Predict for each pick using average premium/non-premium profiles
 pred_by_pick <- map_dfr(1:32, function(p) {
   # Average premium prospect at this pick (weighted across premium positions)
   prem_preds <- map_dbl(premium_pos, function(pos) {
-    row <- data.frame(cmbn_score = prem_avg_scores$cmbn, athlete_score = prem_avg_scores$ath,
-                      prod_score = prem_avg_scores$prod, pick = p,
+    row <- data.frame(cmbn_score = prem_avg_cmbn, pick = p,
                       pos_group = factor(pos, levels = levels(model_data$pos_group)))
     predict(av_lm, newdata = row)
   })
   # Average non-premium prospect
   nonprem_positions <- setdiff(key_positions, premium_pos)
   nonprem_preds <- map_dbl(nonprem_positions, function(pos) {
-    row <- data.frame(cmbn_score = nonprem_avg_scores$cmbn, athlete_score = nonprem_avg_scores$ath,
-                      prod_score = nonprem_avg_scores$prod, pick = p,
+    row <- data.frame(cmbn_score = nonprem_avg_cmbn, pick = p,
                       pos_group = factor(pos, levels = levels(model_data$pos_group)))
     predict(av_lm, newdata = row)
   })
@@ -2029,7 +2037,7 @@ The counter-arguments didn't destroy the model. They sharpened it. Here's what s
 
 **Roster needs:** A position is "filled" if the team had a starter who played above the hit threshold, earned a second contract above the free-agent replacement cost for the position, and was not on an expiring deal. A position is a "need" if it wasn't filled.
 
-**Predictive models:** Two models trained on players drafted 2010-2019 with Prospect Scores and career outcomes, validated out-of-time on the 2020-2022 classes. Features: Prospect Score, Athlete Score, Production Score, log(draft pick), and position group. Draft pick is log-transformed because draft value declines non-linearly. (1) Logistic regression predicting P(top 10% career AV). (2) Linear regression predicting weighted career AV (test R² = 0.184, RMSE = 13.8). Love's predictions use his actual Prospect Score sub-components with hypothetical pick positions.
+**Predictive models:** Two models trained on players drafted 2010-2019 with Prospect Scores and career outcomes, validated out-of-time on the 2020-2022 classes. Features: Prospect Score, log(draft pick), and position group. Draft pick is log-transformed because draft value declines non-linearly. (1) Logistic regression predicting P(top 10% career AV). (2) Linear regression predicting weighted career AV. Athlete Score and Production Score (sub-components of Prospect Score) were tested but excluded — neither was significant when the composite Prospect Score was already in the model. Love's predictions use his Prospect Score with hypothetical pick positions.
 
 **Part 1:** Full methodology and interactive charts at [stranger9977.github.io/draft-sharpe-analysis](https://stranger9977.github.io/draft-sharpe-analysis/)
 
