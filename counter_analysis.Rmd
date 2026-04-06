@@ -2227,6 +2227,8 @@ teams_needing_rb_2026 <- rb_table %>% filter(status == "Need") %>% pull(team)
 
 Everything we've built in this article converges on a single question. Which teams are in the best position to draft Jeremiyah Love?
 
+There's one more factor the surplus math can't see: **RBs peak early and decline fast.** The typical RB age curve peaks around 24-26 — earlier than any other offensive position. That's a double-edged sword. On one hand, you get immediate production on the rookie deal. On the other, the window is short. Teams picking in the top 10 are usually rebuilding. By the time they're competitive, the RB's best years may already be behind him. Teams picking later in the first round are closer to contention — they can put Love's peak years to use immediately. This is another reason the math points to pick `r if(!is.na(upside_fair_value)) upside_fair_value else 14` and beyond.
+
 ```{r love-verdict, results='asis'}
 # The upside fair value (pick where Q90 crosses premium surplus) is the key cutoff
 fair_value_pick <- if(!is.na(upside_fair_value)) upside_fair_value else 32
@@ -2291,7 +2293,7 @@ We built the Sharpe ratio to answer a simple question: which positions are worth
 
 2. **Class depth varies wildly.** The 2026 RB class is thin — Love is the only Elite prospect. Pass on him and there's no comparable alternative in round 2 or 3. Meanwhile, IOL, CB, and WR are loaded. The positions the model says to take instead will still be available later. The RB won't be.
 
-3. **Not all prospects are average.** Love's 94.3 Prospect Score ranks 5th among all RB prospects since 2010. The model averages over all RBs. Love isn't average. Two pre-draft models — both validated out-of-time on 2020-2022 — confirm this: Love's predicted career AV exceeds every non-RB prospect in the 2026 class, and his 90th-percentile surplus outcome crosses the premium position average at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`.
+3. **Not all prospects are average.** Love's 94.3 Prospect Score ranks 5th among all RB prospects since 2010. The model averages over all RBs. Love isn't average. Two pre-draft models — both validated out-of-time on 2020-2022 — confirm this: Love's predicted career AV exceeds all but one non-RB prospect in the 2026 class (Spencer Fano, OT), and his 90th-percentile surplus outcome crosses the premium position average at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`.
 
 **What still holds:** QB is still king. The surplus math still favors premium positions before pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`. Day 2+ RBs are still the default when the class isn't thin. The Sharpe ratio is a compass, not a GPS — it points the right direction, but roster needs, class depth, and prospect separation require judgment no single metric can capture.
 
