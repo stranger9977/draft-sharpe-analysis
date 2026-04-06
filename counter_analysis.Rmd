@@ -89,7 +89,7 @@ cat("
 |---|---|
 | Teams should always draft the highest-Sharpe position | Roster needs make some positions irrelevant for some teams |
 | All draft classes are interchangeable | Class depth varies wildly year to year |
-| Snaps measure quality — and all prospects are fungible | Career value tells a different story, and blue-chip prospects break the averages |
+| Snaps measure quality — and all prospects are fungible | Career value tells a different story, and elite prospects break the averages |
 ")
 ```
 
@@ -606,6 +606,9 @@ rb_scatter <- ngs_with_outcomes %>%
   filter(pos_group == "RB") %>%
   mutate(is_bc = is_ngs_blue_chip)
 
+rb_lm <- lm(car_av ~ cmbn_score, data = rb_scatter)
+rb_r2 <- summary(rb_lm)$r.squared
+
 # Label blue chips + top career AV non-blue-chips
 rb_labeled <- rb_scatter %>% filter(is_bc | car_av >= quantile(car_av, 0.9))
 
@@ -618,6 +621,11 @@ ggplot(rb_scatter, aes(x = cmbn_score, y = car_av)) +
             max.overlaps = 20, seed = 42, box.padding = 0.4,
             min.segment.length = 0.2, segment.color = "gray70") +
   geom_smooth(method = "lm", se = TRUE, color = "#377EB8", linewidth = 0.8, alpha = 0.2) +
+  annotate("text",
+           x = max(rb_scatter$cmbn_score, na.rm = TRUE) - 2,
+           y = max(rb_scatter$car_av, na.rm = TRUE) - 5,
+           label = paste0("R² = ", round(rb_r2, 3)),
+           color = "#377EB8", size = 4, fontface = "bold", hjust = 1) +
   scale_color_manual(values = c("TRUE" = "#377EB8", "FALSE" = "gray50")) +
   labs(
     title = "RB: Do Pre-Draft Scores Predict Career Value?",
@@ -850,9 +858,9 @@ ngs_rb <- ngs_prospects %>%
 
 ggplot(ngs_rb, aes(x = cmbn_score, y = player_label, fill = ngs_tier, color = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85, show.legend = TRUE) +
-  geom_point(size = 8, shape = 21, fill = "white", stroke = 2, show.legend = FALSE) +
-  geom_text(aes(label = round(cmbn_score, 1)), size = 2.3, fontface = "bold",
-            show.legend = FALSE) +
+  geom_point(aes(x = cmbn_score + 1.5), size = 8, shape = 21, stroke = 2, show.legend = FALSE) +
+  geom_text(aes(x = cmbn_score + 1.5, label = round(cmbn_score, 1)),
+            color = "white", size = 2.3, fontface = "bold", show.legend = FALSE) +
   scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
@@ -861,8 +869,8 @@ ggplot(ngs_rb, aes(x = cmbn_score, y = player_label, fill = ngs_tier, color = ng
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     guide = "none"
   ) +
-  scale_x_continuous(breaks = seq(55, 95, 5), expand = expansion(mult = c(0, 0.08))) +
-  coord_cartesian(xlim = c(55, 100), clip = "off") +
+  scale_x_continuous(breaks = seq(55, 95, 5), expand = expansion(mult = c(0, 0.12))) +
+  coord_cartesian(xlim = c(55, NA), clip = "off") +
   labs(
     title = "2026 RB Prospects: NGS Combined Score",
     subtitle = "Love's 94.3 is tied for #1 overall (all positions) with Sonny Styles",
@@ -889,7 +897,7 @@ cat(paste0(
 
 How does Love's 94.3 compare to every RB prospect since 2010? Here's every RB with an NGS Combined Score, with Love highlighted:
 
-```{r love-historical-rank, fig.height=5, fig.width=8}
+```{r love-historical-rank, fig.height=8, fig.width=8}
 # Combine historical (2010-2022), recent (2023-2025), and 2026 RB NGS scores
 historical_rb_ngs <- ngs_with_outcomes %>%
   filter(pos_group == "RB") %>%
@@ -934,9 +942,9 @@ top20 <- all_rb_ngs %>% slice_head(n = 20) %>%
 
 ggplot(top20, aes(x = cmbn_score, y = label, fill = ngs_tier, color = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85, show.legend = TRUE) +
-  geom_point(size = 8, shape = 21, fill = "white", stroke = 2, show.legend = FALSE) +
-  geom_text(aes(label = round(cmbn_score, 1)), size = 2.3, fontface = "bold",
-            show.legend = FALSE) +
+  geom_point(aes(x = cmbn_score + 0.8, fill = ngs_tier), size = 7, shape = 21, stroke = 1.5, show.legend = FALSE) +
+  geom_text(aes(x = cmbn_score + 0.8, label = round(cmbn_score, 1)),
+            color = "white", size = 2.2, fontface = "bold", show.legend = FALSE) +
   scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
@@ -945,7 +953,7 @@ ggplot(top20, aes(x = cmbn_score, y = label, fill = ngs_tier, color = ngs_tier))
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     guide = "none"
   ) +
-  scale_x_continuous(expand = expansion(mult = c(0, 0.08))) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
   coord_cartesian(xlim = c(75, NA), clip = "off") +
   labs(
     title = "Top 20 RB Prospects by NGS Score (2010-2026)",
@@ -1005,9 +1013,9 @@ top_2025_all <- top_2025_all %>%
 
 ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tier, color = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85, show.legend = TRUE) +
-  geom_point(size = 8, shape = 21, fill = "white", stroke = 2, show.legend = FALSE) +
-  geom_text(aes(label = round(cmbn_score, 1)), size = 2.3, fontface = "bold",
-            show.legend = FALSE) +
+  geom_point(aes(x = cmbn_score + 1.5), size = 8, shape = 21, stroke = 2, show.legend = FALSE) +
+  geom_text(aes(x = cmbn_score + 1.5, label = round(cmbn_score, 1)),
+            color = "white", size = 2.3, fontface = "bold", show.legend = FALSE) +
   scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
@@ -1017,8 +1025,8 @@ ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tie
     guide = "none"
   ) +
   scale_y_discrete(labels = function(x) str_remove(x, "^.*___")) +
-  scale_x_continuous(breaks = seq(60, 100, 10), expand = expansion(mult = c(0, 0.08))) +
-  coord_cartesian(xlim = c(58, 100), clip = "off") +
+  scale_x_continuous(breaks = seq(60, 100, 10), expand = expansion(mult = c(0, 0.12))) +
+  coord_cartesian(xlim = c(58, NA), clip = "off") +
   facet_wrap(~pos_group, scales = "free_y", ncol = 2) +
   labs(
     title = "2026 Draft Class: Top 5 Prospects by NGS Combined Score",
