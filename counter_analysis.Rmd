@@ -2233,7 +2233,7 @@ There's one more factor the surplus math can't see: **RBs peak early and decline
 # Build age curves from snap count data
 library(nflreadr)
 
-rosters_age <- load_rosters(2012:2024) %>%
+rosters_age <- load_rosters(2010:2024) %>%
   select(season, pfr_id, full_name, position, birth_date) %>%
   distinct() %>%
   filter(!is.na(birth_date), !is.na(pfr_id)) %>%
@@ -2275,7 +2275,7 @@ peak_data <- ever_starter %>%
   mutate(peak_snap = max(snap_pct), pct_of_peak = snap_pct / peak_snap) %>%
   ungroup()
 
-show_positions <- c("RB", "WR", "QB", "OT", "EDGE")
+show_positions <- c("RB", "WR", "QB", "OT", "EDGE", "CB")
 age_curves <- peak_data %>%
   filter(pos_group %in% show_positions) %>%
   group_by(pos_group, age) %>%
@@ -2286,7 +2286,7 @@ age_curves <- peak_data %>%
 peak_ages <- age_curves %>% group_by(pos_group) %>% slice_max(avg_pct_peak, n = 1)
 
 pos_colors <- c("RB" = "#377EB8", "WR" = "#E67E22", "QB" = "#c62828",
-                "OT" = "#66BB6A", "EDGE" = "#9C27B0")
+                "OT" = "#66BB6A", "EDGE" = "#9C27B0", "CB" = "#FF9800")
 
 ggplot(age_curves, aes(x = age, y = avg_pct_peak, color = pos_group)) +
   geom_line(linewidth = 1.5) +
@@ -2296,7 +2296,7 @@ ggplot(age_curves, aes(x = age, y = avg_pct_peak, color = pos_group)) +
   scale_x_continuous(breaks = 22:33) +
   labs(
     title = "The RB Clock: Playing Time Relative to Peak, by Position",
-    subtitle = "NFL starters 2012-2024 | Each player normalized to their own peak season",
+    subtitle = "NFL starters 2012-2024 (rosters from 2010) | Each player normalized to their own peak season",
     x = "Age", y = "% of Peak Playing Time"
   ) +
   theme_minimal(base_size = 13) +
