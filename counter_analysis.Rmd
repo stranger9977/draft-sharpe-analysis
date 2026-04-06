@@ -1526,6 +1526,87 @@ cat(paste0(
 ))
 ```
 
+### Love's Predicted Value vs the Alternative
+
+Article 1's strongest argument against first-round RBs is the rookie surplus: backs on cheap rookie contracts produce so efficiently that the *marginal* value of drafting one early is negative. You get 80% of the production at 20% of the draft capital. But that argument assumes an average RB. Love isn't average.
+
+```{r love-vs-alt, fig.height=5, fig.width=8}
+# Non-RB expected career AV at each pick (historical, 2010-2022)
+non_rb_expected <- blue_chip %>%
+  filter(pick <= 32, pos_group %in% key_positions, pos_group != "RB",
+         !is.na(car_av), season >= 2010, season <= 2022) %>%
+  group_by(pick) %>%
+  summarise(non_rb_av = mean(car_av, na.rm = TRUE), n = n(), .groups = "drop")
+
+# 5-pick rolling smooth for non-RB line
+non_rb_smooth <- non_rb_expected %>%
+  arrange(pick) %>%
+  mutate(smooth_av = map_dbl(pick, function(p) {
+    window <- non_rb_expected %>% filter(pick >= p - 2, pick <= p + 2)
+    mean(window$non_rb_av, na.rm = TRUE)
+  }))
+
+# Combine with Love's XGBoost predictions
+comparison <- love_av_by_pick %>%
+  left_join(non_rb_smooth %>% select(pick, non_rb_av = smooth_av), by = "pick") %>%
+  filter(!is.na(non_rb_av))
+
+# Find crossover pick (where Love's predicted AV >= non-RB average)
+crossover <- comparison %>%
+  filter(xgb_pred >= non_rb_av) %>%
+  slice_head(n = 1) %>%
+  pull(pick)
+
+ggplot(comparison, aes(x = pick)) +
+  geom_line(aes(y = xgb_pred, color = "Love (predicted)"), linewidth = 1.2) +
+  geom_line(aes(y = non_rb_av, color = "Avg non-RB (historical)"), linewidth = 1.2) +
+  geom_ribbon(data = comparison %>% filter(xgb_pred >= non_rb_av),
+              aes(ymin = non_rb_av, ymax = xgb_pred), fill = "#2e7d32", alpha = 0.12) +
+  geom_ribbon(data = comparison %>% filter(xgb_pred < non_rb_av),
+              aes(ymin = xgb_pred, ymax = non_rb_av), fill = "#c62828", alpha = 0.12) +
+  geom_vline(xintercept = crossover, linetype = "dashed", color = "gray50") +
+  annotate("text", x = crossover + 0.5, y = max(comparison$xgb_pred) * 0.95,
+           label = paste0("Crossover: pick ", crossover),
+           hjust = 0, color = "gray30", fontface = "bold", size = 3.5) +
+  scale_color_manual(values = c("Love (predicted)" = "#377EB8", "Avg non-RB (historical)" = "#c62828"),
+                     name = NULL) +
+  scale_x_continuous(breaks = seq(1, 32, 2)) +
+  labs(
+    title = "Love's Predicted Career Value vs the Alternative",
+    subtitle = "XGBoost prediction for Love vs historical avg non-RB at each pick (smoothed)",
+    x = "Draft Pick", y = "Weighted Career AV"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top")
+```
+
+```{r love-vs-alt-narrative, results='asis'}
+love_at_10 <- comparison %>% filter(pick == 10)
+cat(paste0(
+  "Article 1's strongest argument against first-round RBs is the rookie surplus: backs on cheap ",
+  "rookie contracts produce so efficiently that the *marginal* value of drafting one early is negative. ",
+  "You get 80% of the production at 20% of the draft capital.\n\n",
+  "But that argument assumes an average RB. Love isn't average — the model predicts career AV of **",
+  round(love_at_10$xgb_pred, 0),
+  "** at pick 10, which ",
+  if (love_at_10$xgb_pred >= love_at_10$non_rb_av) {
+    paste0("exceeds the historical average non-RB first-rounder at that pick (",
+           round(love_at_10$non_rb_av, 0), ").")
+  } else {
+    paste0("falls short of the historical average non-RB first-rounder at that pick (",
+           round(love_at_10$non_rb_av, 0), ") — but not by much.")
+  },
+  "\n\n",
+  "The crossover point — where Love's predicted value exceeds the non-RB alternative — is **pick ",
+  crossover, "**. Before that, you're paying a premium for the name 'RB' when a non-RB pick produces ",
+  "more expected career value. After it, Love's elite profile starts to outweigh the positional discount.\n\n",
+  "This doesn't eliminate the rookie surplus concern. A team still gets cheap production from a Day 2 RB. ",
+  "But the question isn't 'can you find *a* running back later?' — it's 'can you find *this* running back ",
+  "later?' Love's 94.3 NGS score says no. The gap between Love and RB2 in this class is 17 points. ",
+  "The surplus argument assumes fungibility. Love breaks that assumption."
+))
+```
+
 ### Love's Fair Value in This Draft
 
 The dumbbell chart shows the historical gamble. But what pick makes the gamble worth it? The Sharpe ratio's opportunity cost assumes every class is average, with equal depth at every position. In 2026, that assumption breaks down. **RB supply is scarce** (Love is the only Elite-tier RB, with a 17-point gap to RB2) while **non-RB supply is deep** (IOL, CB, and WR are loaded with Good+ prospects — and even EDGE and OT have enough depth to find value in round 2). When non-RB positions are deep, you can find that EDGE or OT later. When RB is thin, you can't. The effective opportunity cost of drafting Love is lower than the historical average suggests because what you're "giving up" will still be there later.
