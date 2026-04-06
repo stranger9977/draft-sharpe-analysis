@@ -2015,9 +2015,9 @@ for(i in 2:nrow(labels_df)) {
   }
 }
 
-# Find where Love Q90 crosses the 2026 premium median
+# Find where Love Q90 first crosses above the 2026 premium median
 q90_cross <- which(love_range$q90 >= prem_median$avg_rs)
-upside_fair_value <- if(length(q90_cross) > 0) max(q90_cross) else NA
+upside_fair_value <- if(length(q90_cross) > 0) min(q90_cross) else NA
 
 ggplot() +
   # Love's range band (Q10-Q90)
@@ -2044,10 +2044,10 @@ ggplot() +
   # 2026 non-premium avg median (orange)
   geom_line(data = nonprem_median, aes(x = pick, y = avg_rs * salary_cap),
             color = "#E67E22", linewidth = 1.2) +
-  # Vertical line where Love Q90 crosses premium
-  { if(!is.na(upside_fair_value))
+  # Vertical line where Love Q90 crosses premium (only if before pick 32)
+  { if(!is.na(upside_fair_value) && upside_fair_value < 32)
     geom_vline(xintercept = upside_fair_value, linetype = "dotted", color = "#377EB8", linewidth = 0.8) } +
-  { if(!is.na(upside_fair_value))
+  { if(!is.na(upside_fair_value) && upside_fair_value < 32)
     annotate("text", x = upside_fair_value + 0.5,
              y = max(love_range$q90 * salary_cap) * 0.75,
              label = paste0("Upside fair value\n(pick ", upside_fair_value, ")"),
@@ -2137,7 +2137,7 @@ cat(paste0(
   "regardless of the individual player.\n\n",
   "This is the Sharpe ratio's blind spot made visible. Career AV says Love is the best prospect in ",
   "the class. Surplus value says premium positions still generate more efficient returns. Both are true.\n\n",
-  if(!is.na(upside_fair_value)) {
+  if(!is.na(upside_fair_value) && upside_fair_value < 32) {
     paste0(
       "But there's a third view: Love's **ceiling**. His 90th-percentile outcome — a Gurley/CMC-level career — ",
       "crosses the premium position average at **pick ", upside_fair_value, "**. ",
@@ -2241,10 +2241,15 @@ dead_zone_fits <- love_fits %>% filter(!in_fair_zone)
 cat(paste0(
   "We score each first-round team on three factors from this article:\n\n",
   "1. **Roster need:** Does the team lack a starter-level RB? (from the table above)\n",
-  "2. **Fair value:** Is their pick outside the dead zone (picks ", dead_zone_start, "-", dead_zone_end,
-  ") where premium position talent is richest? Or past pick ",
-  if(!is.na(upside_fair_value)) upside_fair_value else "N/A",
-  " where Love's upside case beats premium alternatives?\n",
+  if(dead_zone_end > 0) {
+    paste0("2. **Fair value:** Is their pick outside the dead zone (picks ", dead_zone_start, "-", dead_zone_end,
+    ") where premium position talent is richest? Or past pick ",
+    if(!is.na(upside_fair_value)) upside_fair_value else "N/A",
+    " where Love's upside case beats premium alternatives?\n")
+  } else {
+    paste0("2. **Career value:** Love's predicted career AV exceeds the premium position average at every pick. ",
+    "The surplus math still favors premium positions, but the career production case supports Love anywhere in round 1.\n")
+  },
   "3. **Class context:** 2026 is a thin RB class with Love as the only Elite prospect — ",
   "this factor applies equally to every team.\n\n"
 ))
@@ -2278,18 +2283,34 @@ cat(paste0(
 
 cat(paste0(
   "---\n\n",
-  "**The bottom line:** The model says the dead zone ends at pick ", dead_zone_end,
-  ". Every team above that line pays a premium in opportunity cost that even an elite RB can't offset. ",
-  "Below it, the math flips.\n\n",
-  if(nrow(best_fits) > 0) paste0(
-    "The best fits are **", paste(paste0(best_fits$team, " (", best_fits$pick, ")"), collapse = ", "),
-    "** -- teams that need a back *and* pick in the fair value zone. ",
-    "But keep an eye on the dead-zone teams too. If Love slides past pick ", dead_zone_end,
-    ", a team like **MIN (18)** -- aging Aaron Jones, no long-term answer, picking squarely in the fair value zone -- ",
-    "has every reason to trade up. That's the scenario where all three counter-arguments align at once: ",
-    "need, class scarcity, and prospect separation. The model built in Part 1 can't see it. This article can."
-  ) else
-  "In 2026, no team perfectly combines need and fair-value pick position, which means Love could slide -- or a team trades up to get him."
+  if(dead_zone_end > 0) {
+    paste0(
+      "**The bottom line:** The model says the dead zone ends at pick ", dead_zone_end,
+      ". Every team above that line pays a premium in opportunity cost that even an elite RB can't offset. ",
+      "Below it, the math flips.\n\n",
+      if(nrow(best_fits) > 0) paste0(
+        "The best fits are **", paste(paste0(best_fits$team, " (", best_fits$pick, ")"), collapse = ", "),
+        "** -- teams that need a back *and* pick in the fair value zone. ",
+        "But keep an eye on the dead-zone teams too. If Love slides past pick ", dead_zone_end,
+        ", a team like **MIN (18)** -- aging Aaron Jones, no long-term answer, picking squarely in the fair value zone -- ",
+        "has every reason to trade up. That's the scenario where all three counter-arguments align at once: ",
+        "need, class scarcity, and prospect separation. The model built in Part 1 can't see it. This article can."
+      ) else ""
+    )
+  } else {
+    paste0(
+      "**The bottom line:** Love's career AV projection beats the premium position average at every pick — there is no dead zone. ",
+      "The Sharpe ratio still favors premium positions on surplus value, but the career production case for Love holds across the entire first round.\n\n",
+      if(nrow(best_fits) > 0) paste0(
+        "The best fits are **", paste(paste0(best_fits$team, " (", best_fits$pick, ")"), collapse = ", "),
+        "** -- teams that need a back *and* can't find a comparable RB later in this thin class. ",
+        "A team like **MIN (18)** -- aging Aaron Jones, no long-term answer -- ",
+        "has every reason to trade up if Love slides. That's the scenario where all three counter-arguments align at once: ",
+        "need, class scarcity, and prospect separation. The model built in Part 1 can't see it. This article can."
+      ) else
+      "In 2026, no team perfectly combines need and fair-value pick position, which means Love could slide -- or a team trades up to get him."
+    )
+  }
 ))
 ```
 
@@ -2309,13 +2330,13 @@ We built the Sharpe ratio to answer a simple question: which positions are worth
 
 - **QB is still king.** Nothing we found changes the top of the positional hierarchy. If you need a franchise QB and one is available, take him.
 
-- **The dead zone is real.** Picks `r dead_zone_start`-`r dead_zone_end` are where premium position talent projects higher career value than Love. Even in 2026, the opportunity cost at the top of the draft is steep. Love at 3 is a different conversation than Love at `r fair_value_start`.
+- **The surplus math still favors premium positions.** `r if(dead_zone_end > 0) paste0("Picks ", dead_zone_start, "-", dead_zone_end, " are where premium position talent projects higher career value than Love. ") else "Love's career AV projection beats the premium average everywhere — but the Sharpe ratio's surplus calculation still favors premium positions. "` Even in 2026, the opportunity cost of passing on QB/EDGE/OT/WR talent is real. Love at 3 is a different conversation than Love at 18.
 
 - **Day 2+ RBs are still the default.** When the class isn't thin and the top RB isn't separated, the model's advice stands. Most years, you can find a productive back in rounds 2-4.
 
 - **The Sharpe ratio is a compass, not a GPS.** It points you in the right direction. But the last mile — roster needs, class depth, prospect separation — requires judgment that no single metric can capture. GMs don't draft on average. They draft in a specific year, for a specific team, at a specific pick.
 
-**The bottom line for Love:** Nine teams need a running back. The 2026 class is thin. Love is separated from every other RB prospect by 17 points. His median outcome still loses the surplus math to premium positions — but his ceiling case crosses the premium line at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`. Teams picking after that point who need an RB can bet on Love's upside — but they're betting on a Todd Gurley / Christian McCaffrey outcome. That's a bet worth making exactly once every few years, when the prospect grade says so. Love's 94.3 says so.
+**The bottom line for Love:** Nine teams need a running back. The 2026 class is thin. Love is separated from every other RB prospect by 17 points. His median outcome still loses the surplus math to premium positions — but his ceiling case crosses the premium line at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`. Teams who need an RB can bet on Love's upside — but they're betting on a Todd Gurley / Christian McCaffrey outcome. That's a bet worth making exactly once every few years, when the prospect grade says so. Love's 94.3 says so.
 
 ---
 
