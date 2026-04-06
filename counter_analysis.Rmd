@@ -328,11 +328,22 @@ We'll start with RB -- the position at the center of the Sharpe debate -- then s
 ```{r ngs-rb-depth-big, fig.height=5, fig.width=8}
 ngs_rb_tiers <- ngs_class_tiers %>%
   filter(pos_group == "RB", season >= 2010, season <= 2026,
+         !season %in% 2023:2025,
          ngs_tier %in% c("Elite", "Good")) %>%
   mutate(
     ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
-    draft_year = factor(as.integer(season), levels = 2010:2026)
+    draft_year = factor(as.integer(season), levels = setdiff(2010:2026, 2023:2025))
   )
+
+# Add 2026 class tiers computed from ngs_prospects (mapped positions)
+ngs_rb_2026 <- ngs_prospects %>%
+  filter(pos_group == "RB", !is.na(cmbn_score)) %>%
+  mutate(ngs_tier = case_when(cmbn_score >= 90 ~ "Elite", cmbn_score >= 70 ~ "Good", TRUE ~ NA_character_)) %>%
+  filter(!is.na(ngs_tier)) %>%
+  count(ngs_tier, name = "n") %>%
+  mutate(pos_group = "RB", season = 2026, ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
+         draft_year = factor(2026L, levels = levels(ngs_rb_tiers$draft_year)))
+ngs_rb_tiers <- bind_rows(ngs_rb_tiers, ngs_rb_2026)
 
 ggplot(ngs_rb_tiers, aes(x = draft_year, y = n, fill = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85) +
@@ -361,12 +372,24 @@ Now the same view across every position:
 ```{r ngs-all-depth-small, fig.height=12, fig.width=8}
 ngs_other_tiers <- ngs_class_tiers %>%
   filter(pos_group %in% key_positions, season >= 2010, season <= 2026,
+         !season %in% 2023:2025,
          ngs_tier %in% c("Elite", "Good")) %>%
   mutate(
     ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
     pos_group = factor(pos_group, levels = key_positions),
-    draft_year = factor(as.integer(season), levels = 2010:2026)
+    draft_year = factor(as.integer(season), levels = setdiff(2010:2026, 2023:2025))
   )
+
+# Add 2026 class tiers from ngs_prospects (mapped positions)
+ngs_all_2026 <- ngs_prospects %>%
+  filter(!is.na(cmbn_score), pos_group %in% key_positions) %>%
+  mutate(ngs_tier = case_when(cmbn_score >= 90 ~ "Elite", cmbn_score >= 70 ~ "Good", TRUE ~ NA_character_)) %>%
+  filter(!is.na(ngs_tier)) %>%
+  count(pos_group, ngs_tier, name = "n") %>%
+  mutate(season = 2026, ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
+         pos_group = factor(pos_group, levels = key_positions),
+         draft_year = factor(2026L, levels = levels(ngs_other_tiers$draft_year)))
+ngs_other_tiers <- bind_rows(ngs_other_tiers, ngs_all_2026)
 
 ggplot(ngs_other_tiers, aes(x = draft_year, y = n, fill = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85) +
@@ -411,12 +434,20 @@ cat(paste0(
 ```
 
 ```{r class-2025-commentary, results='asis'}
-class_2025 <- ngs_class_tiers %>%
-  filter(season == 2026, ngs_tier %in% c("Elite", "Good")) %>%
+# Compute 2026 class tiers from ngs_prospects (not ngs_class_tiers, which lacks 2026)
+class_2025 <- ngs_prospects %>%
+  filter(!is.na(cmbn_score), pos_group %in% key_positions) %>%
+  mutate(ngs_tier = case_when(
+    cmbn_score >= 90 ~ "Elite",
+    cmbn_score >= 70 ~ "Good",
+    cmbn_score >= 60 ~ "Average",
+    TRUE ~ "Below Avg"
+  )) %>%
+  filter(ngs_tier %in% c("Elite", "Good")) %>%
   group_by(pos_group) %>%
   summarise(
-    n_good_plus = sum(n),
-    n_elite = sum(n[ngs_tier == "Elite"]),
+    n_good_plus = n(),
+    n_elite = sum(ngs_tier == "Elite"),
     .groups = "drop"
   ) %>%
   arrange(desc(n_good_plus))
@@ -465,6 +496,8 @@ cat(paste0(
 ### Did the Pre-Draft Signal Match Reality?
 
 The NGS scores tell us what the class looked like before the draft. But did the "deep" classes actually produce more hits? Here's the RB timeline with retrospective hit rates — the percentage of ALL drafted RBs that season who became starters (75%+ of positional snap baseline, from Article 1). Bar color is the pre-draft NGS classification, bar height is what actually happened.
+
+**Why stop at 2022?** Hit rates require a full four-year rookie contract to evaluate — a player drafted in 2023 has only played two seasons, which isn't enough to know if they'll become a starter. The 2022 class is the most recent with enough NFL tape to judge.
 
 ```{r rb-class-timeline-big, fig.height=6, fig.width=8}
 rb_classes <- class_depth %>%
@@ -615,7 +648,7 @@ ngs_with_outcomes <- blue_chip %>%
 
 ### Pre-Draft Elite vs Career Elite
 
-We can define "elite" two ways: retrospectively (top 10% of weighted career AV at the position) and prospectively (top 10% of Prospect Score at the position). How much do they overlap -- and does it differ by position?
+The Sharpe ratio treats all prospects at a position the same. But if we can identify which prospects are likely to become great *before the draft*, the average-case advice becomes less relevant. We can define "elite" two ways: retrospectively (top 10% of weighted career AV at the position) and prospectively (top 10% of Prospect Score at the position). How much do they overlap — and does it differ by position?
 
 If high NGS scores actually predict career success, the top-scoring prospects should cluster toward the top of the career value axis. Here's every RB with an NGS score — the pre-draft elite prospects (top 10% NGS) are highlighted:
 
@@ -640,10 +673,10 @@ ggplot(rb_scatter, aes(x = cmbn_score, y = car_av)) +
             min.segment.length = 0.2, segment.color = "gray70") +
   geom_smooth(method = "lm", se = TRUE, color = "#377EB8", linewidth = 0.8, alpha = 0.2) +
   annotate("label",
-           x = max(rb_scatter$cmbn_score, na.rm = TRUE) - 2,
+           x = min(rb_scatter$cmbn_score, na.rm = TRUE) + 2,
            y = max(rb_scatter$car_av, na.rm = TRUE) - 5,
            label = paste0("R² = ", round(rb_r2, 3)),
-           color = "white", fill = "#377EB8", size = 5, fontface = "bold", hjust = 1,
+           color = "white", fill = "#377EB8", size = 5, fontface = "bold", hjust = 0,
            label.padding = unit(0.4, "lines")) +
   scale_color_manual(values = c("TRUE" = "#377EB8", "FALSE" = "gray50")) +
   labs(
@@ -1068,13 +1101,18 @@ top_2025_all <- top_2025_all %>%
     pos_group = factor(pos_group, levels = key_positions)
   )
 
-ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tier)) +
+ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tier, color = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85, show.legend = TRUE) +
+  geom_point(aes(x = cmbn_score), size = 5, shape = 21, stroke = 1.2, show.legend = FALSE) +
   geom_text(aes(x = cmbn_score, label = round(cmbn_score, 1)),
-            hjust = -0.3, size = 2.5, fontface = "bold", color = "gray30", show.legend = FALSE) +
+            color = "white", hjust = 0.5, size = 1.8, fontface = "bold", show.legend = FALSE) +
   scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
+  ) +
+  scale_color_manual(
+    values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
+    guide = "none"
   ) +
   scale_y_discrete(labels = function(x) str_remove(x, "^.*___")) +
   scale_x_continuous(breaks = seq(60, 100, 10), expand = expansion(mult = c(0, 0.15))) +
@@ -1213,24 +1251,38 @@ if (length(pos_preds) > 0 && length(neg_preds) > 0) {
 test_brier <- mean((test_data$pred_elite - test_data$is_elite)^2)
 ```
 
-```{r p-elite-table, results='asis'}
-elite_summary %>%
+```{r p-elite-table, fig.height=5, fig.width=8}
+# Feature importance bar chart (odds ratios, log scale)
+elite_features <- elite_summary %>%
   filter(term != "(Intercept)") %>%
-  select(term, odds_ratio, p.value, p_star) %>%
   mutate(
-    term = str_replace(term, "pos_group", "") %>%
+    feature = str_replace(term, "pos_group", "") %>%
       str_replace("cmbn_score", "Prospect Score") %>%
       str_replace("log\\(pick\\)", "Log(Draft Pick)"),
-    odds_ratio = round(odds_ratio, 3),
-    p.value = format.pval(p.value, digits = 2)
-  ) %>%
-  gt() %>%
-  cols_label(term = "Feature", odds_ratio = "Odds Ratio",
-             p.value = "p-value", p_star = "") %>%
-  tab_header(title = md("**What Predicts an Elite Career?**"),
-             subtitle = paste0("Logistic regression | Train: 2010-2019 | Test AUC: ",
-                               round(test_auc, 3), " | Test Brier: ", round(test_brier, 3))) %>%
-  tab_options(table.font.size = px(12))
+    feature = fct_reorder(feature, odds_ratio),
+    significant = p.value < 0.05,
+    direction = if_else(odds_ratio >= 1, "Increases odds", "Decreases odds")
+  )
+
+ggplot(elite_features, aes(x = odds_ratio, y = feature, fill = direction)) +
+  geom_col(alpha = 0.85, width = 0.7) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "gray40") +
+  geom_text(aes(label = paste0(round(odds_ratio, 2), "x",
+                                if_else(p.value < 0.001, " ***",
+                                  if_else(p.value < 0.01, " **",
+                                    if_else(p.value < 0.05, " *", ""))))),
+            hjust = if_else(elite_features$odds_ratio >= 1, -0.1, 1.1),
+            size = 3, fontface = "bold") +
+  scale_fill_manual(values = c("Increases odds" = "#2e7d32", "Decreases odds" = "#c62828")) +
+  scale_x_continuous(expand = expansion(mult = c(0.05, 0.15))) +
+  labs(
+    title = "What Predicts an Elite Career?",
+    subtitle = paste0("Odds ratios from logistic regression | Train: 2010-2019 | Test AUC: ",
+                      round(test_auc, 3), " | Brier: ", round(test_brier, 3)),
+    x = "Odds Ratio (1 = no effect)", y = NULL, fill = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top")
 ```
 
 ```{r p-elite-love}
@@ -1363,26 +1415,36 @@ rs_test_r2 <- 1 - sum((rs_test$player_return - rs_test_pred)^2, na.rm = TRUE) /
   sum((rs_test$player_return - mean(train_data$player_return, na.rm = TRUE))^2, na.rm = TRUE)
 ```
 
-```{r career-av-coefficients, results='asis'}
-av_lm_summary %>%
+```{r career-av-coefficients, fig.height=5, fig.width=8}
+# Feature importance bar chart (standardized coefficients)
+av_features <- av_lm_summary %>%
   filter(term != "(Intercept)") %>%
   mutate(
-    term = str_replace(term, "pos_group", "") %>%
+    feature = str_replace(term, "pos_group", "") %>%
       str_replace("cmbn_score", "Prospect Score") %>%
       str_replace("log\\(pick\\)", "Log(Draft Pick)"),
-    estimate = round(estimate, 2),
-    p.value = format.pval(p.value, digits = 2),
-    p_star = case_when(p.value < 0.001 ~ "***", p.value < 0.01 ~ "**",
-                       p.value < 0.05 ~ "*", TRUE ~ "")
-  ) %>%
-  select(term, estimate, p.value, p_star) %>%
-  gt() %>%
-  cols_label(term = "Feature", estimate = "Coefficient",
-             p.value = "p-value", p_star = "") %>%
-  tab_header(title = md("**Predicting Career AV from Pre-Draft Features**"),
-             subtitle = paste0("Linear regression | Train: 2010-2019 | Test R²: ",
-                               round(lm_test_r2, 3), " | Test RMSE: ", round(lm_test_rmse, 1))) %>%
-  tab_options(table.font.size = px(12))
+    feature = fct_reorder(feature, estimate),
+    direction = if_else(estimate >= 0, "Positive", "Negative"),
+    p_star = case_when(p.value < 0.001 ~ " ***", p.value < 0.01 ~ " **",
+                       p.value < 0.05 ~ " *", TRUE ~ "")
+  )
+
+ggplot(av_features, aes(x = estimate, y = feature, fill = direction)) +
+  geom_col(alpha = 0.85, width = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray40") +
+  geom_text(aes(label = paste0(round(estimate, 1), p_star)),
+            hjust = if_else(av_features$estimate >= 0, -0.1, 1.1),
+            size = 3, fontface = "bold") +
+  scale_fill_manual(values = c("Positive" = "#2e7d32", "Negative" = "#c62828")) +
+  scale_x_continuous(expand = expansion(mult = c(0.15, 0.15))) +
+  labs(
+    title = "Predicting Career AV from Pre-Draft Features",
+    subtitle = paste0("Linear regression coefficients | Train: 2010-2019 | Test R²: ",
+                      round(lm_test_r2, 3), " | RMSE: ", round(lm_test_rmse, 1)),
+    x = "Coefficient (career AV points)", y = NULL, fill = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top")
 ```
 
 How well does this work in practice? Here are some players from the 2020-2022 test set — prospects the model never saw during training — with their predicted vs actual career AV:
@@ -1935,7 +1997,7 @@ prospect_table %>%
 
 ### The Surplus Value View
 
-Career AV tells us how good a player becomes. But Article 1's Sharpe ratio doesn't use career AV — it uses **surplus value** (player return), the total value a draft pick generates beyond replacement. The formula:
+Everything above used career AV — a production metric. But the Sharpe ratio doesn't measure production; it measures **surplus value** — how much cheaper a drafted player is than a free-agent replacement. This is the metric that says "never draft an RB." If Love can beat premium positions on surplus too, the case is airtight. The formula:
 
 > **Surplus Value** = Rookie Surplus + Second Contract APY (as % of cap)
 
@@ -1952,7 +2014,54 @@ We use quantile regression at the 10th, 50th, and 90th percentiles for both mode
 
 > *Player Return = Snap Ratio × (FA Cost − Rookie APY) × 4 + Second Contract*
 
-Combined median out-of-sample R² = `r round(rs_test_r2, 3)`. Translated to the 2026 salary cap ($275M):
+```{r component-model-features, fig.height=8, fig.width=8}
+# Feature importance for snap ratio and second contract OLS models
+sc_lm <- lm(second_apy_cap_pct ~ cmbn_score + log(pick) + pos_group, data = sc_train)
+sc_r2 <- summary(sc_lm)$r.squared
+
+sr_features <- broom::tidy(sr_lm) %>% filter(term != "(Intercept)") %>%
+  mutate(model = "Snap Ratio", feature = str_replace(term, "pos_group", "") %>%
+    str_replace("cmbn_score", "Prospect Score") %>% str_replace("log\\(pick\\)", "Log(Draft Pick)"))
+sc_features <- broom::tidy(sc_lm) %>% filter(term != "(Intercept)") %>%
+  mutate(model = "Second Contract", feature = str_replace(term, "pos_group", "") %>%
+    str_replace("cmbn_score", "Prospect Score") %>% str_replace("log\\(pick\\)", "Log(Draft Pick)"))
+
+component_features <- bind_rows(sr_features, sc_features) %>%
+  mutate(
+    direction = if_else(estimate >= 0, "Positive", "Negative"),
+    feature = fct_reorder(feature, estimate, .fun = mean),
+    p_star = case_when(p.value < 0.001 ~ " ***", p.value < 0.01 ~ " **",
+                       p.value < 0.05 ~ " *", TRUE ~ "")
+  )
+
+# Out-of-time test metrics for snap ratio
+sr_test <- test_data %>% filter(!is.na(snap_ratio))
+sr_test_pred <- predict(sr_lm, newdata = sr_test)
+sr_test_r2 <- 1 - sum((sr_test$snap_ratio - sr_test_pred)^2) /
+  sum((sr_test$snap_ratio - mean(sr_train$snap_ratio))^2)
+
+sc_test <- test_data %>% filter(!is.na(second_apy_cap_pct))
+sc_test_pred <- predict(sc_lm, newdata = sc_test)
+sc_test_r2 <- 1 - sum((sc_test$second_apy_cap_pct - sc_test_pred)^2) /
+  sum((sc_test$second_apy_cap_pct - mean(sc_train$second_apy_cap_pct))^2)
+
+ggplot(component_features, aes(x = estimate, y = feature, fill = direction)) +
+  geom_col(alpha = 0.85, width = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray40") +
+  scale_fill_manual(values = c("Positive" = "#2e7d32", "Negative" = "#c62828")) +
+  facet_wrap(~model, scales = "free_x", ncol = 2) +
+  labs(
+    title = "Component Model Feature Importance",
+    subtitle = paste0("Snap Ratio: Test R² = ", round(sr_test_r2, 3),
+                      " | Second Contract: Test R² = ", round(sc_test_r2, 3),
+                      " | Combined Player Return: Test R² = ", round(rs_test_r2, 3)),
+    x = "Coefficient", y = NULL, fill = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "top", strip.text = element_text(face = "bold", size = 12))
+```
+
+**Model performance:** The snap ratio model (OLS R² = `r round(sr_r2, 3)`, test R² = `r round(sr_test_r2, 3)`) captures how much a player plays. Prospect Score is the strongest predictor — higher-graded prospects earn more snaps. The second contract model (test R² = `r round(sc_test_r2, 3)`) predicts the market's verdict after the rookie deal. When we assemble the full player return from these components plus the known FA costs and rookie APY, the combined median out-of-sample R² is **`r round(rs_test_r2, 3)`**. Translated to the 2026 salary cap ($275M):
 
 ```{r love-player-return, fig.height=7, fig.width=9}
 # Love's curve at 10th, 50th, 90th percentile outcomes
@@ -2022,6 +2131,10 @@ for(i in 2:nrow(labels_df)) {
   }
 }
 
+# Find where Love Q90 crosses the 2026 premium median
+q90_cross <- which(love_range$q90 >= prem_median$avg_rs)
+upside_fair_value <- if(length(q90_cross) > 0) max(q90_cross) else NA
+
 ggplot() +
   # Love's range band (Q10-Q90)
   geom_ribbon(data = love_range,
@@ -2047,6 +2160,14 @@ ggplot() +
   # 2026 non-premium avg median (orange)
   geom_line(data = nonprem_median, aes(x = pick, y = avg_rs * salary_cap),
             color = "#E67E22", linewidth = 1.2) +
+  # Vertical line where Love Q90 crosses premium
+  { if(!is.na(upside_fair_value))
+    geom_vline(xintercept = upside_fair_value, linetype = "dotted", color = "#377EB8", linewidth = 0.8) } +
+  { if(!is.na(upside_fair_value))
+    annotate("text", x = upside_fair_value + 0.5,
+             y = max(love_range$q90 * salary_cap) * 0.75,
+             label = paste0("Upside fair value\n(pick ", upside_fair_value, ")"),
+             color = "#377EB8", fontface = "bold", size = 3.2, hjust = 0) } +
   # Labels — dynamically positioned to avoid overlap
   {lapply(1:nrow(labels_df), function(i)
     annotate("text", x = 32.5, y = labels_df$y[i], label = labels_df$label[i],
@@ -2080,7 +2201,18 @@ cat(paste0(
   "regardless of how good the player is.\n\n",
   "At pick 20, the rookie deal drops to **$", rk_pick20, "M/year**, opening a **$",
   round((fa_costs["IOL"] - rookie_apy["20"]) * salary_cap, 1),
-  "M/year** gap. Over four rookie years, that gap compounds into real surplus. ",
+  "M/year** gap. Over four rookie years, that gap compounds into real surplus.\n\n",
+  "**Worked example — IOL at pick 5 vs pick 20:**\n\n",
+  "| | Pick 5 | Pick 20 |\n",
+  "|---|---|---|\n",
+  "| Rookie APY | $", round(rookie_apy["5"] * salary_cap, 1), "M | $", rk_pick20, "M |\n",
+  "| FA replacement | $", iol_fa, "M | $", iol_fa, "M |\n",
+  "| Annual savings | $", round((fa_costs["IOL"] - rookie_apy["5"]) * salary_cap, 1),
+  "M | $", round((fa_costs["IOL"] - rookie_apy["20"]) * salary_cap, 1), "M |\n",
+  "| 4-year surplus (if starter) | $", round((fa_costs["IOL"] - rookie_apy["5"]) * salary_cap * 4, 1),
+  "M | $", round((fa_costs["IOL"] - rookie_apy["20"]) * salary_cap * 4, 1), "M |\n\n",
+  "At pick 5, the IOL's rookie deal is so expensive that four years of starting barely saves anything. ",
+  "At pick 20, the same player on a cheaper rookie deal generates real surplus. ",
   "For non-premium positions, the savings only materialize at later picks — which is exactly why the Sharpe ratio ",
   "says drafting them early is value-destructive.\n\n",
   "Premium positions don't have this problem. A QB's free-agent replacement costs **$", qb_fa,
@@ -2120,7 +2252,15 @@ cat(paste0(
   "This is why the Sharpe ratio says never draft an RB: the surplus math penalizes the position ",
   "regardless of the individual player.\n\n",
   "This is the Sharpe ratio's blind spot made visible. Career AV says Love is the best prospect in ",
-  "the class. Surplus value says premium positions still generate more efficient returns. Both are true. ",
+  "the class. Surplus value says premium positions still generate more efficient returns. Both are true.\n\n",
+  if(!is.na(upside_fair_value)) {
+    paste0(
+      "But there's a third view: Love's **ceiling**. His 90th-percentile outcome — a Gurley/CMC-level career — ",
+      "crosses the premium position average at **pick ", upside_fair_value, "**. ",
+      "After that pick, even the Sharpe ratio's own surplus math says Love's upside beats premium alternatives. ",
+      "That's the gamble: if a team believes Love can be a generational back, the math supports drafting him ",
+      "from pick ", upside_fair_value, " onward. If they think he's closer to average, the model says wait.\n\n")
+  } else "",
   "The question isn't which metric is right — it's which one your team cares about. ",
   "A team building for the next decade wants career production. A team optimizing cap efficiency wants surplus. ",
   "Love is the rare prospect where the career value argument is strong enough to challenge the surplus math."
@@ -2218,7 +2358,9 @@ cat(paste0(
   "We score each first-round team on three factors from this article:\n\n",
   "1. **Roster need:** Does the team lack a starter-level RB? (from the table above)\n",
   "2. **Fair value:** Is their pick outside the dead zone (picks ", dead_zone_start, "-", dead_zone_end,
-  ") where premium position talent is richest?\n",
+  ") where premium position talent is richest? Or past pick ",
+  if(!is.na(upside_fair_value)) upside_fair_value else "N/A",
+  " where Love's upside case beats premium alternatives?\n",
   "3. **Class context:** 2026 is a thin RB class with Love as the only Elite prospect — ",
   "this factor applies equally to every team.\n\n"
 ))
@@ -2283,9 +2425,11 @@ Then we stress-tested it. And the model held up -- mostly. The positional hierar
 
 4. **Pre-draft models confirm the exception.** Three models — all trained on 2010-2019 and validated out-of-time on 2020-2022 — agree: Love's Prospect Score profile predicts a meaningfully higher probability of an elite career than the positional average. His predicted career AV at pick 10 exceeds every non-RB prospect in the 2026 class. Even the risk-adjusted predicted Sharpe ratio — which penalizes RB for positional variance — shows a crossover point where Love becomes the better bet. The rookie surplus argument assumes all RBs are interchangeable. Love's predicted career trajectory says otherwise.
 
-And then the numbers that tie it together: the career AV crossover shows Love outprojects every non-RB prospect in the 2026 class, while the risk-adjusted Sharpe crossover lands at the exact pick range where the gamble starts to make sense. Two views of the same question -- and both say the opportunity cost argument breaks down when the alternative prospects are this far below Love's grade.
+And then the numbers that tie it together: the career AV crossover shows Love outprojects every non-RB prospect in the 2026 class, while the surplus value model reveals a second crossover — Love's 90th-percentile outcome (a Gurley/CMC-level career) beats the premium position average starting at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`. That's the upside case: teams drafting after that point can bet on Love's ceiling and win the surplus math too.
 
-The wildest scenario? Minnesota at pick 18, with Aaron Jones turning 32 and no long-term answer behind him. If Love is still on the board at 10 -- or slides past it -- the Vikings have every reason to trade up. They have the need, the pick falls in the fair value zone, and the 2026 class gives them no alternative. Every counter-argument in this article points at MIN.
+But it IS a bet. Love's median outcome still trails premium positions in surplus terms at every pick. The upside case requires him to be a generational back — the kind that comes along once every few years. Teams that can't afford to gamble should follow the model. Teams that need an RB, pick late enough, and believe in the prospect have the math on their side — if Love hits his ceiling.
+
+The wildest scenario? Minnesota at pick 18, with Aaron Jones turning 32 and no long-term answer behind him. If Love is still on the board at 10 — or slides past it — the Vikings have every reason to trade up. They have the need, the pick falls past the upside crossover at `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`, and the 2026 class gives them no alternative. Every counter-argument in this article points at MIN.
 
 ---
 
@@ -2299,7 +2443,9 @@ The counter-arguments didn't destroy the model. They sharpened it. Here's what s
 
 - **Day 2+ RBs are still the default.** When the class isn't thin and the top RB isn't separated, the model's advice stands. Most years, you can find a productive back in rounds 2-4.
 
-- **The Sharpe ratio is a compass, not a GPS.** It points you in the right direction. But the last mile -- roster needs, class depth, prospect separation -- requires judgment that no single metric can capture. The model tells you what to do on average. GMs don't draft on average. They draft in a specific year, for a specific team, at a specific pick. Context is the difference between a good process and a great one.
+- **The Sharpe ratio is a compass, not a GPS.** It points you in the right direction. But the last mile — roster needs, class depth, prospect separation — requires judgment that no single metric can capture. The model tells you what to do on average. GMs don't draft on average. They draft in a specific year, for a specific team, at a specific pick. Context is the difference between a good process and a great one.
+
+**The bottom line for Love:** Nine teams need a running back. The 2026 class is thin. Love is separated from every other RB prospect by 17 points. His median outcome still loses the surplus math to premium positions — but his ceiling case crosses the premium line at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`. Teams picking after that point who need an RB can justify the pick, but they're betting on a Todd Gurley / Christian McCaffrey outcome. That's a bet worth making exactly once every few years, when the prospect grade says so. Love's 94.3 says so.
 
 ---
 
