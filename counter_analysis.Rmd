@@ -1697,7 +1697,7 @@ cat(paste0(
   "(pick 2) earned ~4.4% of the cap on his rookie deal, while a replacement RB costs ~6% — ",
   "a savings of just ~$4M/yr. Sam Darnold (pick 3) earned ~4.3%, but a replacement QB costs ~14.6% — ",
   "a savings of ~$26M/yr. Over four years, Darnold's rookie surplus alone (~$120M in today's cap terms) ",
-  "dwarfs Barkley's (~$19M), even though Darnold is widely considered a bust. ",
+  "dwarfs Barkley's (~$19M), even though Darnold's rookie contract years with the Jets were a disaster. ",
   "The cost-controlled advantage at positions with expensive free-agent markets is so massive that ",
   "even a mediocre QB outcome beats a great RB outcome in surplus terms.\n\n",
   "This isn't a theoretical 'what if' — these are the actual outcomes of the next QB, EDGE, OT, or WR ",
