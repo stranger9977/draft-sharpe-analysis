@@ -914,7 +914,8 @@ ggplot(ngs_rb, aes(x = cmbn_score, y = player_label, fill = ngs_tier, color = ng
     x = "Prospect Score", y = NULL
   ) +
   theme_minimal(base_size = 14) +
-  theme(panel.grid.major.y = element_blank())
+  theme(panel.grid.major.y = element_blank(),
+        axis.text.y = element_text(color = "white"))
 ```
 
 ```{r ngs-love-narrative, results='asis'}
@@ -998,7 +999,8 @@ ggplot(top20, aes(x = cmbn_score, y = label, fill = ngs_tier, color = ngs_tier))
     x = "Prospect Score", y = NULL
   ) +
   theme_minimal(base_size = 13) +
-  theme(legend.position = "top", panel.grid.major.y = element_blank())
+  theme(legend.position = "top", panel.grid.major.y = element_blank(),
+        axis.text.y = element_text(color = "white"))
 ```
 
 ```{r love-historical-narrative, results='asis'}
@@ -1048,21 +1050,16 @@ top_2025_all <- top_2025_all %>%
     pos_group = factor(pos_group, levels = key_positions)
   )
 
-ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tier, color = ngs_tier)) +
+ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tier)) +
   geom_col(width = 0.7, alpha = 0.85, show.legend = TRUE) +
-  geom_point(aes(x = cmbn_score), size = 7, shape = 21, stroke = 1.5, show.legend = FALSE) +
   geom_text(aes(x = cmbn_score, label = round(cmbn_score, 1)),
-            color = "white", size = 2.0, fontface = "bold", show.legend = FALSE) +
+            hjust = -0.3, size = 2.5, fontface = "bold", color = "gray30", show.legend = FALSE) +
   scale_fill_manual(
     values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
     name = "NGS Tier"
   ) +
-  scale_color_manual(
-    values = c("Elite" = "#1565C0", "Good" = "#66BB6A", "Average" = "#FFA726", "Below Avg" = "#EF5350"),
-    guide = "none"
-  ) +
   scale_y_discrete(labels = function(x) str_remove(x, "^.*___")) +
-  scale_x_continuous(breaks = seq(60, 100, 10), expand = expansion(mult = c(0, 0.12))) +
+  scale_x_continuous(breaks = seq(60, 100, 10), expand = expansion(mult = c(0, 0.15))) +
   coord_cartesian(xlim = c(58, NA), clip = "off") +
   facet_wrap(~pos_group, scales = "free_y", ncol = 2) +
   labs(
@@ -1075,6 +1072,7 @@ ggplot(top_2025_all, aes(x = cmbn_score, y = player_label_unique, fill = ngs_tie
     legend.position = "top",
     strip.text = element_text(face = "bold", size = 11),
     panel.grid.major.y = element_blank(),
+    axis.text.y = element_text(color = "white"),
     plot.margin = margin(5, 25, 5, 5)
   )
 ```
@@ -1630,218 +1628,182 @@ cat(paste0(
 ))
 ```
 
-### Love's Predicted Value vs the Alternative
+### Love vs the 2026 Class: Who's the Better Pick?
 
-The model lets us do something the raw averages can't: predict career value for *specific* prospects, not just position averages. Instead of comparing Love to the historical mean non-RB, we can ask: what does the model predict for a typical premium-position prospect (QB, EDGE, OT, WR) vs a typical non-premium prospect at each pick?
+The model lets us do something the raw averages can't: predict career value for *specific* prospects in *this* draft class. Instead of comparing Love to a historical average, we can plug in the actual top prospect at every position and ask: who does the model project highest at each pick?
 
-```{r love-vs-alt, fig.height=5, fig.width=8}
-premium_pos <- c("QB", "EDGE", "OT", "WR")
-
-# Average predicted career AV for premium vs non-premium prospects at each pick
-# Using the linear model's coefficients with average Prospect Scores per group
-prem_avg_cmbn <- model_data %>%
-  filter(pos_group %in% premium_pos) %>%
-  pull(cmbn_score) %>% mean()
-
-nonprem_avg_cmbn <- model_data %>%
-  filter(!pos_group %in% premium_pos) %>%
-  pull(cmbn_score) %>% mean()
-
-# Predict for each pick using average premium/non-premium profiles
-pred_by_pick <- map_dfr(1:32, function(p) {
-  # Average premium prospect at this pick (weighted across premium positions)
-  prem_preds <- map_dbl(premium_pos, function(pos) {
-    row <- data.frame(cmbn_score = prem_avg_cmbn, pick = p,
-                      pos_group = factor(pos, levels = levels(model_data$pos_group)))
-    predict(av_lm, newdata = row)
-  })
-  # Average non-premium prospect
-  nonprem_positions <- setdiff(key_positions, premium_pos)
-  nonprem_preds <- map_dbl(nonprem_positions, function(pos) {
-    row <- data.frame(cmbn_score = nonprem_avg_cmbn, pick = p,
-                      pos_group = factor(pos, levels = levels(model_data$pos_group)))
-    predict(av_lm, newdata = row)
-  })
-
-  # Love's prediction
-  love_pred_row <- love_base %>% mutate(pick = p)
-
-  tibble(
-    pick = p,
-    premium_avg = mean(prem_preds),
-    nonprem_avg = mean(nonprem_preds),
-    love_pred = predict(av_lm, newdata = love_pred_row)
-  )
-})
-
-# Find crossover: where Love > premium average
-crossover <- pred_by_pick %>%
-  filter(love_pred >= premium_avg) %>%
-  slice_head(n = 1) %>%
-  pull(pick)
-
-ggplot(pred_by_pick, aes(x = pick)) +
-  geom_line(aes(y = love_pred, color = "Love (predicted)"), linewidth = 1.2) +
-  geom_line(aes(y = premium_avg, color = "Avg premium prospect"), linewidth = 1.2) +
-  geom_line(aes(y = nonprem_avg, color = "Avg non-premium prospect"), linewidth = 1, linetype = "dashed") +
-  geom_ribbon(data = pred_by_pick %>% filter(love_pred >= premium_avg),
-              aes(ymin = premium_avg, ymax = love_pred), fill = "#2e7d32", alpha = 0.12) +
-  geom_ribbon(data = pred_by_pick %>% filter(love_pred < premium_avg),
-              aes(ymin = love_pred, ymax = premium_avg), fill = "#c62828", alpha = 0.12) +
-  scale_color_manual(values = c("Love (predicted)" = "#377EB8",
-                                "Avg premium prospect" = "#c62828",
-                                "Avg non-premium prospect" = "#999999"),
-                     name = NULL) +
-  scale_x_continuous(breaks = seq(1, 32, 2)) +
-  labs(
-    title = "Love vs the Model's View of the Alternative",
-    subtitle = "Linear model predictions: Love vs avg premium and non-premium prospects by pick",
-    x = "Draft Pick", y = "Predicted Weighted Career AV"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(legend.position = "top")
-```
-
-```{r love-vs-alt-narrative, results='asis'}
-love_at_10_pred <- pred_by_pick %>% filter(pick == 10)
-cat(paste0(
-  "The model predicts Love's career AV at **", round(love_at_10_pred$love_pred, 0),
-  "** at pick 10. The average premium-position prospect (QB, EDGE, OT, WR) at the same pick ",
-  "projects to **", round(love_at_10_pred$premium_avg, 0),
-  "**",
-  if (!is.na(crossover) && crossover <= 32) {
-    paste0(". Love's predicted value exceeds the premium average starting at **pick ",
-           crossover, "** — meaning from that point on, the model says Love is the better bet ",
-           "than what you'd typically find at a premium position.")
-  } else {
-    paste0(". Love's predicted value trails the premium average throughout the first round, ",
-           "but narrows the gap significantly in the back half.")
-  },
-  "\n\n",
-  "This doesn't eliminate the rookie surplus concern. A team still gets cheap production from a Day 2 RB. ",
-  "But the question isn't 'can you find *a* running back later?' — it's 'can you find *this* running back ",
-  "later?' Love's 94.3 Prospect Score says no. The gap between Love and RB2 in this class is 17 points. ",
-  "The surplus argument assumes fungibility. Love breaks that assumption."
-))
-```
-
-### Love's Fair Value in This Draft
-
-The dumbbell chart shows the historical gamble. But what pick makes the gamble worth it? The Sharpe ratio's opportunity cost assumes every class is average, with equal depth at every position. In 2026, that assumption breaks down. **RB supply is scarce** (Love is the only Elite-tier RB, with a 17-point gap to RB2) while **non-RB supply is deep** (IOL, CB, and WR are loaded with Good+ prospects — and even EDGE and OT have enough depth to find value in round 2). When non-RB positions are deep, you can find that EDGE or OT later. When RB is thin, you can't. The effective opportunity cost of drafting Love is lower than the historical average suggests because what you're "giving up" will still be there later.
-
-```{r love-fair-value, fig.height=6, fig.width=8}
-# Elite RB career AV (all NGS top-10% RBs)
+```{r love-vs-class, fig.height=7, fig.width=8}
+# Dead zone calculation (used in verdict section)
 bc_rb_av <- blue_chip %>%
   filter(pos_group == "RB", is_ngs_blue_chip == TRUE, !is.na(car_av))
-
 bc_median <- median(bc_rb_av$car_av)
-bc_q25 <- quantile(bc_rb_av$car_av, 0.25)
-bc_q75 <- quantile(bc_rb_av$car_av, 0.75)
-bc_min <- min(bc_rb_av$car_av)
-bc_max <- max(bc_rb_av$car_av)
-
-# Use blue_chip for career AV (has all drafted players)
-all_r1_av <- blue_chip %>%
+all_r1_av_fv <- blue_chip %>%
   filter(pick <= 32, pos_group %in% key_positions, !is.na(car_av), season >= 2010)
-
-# Single non-RB line (all positions combined)
-non_rb_line <- all_r1_av %>%
+non_rb_line <- all_r1_av_fv %>%
   filter(pos_group != "RB") %>%
   group_by(pick) %>%
-  summarise(avg_av = mean(car_av, na.rm = TRUE), n = n(), .groups = "drop") %>%
+  summarise(avg_av = mean(car_av, na.rm = TRUE), .groups = "drop") %>%
   arrange(pick)
-
-# 5-pick rolling smooth
 smooth_line <- function(df, col = "avg_av") {
   df <- df %>% arrange(pick) %>% filter(pick <= 32)
   vals <- numeric(nrow(df))
   for(i in seq_along(df$pick)) {
     p <- df$pick[i]
-    window_picks <- (p - 2):(p + 2)
-    window_data <- df %>% filter(pick %in% window_picks)
+    window_data <- df %>% filter(pick >= p - 2, pick <= p + 2)
     vals[i] <- mean(window_data[[col]], na.rm = TRUE)
   }
   df$smooth_av <- vals
   df
 }
-
 non_rb_smooth <- smooth_line(non_rb_line)
-
-# Find where non-RB line first drops below elite RB median (the crossover point)
-# This marks the end of the dead zone - where non-RB talent no longer outproduces elite RBs
 above <- non_rb_smooth$smooth_av > bc_median
-
-# Find the first contiguous stretch where non-RB > median
 if(any(above)) {
   dead_zone_start <- non_rb_smooth$pick[which(above)[1]]
-  # Find where the first run of TRUE ends
   first_false <- which(!above & non_rb_smooth$pick > dead_zone_start)
-  if(length(first_false) > 0) {
-    dead_zone_end <- non_rb_smooth$pick[first_false[1] - 1]
-  } else {
-    dead_zone_end <- non_rb_smooth$pick[max(which(above))]
-  }
-} else {
-  dead_zone_start <- 0
-  dead_zone_end <- 0
-}
-
-# Fair value = picks AFTER the dead zone
+  dead_zone_end <- if(length(first_false) > 0) non_rb_smooth$pick[first_false[1] - 1] else non_rb_smooth$pick[max(which(above))]
+} else { dead_zone_start <- 0; dead_zone_end <- 0 }
 fair_value_start <- dead_zone_end + 1
 
+# Top prospect at each position in the 2026 class
+# Note: NGS doesn't separately score EDGE or OT (mapped to DL and IOL)
+top_2026 <- ngs_prospects %>%
+  filter(!is.na(cmbn_score), pos_group %in% key_positions) %>%
+  group_by(pos_group) %>%
+  slice_max(cmbn_score, n = 1) %>%
+  ungroup() %>%
+  select(player, pos_group, cmbn_score)
+
+# Predict career AV for each top prospect at each pick
+prospect_curves <- map_dfr(1:32, function(p) {
+  map_dfr(1:nrow(top_2026), function(i) {
+    row <- data.frame(
+      cmbn_score = top_2026$cmbn_score[i],
+      pick = p,
+      pos_group = factor(top_2026$pos_group[i], levels = levels(model_data$pos_group))
+    )
+    tibble(
+      pick = p,
+      player = top_2026$player[i],
+      pos_group = top_2026$pos_group[i],
+      cmbn_score = top_2026$cmbn_score[i],
+      pred_av = predict(av_lm, newdata = row)
+    )
+  })
+})
+
+# Add Love separately (already in the data as RB, but we'll highlight him)
+love_curve <- prospect_curves %>% filter(player == "Jeremiyah Love")
+other_curves <- prospect_curves %>% filter(player != "Jeremiyah Love")
+
+# Create labels for the legend
+prospect_labels <- top_2026 %>%
+  mutate(label = paste0(player, " (", pos_group, ", ", round(cmbn_score, 1), ")")) %>%
+  arrange(desc(cmbn_score))
+
+# Use position colors, but make Love's line stand out
+other_curves <- other_curves %>%
+  mutate(label = paste0(player, " (", pos_group, ", ", round(cmbn_score, 1), ")"))
+love_curve <- love_curve %>%
+  mutate(label = paste0(player, " (", pos_group, ", ", round(cmbn_score, 1), ")"))
+
+# Plot all curves
 ggplot() +
-  # Dead zone (where non-RB > elite RB median)
-  annotate("rect", xmin = dead_zone_start - 0.5, xmax = dead_zone_end + 0.5,
-           ymin = -Inf, ymax = Inf, fill = "#c62828", alpha = 0.06) +
-  annotate("text", x = (dead_zone_start + dead_zone_end) / 2, y = bc_median + 25,
-           label = paste0("Dead zone (", dead_zone_start, "-", dead_zone_end, ")"),
-           color = "#c62828", hjust = 0.5, size = 3.5, fontface = "bold") +
-  # Fair value zone
-  annotate("rect", xmin = dead_zone_end + 0.5, xmax = 32.5,
-           ymin = -Inf, ymax = Inf, fill = "#2e7d32", alpha = 0.04) +
-  annotate("text", x = (dead_zone_end + 32) / 2, y = bc_median + 25,
-           label = paste0("Fair value (", fair_value_start, "+)"),
-           color = "#2e7d32", hjust = 0.5, size = 3.5, fontface = "bold") +
-  # Non-RB line
-  geom_line(data = non_rb_smooth, aes(x = pick, y = smooth_av),
-            color = "#c62828", linewidth = 1.2) +
-  # Elite RB median
-  geom_hline(yintercept = bc_median, color = "#377EB8", linewidth = 1.2, linetype = "solid") +
-  # Labels
-  annotate("text", x = 32, y = bc_median + 2,
-           label = paste0("Elite RB median: ", round(bc_median, 0)),
-           color = "#377EB8", hjust = 1, size = 3.2, fontface = "bold") +
-  annotate("text", x = 4, y = non_rb_smooth$smooth_av[non_rb_smooth$pick == 4] + 4,
-           label = "Non-RB avg", color = "#c62828", hjust = 0.5, size = 3.5, fontface = "bold") +
-  scale_x_continuous(breaks = seq(1, 32, 2)) +
-  coord_cartesian(ylim = c(max(bc_min - 5, 0), bc_median + 30)) +
+  # Other prospect lines (thinner, by position color)
+  geom_line(data = other_curves,
+            aes(x = pick, y = pred_av, color = pos_group, group = player),
+            linewidth = 0.8, alpha = 0.6) +
+  # Love's line (thick, highlighted)
+  geom_line(data = love_curve,
+            aes(x = pick, y = pred_av), color = "#377EB8", linewidth = 1.5) +
+  # Label each line at pick 32
+  geom_text_repel(data = other_curves %>% filter(pick == 32),
+                  aes(x = pick, y = pred_av, label = paste0(player, "\n(", pos_group, ")"),
+                      color = pos_group),
+                  size = 2.5, hjust = 0, nudge_x = 0.5, direction = "y",
+                  segment.size = 0.3, show.legend = FALSE, fontface = "bold") +
+  geom_text_repel(data = love_curve %>% filter(pick == 32),
+                  aes(x = pick, y = pred_av),
+                  label = "Love\n(RB)", color = "#377EB8",
+                  size = 3, hjust = 0, nudge_x = 0.5, fontface = "bold",
+                  segment.size = 0.3) +
+  # Mark pick 10
+  geom_point(data = love_curve %>% filter(pick == 10),
+             aes(x = pick, y = pred_av), color = "#377EB8", size = 3) +
+  scale_color_manual(values = pos_colors, guide = "none") +
+  scale_x_continuous(breaks = seq(1, 32, 2), expand = expansion(mult = c(0.02, 0.12))) +
   labs(
-    title = "Love's Fair Value: Where the Gamble Makes Sense",
-    subtitle = "Red = avg non-RB career AV by pick | Blue = elite RB median (historical top 10% Prospect Score)",
-    x = "Pick Number", y = "Weighted Career AV"
+    title = "2026 Draft: Predicted Career AV by Prospect and Pick",
+    subtitle = "Each line = top prospect at that position | Love highlighted in blue",
+    x = "Draft Pick", y = "Predicted Weighted Career AV"
   ) +
   theme_minimal(base_size = 13)
 ```
 
-```{r love-fair-value-narrative, results='asis'}
+```{r love-vs-class-table, results='asis'}
+# Table: predicted AV at picks 5, 10, 15, 20 for each prospect
+pick_slices <- c(5, 10, 15, 20)
+prospect_table <- prospect_curves %>%
+  filter(pick %in% pick_slices) %>%
+  mutate(pred_av = round(pred_av, 0)) %>%
+  select(player, pos_group, cmbn_score, pick, pred_av) %>%
+  pivot_wider(names_from = pick, values_from = pred_av, names_prefix = "pick_") %>%
+  arrange(desc(cmbn_score))
+
+prospect_table %>%
+  gt() %>%
+  cols_label(
+    player = "Prospect", pos_group = "Pos", cmbn_score = "Score",
+    pick_5 = "Pick 5", pick_10 = "Pick 10", pick_15 = "Pick 15", pick_20 = "Pick 20"
+  ) %>%
+  tab_spanner(label = "Predicted Career AV at Pick", columns = starts_with("pick_")) %>%
+  tab_style(
+    style = cell_fill(color = "#e3f2fd"),
+    locations = cells_body(rows = player == "Jeremiyah Love")
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(rows = player == "Jeremiyah Love")
+  ) %>%
+  tab_header(
+    title = md("**2026 Draft Class: Predicted Career AV by Pick**"),
+    subtitle = "Top prospect at each position | Prospect Score drives the prediction"
+  ) %>%
+  tab_options(table.font.size = px(12))
+```
+
+```{r love-vs-class-narrative, results='asis'}
+love_at_10 <- prospect_curves %>% filter(player == "Jeremiyah Love", pick == 10) %>% pull(pred_av)
+
+# Who beats Love at pick 10?
+beats_love_10 <- prospect_curves %>%
+  filter(pick == 10, pred_av > love_at_10, player != "Jeremiyah Love") %>%
+  arrange(desc(pred_av))
+
+# Who does Love beat at pick 10?
+love_beats_10 <- prospect_curves %>%
+  filter(pick == 10, pred_av <= love_at_10, player != "Jeremiyah Love") %>%
+  arrange(desc(pred_av))
+
 cat(paste0(
-  "The blue line is the median weighted career AV across all historical elite RBs (top 10% Prospect Score): **",
-  round(bc_median, 0), "**. The red line is the average career AV of all non-RB first-rounders at each pick, smoothed over a 5-pick rolling window.\n\n",
-  "The dead zone is **picks ", dead_zone_start, "-", dead_zone_end,
-  "** -- and that number should jump off the page. Part 1 opened with the question: *Should you draft Jeremiah Love at 10?* ",
-  "The career AV data just answered it. The crossover point -- where elite RB value starts to exceed the average non-RB pick -- ",
-  "is **pick ", fair_value_start, "**. Part 1's question and the career AV breaking point land on the exact same number.\n\n",
-  "In the dead zone, the average non-RB pick outproduces even the median elite RB. The opportunity cost is too high. ",
-  "**After pick ", dead_zone_end, "**, non-RB talent thins out and the calculus flips.\n\n",
-  "Now layer in what we've built:\n\n",
-  "- **Roster needs:** If a team already has its premium positions filled, the opportunity cost drops further.\n",
-  "- **Class depth:** In 2026, the RB class is thin (Love is the only Elite). Pass on him and there's no comparable RB later. ",
-  "Meanwhile, IOL and CB are loaded -- those positions will still be available in round 2+.\n",
-  "- **Prospect separation:** Love's NGS profile puts him in the top tier of historical elite RBs, so his expected value is likely *above* the median line, not on it.\n",
-  "- **No elite premium prospects:** In a typical year, picks ", dead_zone_start, "-", dead_zone_end,
-  " are rich with elite EDGE, OT, and WR talent. In 2026, not a single premium-position prospect grades Elite (90+) on NGS. ",
-  "The opportunity cost of taking Love isn't as high as the historical average suggests -- because the alternatives aren't as good as usual.\n\n",
-  "Love at 10 isn't just defensible. It might be the pick where the career AV math starts to agree with the gamble."
+  "At pick 10, the model projects Love at **", round(love_at_10, 0), "** career AV. ",
+  if (nrow(beats_love_10) > 0) {
+    paste0("Only **", nrow(beats_love_10), "** prospect",
+           if(nrow(beats_love_10) > 1) "s" else "", " project higher: ",
+           paste0(beats_love_10$player, " (", beats_love_10$pos_group, ", ",
+                  round(beats_love_10$pred_av, 0), ")", collapse = ", "), ". ")
+  } else {
+    "No other prospect in the class projects higher. "
+  },
+  "Love outprojects **", nrow(love_beats_10), "** of the remaining top prospects, including ",
+  "every premium-position leader.\n\n",
+  "The Sharpe ratio says 'take a premium position.' But in 2026, **no premium-position prospect ",
+  "(QB, WR) grades Elite (90+) on Prospect Score**. The best QB (Mendoza, 86.7) and the best WR ",
+  "(Tyson, 86.2) are solid Good-tier prospects — but the model projects Love above both at every pick. ",
+  "The opportunity cost argument assumes elite alternatives exist. This year, they don't.\n\n",
+  "This doesn't eliminate the rookie surplus concern. A team still gets cheap production from a Day 2 RB. ",
+  "But the question isn't 'can you find *a* running back later?' — it's 'can you find *this* running back ",
+  "later?' Love's 94.3 Prospect Score says no. The gap between Love and RB2 in this class is 17 points. ",
+  "The surplus argument assumes fungibility. Love breaks that assumption."
 ))
 ```
 
