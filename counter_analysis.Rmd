@@ -630,7 +630,7 @@ ggplot(rb_scatter, aes(x = cmbn_score, y = car_av)) +
   scale_color_manual(values = c("TRUE" = "#377EB8", "FALSE" = "gray50")) +
   labs(
     title = "RB: Do Pre-Draft Scores Predict Career Value?",
-    subtitle = "Blue = pre-draft elite (top 10% NGS) | Gray = everyone else",
+    subtitle = "Blue = pre-draft elite (top 10% Prospect Score) | Gray = everyone else",
     x = "Prospect Score (pre-draft)", y = "Weighted Career AV"
   ) +
   theme_minimal(base_size = 14)
@@ -693,7 +693,7 @@ ggplot(all_scatter, aes(x = cmbn_score, y = car_av)) +
   facet_wrap(~pos_group, scales = "free", ncol = 3) +
   labs(
     title = "Pre-Draft Score vs Career Value: All Positions",
-    subtitle = "Blue = pre-draft elite (top 10% NGS) | Top 3 elite prospects labeled per position",
+    subtitle = "Blue = pre-draft elite (top 10% Prospect Score) | Top 3 elite prospects labeled per position",
     x = "Prospect Score", y = "Weighted Career AV"
   ) +
   theme_minimal(base_size = 12) +
@@ -782,7 +782,7 @@ ggplot(top_ngs_rb, aes(x = cmbn_score, y = player_label, fill = outcome)) +
   scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
   labs(
     title = "Top 8 RB Prospects by Prospect Score (2010-2022)",
-    subtitle = "Pre-draft NGS score vs outcome | Blue = top 10% weighted career AV",
+    subtitle = "Pre-draft Prospect Score vs outcome | Blue = top 10% weighted career AV",
     x = "Prospect Score", y = NULL, fill = "Career\nOutcome"
   ) +
   theme_minimal(base_size = 14) +
@@ -827,7 +827,7 @@ ggplot(top_ngs_all, aes(x = cmbn_score, y = player_label_unique, fill = outcome)
   facet_wrap(~pos_group, scales = "free", ncol = 2) +
   labs(
     title = "Top 6 Historical Players by Prospect Score: All Positions",
-    subtitle = "Pre-draft NGS score vs career outcome | Blue = top 10% weighted career AV",
+    subtitle = "Pre-draft Prospect Score vs career outcome | Blue = top 10% weighted career AV",
     x = "Prospect Score", y = NULL, fill = "Career\nOutcome"
   ) +
   theme_minimal(base_size = 12) +
@@ -993,7 +993,7 @@ ggplot(top20, aes(x = cmbn_score, y = label, fill = ngs_tier, color = ngs_tier))
   scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
   coord_cartesian(xlim = c(75, NA), clip = "off") +
   labs(
-    title = "Top 20 RB Prospects by NGS Score (2010-2026)",
+    title = "Top 20 RB Prospects by Prospect Score (2010-2026)",
     subtitle = paste0("Love ranks #", love_rank, " out of ", total_rb, " RBs — ", love_pctile, "th percentile"),
     x = "Prospect Score", y = NULL
   ) +
@@ -1243,7 +1243,7 @@ ggplot(love_by_pick, aes(x = pick, y = p_elite)) +
   scale_x_continuous(breaks = seq(1, 32, 2)) +
   labs(
     title = "Love's Predicted Probability of an Elite Career",
-    subtitle = "Logistic model: NGS scores + log(draft pick) + position | Trained on 2010-2019",
+    subtitle = "Logistic model: Prospect Score + sub-scores + log(draft pick) + position | Trained on 2010-2019",
     x = "Draft Pick", y = "P(Elite)"
   ) +
   theme_minimal(base_size = 13)
@@ -1809,7 +1809,7 @@ ggplot() +
   coord_cartesian(ylim = c(max(bc_min - 5, 0), bc_median + 30)) +
   labs(
     title = "Love's Fair Value: Where the Gamble Makes Sense",
-    subtitle = "Red = avg non-RB career AV by pick | Blue = elite RB median (historical top 10% NGS)",
+    subtitle = "Red = avg non-RB career AV by pick | Blue = elite RB median (historical top 10% Prospect Score)",
     x = "Pick Number", y = "Weighted Career AV"
   ) +
   theme_minimal(base_size = 13)
@@ -1991,7 +1991,7 @@ Then we stress-tested it. And the model held up -- mostly. The positional hierar
 
 3. **Not all prospects are average.** Love's 94.3 Prospect Score ranks 5th among all RB prospects since 2010. Historical elite RBs with scores like his became great at dramatically higher rates than the position average. The model averages over all RBs. Love isn't average.
 
-4. **Pre-draft models confirm the exception.** A logistic regression and a gradient-boosted model — both trained on 2010-2019 and validated out-of-time on 2020-2022 — agree: Love's NGS profile predicts a meaningfully higher probability of an elite career than the positional average. His predicted career AV at pick 10 exceeds or approaches the historical non-RB alternative at that slot. The rookie surplus argument assumes all RBs are interchangeable. Love's predicted career trajectory says otherwise.
+4. **Pre-draft models confirm the exception.** A logistic regression and a linear regression — both trained on 2010-2019 and validated out-of-time on 2020-2022 — agree: Love's Prospect Score profile predicts a meaningfully higher probability of an elite career than the positional average. His predicted career AV at pick 10 exceeds or approaches the historical non-RB alternative at that slot. The rookie surplus argument assumes all RBs are interchangeable. Love's predicted career trajectory says otherwise.
 
 And then the number that ties it together: the fair value crossover lands at **pick 10** -- the exact pick from Part 1's opening question. The model's own math says that's where the gamble starts to make sense.
 
@@ -2029,7 +2029,7 @@ The counter-arguments didn't destroy the model. They sharpened it. Here's what s
 
 **Roster needs:** A position is "filled" if the team had a starter who played above the hit threshold, earned a second contract above the free-agent replacement cost for the position, and was not on an expiring deal. A position is a "need" if it wasn't filled.
 
-**Predictive models:** Two models trained on players drafted 2010-2019 with Prospect Scores and career outcomes, validated out-of-time on the 2020-2022 classes. Features: Prospect Score, NGS Athlete Score, NGS Production Score, log(draft pick), and position group. Draft pick is log-transformed because draft value declines non-linearly. (1) Logistic regression predicting P(top 10% career AV). (2) Gradient-boosted trees (XGBoost, 200 rounds, max_depth=4) predicting weighted career AV. Love's predictions use his actual NGS scores with hypothetical pick positions.
+**Predictive models:** Two models trained on players drafted 2010-2019 with Prospect Scores and career outcomes, validated out-of-time on the 2020-2022 classes. Features: Prospect Score, Athlete Score, Production Score, log(draft pick), and position group. Draft pick is log-transformed because draft value declines non-linearly. (1) Logistic regression predicting P(top 10% career AV). (2) Linear regression predicting weighted career AV (test R² = 0.184, RMSE = 13.8). Love's predictions use his actual Prospect Score sub-components with hypothetical pick positions.
 
 **Part 1:** Full methodology and interactive charts at [stranger9977.github.io/draft-sharpe-analysis](https://stranger9977.github.io/draft-sharpe-analysis/)
 
