@@ -161,50 +161,13 @@ We define an **elite outcome** as finishing in the **top 10% of weighted career 
 
 ## Assumption 1: Teams Should Always Draft the Highest-Sharpe Position
 
-Article 1 implicitly assumed that every team should always draft the highest-Sharpe position available. But what if you already have a starter?
+Article 1 implicitly assumed that every team should always draft the highest-Sharpe position available. But what if you already have a starter? A committee back averaging 3.8 YPC isn't the same as Saquon Barkley. The depth chart says "RB is filled." The roster has a hole.
 
-RB is the perfect test case. Every team has *someone* listed as RB1 on the depth chart, but a committee back averaging 3.8 YPC isn't the same as Saquon Barkley. A snap-only model would say "RB is filled." The depth chart agrees. But the roster has a hole.
-
-We added a quality gate: a position is only "filled" when the starter meets three criteria -- plays above the snap threshold, earned a second contract above the free-agent replacement cost for the position, and isn't on an expiring deal. A replacement-level back who plays a lot doesn't count. This is how you separate "has a running back" from "has a *good* running back."
-
-```{r rb-quality-timeline, fig.height=4, fig.width=8}
-# Show RB need/filled across a selection of teams over time
-rb_timeline_teams <- c("TEN", "MIN", "ARI", "NYG", "DAL")
-
-rb_timeline <- roster_needs %>%
-  filter(team %in% rb_timeline_teams, pos_group == "RB") %>%
-  mutate(
-    fill_label = if_else(is_filled, "Filled", "Need")
-  )
-
-# Count need years per team
-rb_need_summary <- rb_timeline %>%
-  group_by(team) %>%
-  summarise(need_years = sum(!is_filled), total_years = n(), .groups = "drop") %>%
-  mutate(need_pct = need_years / total_years)
-
-ggplot(rb_timeline, aes(x = draft_season, y = team)) +
-  geom_point(aes(color = is_filled), size = 5) +
-  scale_color_manual(values = c("TRUE" = "#2e7d32", "FALSE" = "#c62828"),
-                     labels = c("TRUE" = "Filled", "FALSE" = "Need")) +
-  scale_x_continuous(breaks = 2014:2022) +
-  labs(
-    title = "RB Need vs Filled: The Quality Gate in Action (2014-2022)",
-    subtitle = "Red = no quality starter despite having a back on the roster",
-    x = NULL, y = NULL, color = NULL
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(
-    panel.grid.minor = element_blank(),
-    legend.position = "top"
-  )
-```
-
-The quality gate reveals that RB is one of the highest-turnover positions. Teams cycle through backs constantly. A name on the depth chart doesn't mean the position is solved, and the Sharpe ratio's generic "don't draft RB" advice ignores whether the team actually has a viable starter.
+We added a quality gate: a position is only "filled" when the starter plays above the snap threshold, earned a second contract above the free-agent replacement cost, and isn't on an expiring deal. A replacement-level player who plays a lot doesn't count. With that filter in place, we re-ranked every team's draft efficiency.
 
 ### How Need-Adjustment Changes the Rankings
 
-In Part 1, we ranked teams by "draft efficiency" -- the average Sharpe ratio of their first-round picks. A team that spent top-10 picks on high-Sharpe positions (QB, OT, EDGE) scored well; a team that spent them on low-Sharpe positions (RB, S) scored poorly. It's a clean metric, but it ignores one obvious thing: whether the team actually needed a player at that position.
+In Part 1, we ranked teams by "draft efficiency," the average Sharpe ratio of their first-round picks. A team that spent top-10 picks on high-Sharpe positions (QB, OT, EDGE) scored well; a team that spent them on low-Sharpe positions (RB, S) scored poorly. It's a clean metric, but it ignores one obvious thing: whether the team actually needed a player at that position.
 
 The need-adjusted version gives partial credit to teams that drafted low-Sharpe positions to fill genuine roster holes, and penalizes teams that drafted high-Sharpe positions they already had covered. The chart shows every team's original rank vs their need-adjusted rank.
 
@@ -269,8 +232,8 @@ ggplot(r1_context, aes(x = sharpe_adjusted, y = context, fill = context)) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray40") +
   scale_fill_manual(values = c("Addressed a Need" = "#2196F3", "Position Already Filled" = "#FF9800")) +
   labs(
-    title = "Need-Adjusted Sharpe: Picks That Filled Needs vs Filled Positions",
-    subtitle = "Dashed line = break-even | Each dot is a first-round pick (2014-2022)",
+    title = "Need-Based Picks vs Filled-Position Picks",
+    subtitle = "Need-adjusted Sharpe ratio | Dashed line = break-even | Each dot is a R1 pick (2014-2022)",
     x = "Need-Adjusted Sharpe Ratio", y = NULL, fill = NULL
   ) +
   theme_minimal(base_size = 14) +
