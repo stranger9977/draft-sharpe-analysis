@@ -216,31 +216,13 @@ cat(paste0(
 ))
 ```
 
-### Need-Based Picks vs Filled-Position Picks
-
-Here's the intuition: if a team drafts a position they actually need, the player steps into a real role. If they draft a position that's already filled, the player competes for scraps. Does that show up in the Sharpe numbers?
-
-```{r need-vs-filled-box, fig.height=5, fig.width=8}
+```{r need-vs-filled-calcs}
+# Compute need vs filled stats (used in narrative below)
 r1_context <- r1_picks %>%
   mutate(
     context = if_else(is_need, "Addressed a Need", "Position Already Filled")
   )
 
-ggplot(r1_context, aes(x = sharpe_adjusted, y = context, fill = context)) +
-  geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.alpha = 0.5, width = 0.5) +
-  geom_jitter(height = 0.15, alpha = 0.3, size = 2) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "gray40") +
-  scale_fill_manual(values = c("Addressed a Need" = "#2196F3", "Position Already Filled" = "#FF9800")) +
-  labs(
-    title = "Need-Based Picks vs Filled-Position Picks",
-    subtitle = "Need-adjusted Sharpe ratio | Dashed line = break-even | Each dot is a R1 pick (2014-2022)",
-    x = "Need-Adjusted Sharpe Ratio", y = NULL, fill = NULL
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "none")
-```
-
-```{r need-vs-filled-stats, results='asis'}
 need_stats <- r1_context %>%
   group_by(context) %>%
   summarise(
@@ -251,18 +233,9 @@ need_stats <- r1_context %>%
   )
 need_row <- need_stats %>% filter(context == "Addressed a Need")
 filled_row <- need_stats %>% filter(context == "Position Already Filled")
-
-cat(paste0(
-  "Picks addressing real needs average a need-adjusted Sharpe of **",
-  round(need_row$mean_adj, 3), "** (n=", need_row$n,
-  "), while picks at already-filled positions average **",
-  round(filled_row$mean_adj, 3), "** (n=", filled_row$n,
-  "). The gap isn't just theoretical. Teams that ignore roster context ",
-  "systematically underperform their draft capital."
-))
 ```
 
-**The takeaway:** Picks that fill genuine roster needs perform better. A player drafted into opportunity has a clearer path to snaps, production, and a second contract. The Sharpe ratio tells you which positions have the best *average* returns. But if you already have a franchise QB, that average is irrelevant to you. Roster context turns a general truth into specific advice.
+**The takeaway:** Picks that fill genuine roster needs perform better. Picks addressing real needs average a need-adjusted Sharpe of **`r round(need_row$mean_adj, 3)`** (n=`r need_row$n`), while picks at already-filled positions average **`r round(filled_row$mean_adj, 3)`** (n=`r filled_row$n`). A player drafted into opportunity has a clearer path to snaps, production, and a second contract. The Sharpe ratio tells you which positions have the best *average* returns. But if you already have a franchise QB, that average is irrelevant to you. Roster context turns a general truth into specific advice.
 
 ---
 
