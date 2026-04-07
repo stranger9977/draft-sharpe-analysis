@@ -1631,9 +1631,9 @@ cat(paste0(
   "dwarfs Barkley's (~$19M), even though Darnold's rookie contract years with the Jets were a disaster. ",
   "The cost-controlled advantage at positions with expensive free-agent markets is so massive that ",
   "even a mediocre QB outcome beats a great RB outcome in surplus terms.\n\n",
-  "This isn't a theoretical 'what if.' These are the actual outcomes of the next QB, EDGE, OT, or WR ",
-  "taken in the same draft. The real counterfactual shows how much value the Sharpe ratio's advice ",
-  "would have captured, or missed."
+  "The numbers are staggering. This isn't a theoretical 'what if' — these are the actual outcomes of the next ",
+  "QB, EDGE, OT, or WR taken in the same draft. The surplus gap is real, it's persistent, ",
+  "and it's the strongest argument in the Sharpe ratio's arsenal."
 ))
 ```
 
@@ -1834,7 +1834,7 @@ prospect_table %>%
 
 ### The Surplus Value View
 
-Everything above used career AV, a production metric. But the Sharpe ratio doesn't measure production; it measures **surplus value**, how much cheaper a drafted player is than a free-agent replacement. This is the metric that says "never draft an RB." If Love can beat premium positions on surplus too, the case is airtight. The formula:
+Career AV is a production metric, and it's kind to RBs. But the Sharpe ratio doesn't measure production; it measures **surplus value** — how much cheaper a drafted player is than a free-agent replacement. This is the metric that says "never draft an RB," and the counterfactual table above shows why. So how does Love overcome a structural disadvantage this large? The formula:
 
 > **Surplus Value** = Rookie Surplus + Second Contract APY (as % of cap)
 
@@ -1898,10 +1898,10 @@ ggplot(component_features, aes(x = estimate, y = feature, fill = direction)) +
   theme(legend.position = "top", strip.text = element_text(face = "bold", size = 12))
 ```
 
-**Model performance:** The snap ratio model (OLS R² = `r round(sr_r2, 3)`, test R² = `r round(sr_test_r2, 3)`) captures how much a player plays. Prospect Score is the strongest predictor — higher-graded prospects earn more snaps. The second contract model (test R² = `r round(sc_test_r2, 3)`) predicts the market's verdict after the rookie deal. When we assemble the full player return from these components plus the known FA costs and rookie APY, the combined median out-of-sample R² is **`r round(rs_test_r2, 3)`**. Translated to the 2026 salary cap ($275M):
+**Model performance:** The snap ratio model (OLS R² = `r round(sr_r2, 3)`, test R² = `r round(sr_test_r2, 3)`) captures how much a player plays. Prospect Score is the strongest predictor — higher-graded prospects earn more snaps. The second contract model (test R² = `r round(sc_test_r2, 3)`) predicts the market's verdict after the rookie deal. When we assemble the full player return from these components plus the known FA costs and rookie APY, the combined median out-of-sample R² is **`r round(rs_test_r2, 3)`**.
 
-```{r love-player-return, fig.height=7, fig.width=9}
-# Love's curve at 10th, 50th, 90th percentile outcomes
+```{r love-surplus-calcs}
+# Love's curve at 10th, 50th, 90th percentile outcomes (needed downstream)
 love_range <- map_dfr(1:32, function(p) {
   row <- data.frame(cmbn_score = 94.3, pick = p,
                     pos_group = factor("RB", levels = levels(model_data$pos_group)))
@@ -1917,192 +1917,32 @@ prem_median <- prospect_curves %>%
   group_by(pick) %>%
   summarise(avg_rs = mean(pred_rs), .groups = "drop")
 
-# 2026 non-premium avg (median outcomes, excluding RB)
-nonprem_median <- prospect_curves %>%
-  filter(!pos_group %in% c(premium_pos, "RB")) %>%
-  group_by(pick) %>%
-  summarise(avg_rs = mean(pred_rs), .groups = "drop")
-
-# Historical top prospects (2018-2022): median player return
-hist_top <- ngs_historical %>%
-  filter(season >= 2018, season <= 2022, !is.na(cmbn_score),
-         pos_group %in% key_positions, pos_group != "RB") %>%
-  group_by(season, pos_group) %>%
-  slice_max(cmbn_score, n = 1) %>%
-  ungroup()
-
-hist_curves <- map_dfr(1:32, function(p) {
-  map_dfr(1:nrow(hist_top), function(i) {
-    row <- data.frame(
-      cmbn_score = hist_top$cmbn_score[i], pick = p,
-      pos_group = factor(hist_top$pos_group[i], levels = levels(model_data$pos_group)))
-    tibble(pick = p, pos_group = hist_top$pos_group[i],
-           pred_rs = predict_rs(row))
-  })
-})
-
-hist_prem <- hist_curves %>%
-  filter(pos_group %in% premium_pos) %>%
-  group_by(pick) %>% summarise(avg_rs = mean(pred_rs), .groups = "drop")
-
-hist_nonprem <- hist_curves %>%
-  filter(!pos_group %in% premium_pos) %>%
-  group_by(pick) %>% summarise(avg_rs = mean(pred_rs), .groups = "drop")
-
-# Build label data — collect all end values, sort descending, spread apart
-labels_df <- tibble(
-  y_raw = c(love_range$q90[32], hist_prem$avg_rs[32], prem_median$avg_rs[32],
-            love_range$q50[32], hist_nonprem$avg_rs[32], nonprem_median$avg_rs[32],
-            love_range$q10[32]) * salary_cap,
-  label = c("Love ceiling (Q90)", "Hist. premium", "2026 premium",
-            "Love median (Q50)", "Hist. non-premium", "2026 non-premium",
-            "Love floor (Q10)"),
-  color = c("#377EB8", "gray50", "#c62828", "#377EB8", "gray70", "#E67E22", "#377EB8")
-) %>% arrange(desc(y_raw))
-
-# Spread labels so they don't overlap (min 3M gap)
-labels_df$y <- labels_df$y_raw
-for(i in 2:nrow(labels_df)) {
-  if(labels_df$y[i] > labels_df$y[i-1] - 3) {
-    labels_df$y[i] <- labels_df$y[i-1] - 3
-  }
-}
-
 # Find where Love Q90 first crosses above the 2026 premium median
 q90_cross <- which(love_range$q90 >= prem_median$avg_rs)
 upside_fair_value <- if(length(q90_cross) > 0) min(q90_cross) else NA
-
-ggplot() +
-  # Love's range band (Q10-Q90)
-  geom_ribbon(data = love_range,
-              aes(x = pick, ymin = q10 * salary_cap, ymax = q90 * salary_cap),
-              fill = "#377EB8", alpha = 0.15) +
-  # Love Q10 floor (dashed)
-  geom_line(data = love_range, aes(x = pick, y = q10 * salary_cap),
-            color = "#377EB8", linewidth = 0.8, linetype = "dashed") +
-  # Love Q90 ceiling (dashed)
-  geom_line(data = love_range, aes(x = pick, y = q90 * salary_cap),
-            color = "#377EB8", linewidth = 0.8, linetype = "dashed") +
-  # Love Q50 median (solid)
-  geom_line(data = love_range, aes(x = pick, y = q50 * salary_cap),
-            color = "#377EB8", linewidth = 1.5) +
-  # Historical lines (gray dashed)
-  geom_line(data = hist_prem, aes(x = pick, y = avg_rs * salary_cap),
-            color = "gray50", linewidth = 1, linetype = "dashed") +
-  geom_line(data = hist_nonprem, aes(x = pick, y = avg_rs * salary_cap),
-            color = "gray70", linewidth = 1, linetype = "dashed") +
-  # 2026 premium avg median (red)
-  geom_line(data = prem_median, aes(x = pick, y = avg_rs * salary_cap),
-            color = "#c62828", linewidth = 1.5) +
-  # 2026 non-premium avg median (orange)
-  geom_line(data = nonprem_median, aes(x = pick, y = avg_rs * salary_cap),
-            color = "#E67E22", linewidth = 1.2) +
-  # Vertical line where Love Q90 crosses premium (only if before pick 32)
-  { if(!is.na(upside_fair_value) && upside_fair_value < 32)
-    geom_vline(xintercept = upside_fair_value, linetype = "dotted", color = "#377EB8", linewidth = 0.8) } +
-  { if(!is.na(upside_fair_value) && upside_fair_value < 32)
-    annotate("text", x = upside_fair_value + 0.5,
-             y = max(love_range$q90 * salary_cap) * 0.75,
-             label = paste0("Upside fair value\n(pick ", upside_fair_value, ")"),
-             color = "#377EB8", fontface = "bold", size = 3.2, hjust = 0) } +
-  # Labels — dynamically positioned to avoid overlap
-  {lapply(1:nrow(labels_df), function(i)
-    annotate("text", x = 32.5, y = labels_df$y[i], label = labels_df$label[i],
-             color = labels_df$color[i], fontface = "bold", size = 2.8, hjust = 0)
-  )} +
-  scale_x_continuous(breaks = seq(1, 32, 2),
-                     expand = expansion(mult = c(0.02, 0.30))) +
-  scale_y_continuous(labels = function(x) paste0("$", round(x), "M")) +
-  labs(
-    title = "Love's Projected Player Return: Floor to Ceiling",
-    subtitle = "Player Return = Salary Savings × Playing Time + Second Contract Value\nBlue band = Love Q10-Q90 | Solid = 2026 class | Dashed = historical (2018-2022)",
-    x = "Pick Number", y = "Total Surplus Value Over Rookie Deal ($M)"
-  ) +
-  theme_minimal(base_size = 13)
 ```
 
-**Reading this chart:** Each line shows the total value a player generates over their rookie deal: how much it would cost on the open market to replace the production they provide on a rookie contract, plus what they earn on their second deal. At pick 3, the average premium position prospect generates ~$107M in total surplus. That means over the life of the rookie deal, it would cost $107M more on the open market to get that level of production. The higher the line, the bigger the bargain.
-
-```{r non-premium-economics, results='asis'}
-# Illustrate the economics: why non-premium return rises at later picks
-iol_fa <- round(fa_costs["IOL"] * salary_cap, 1)
-rk_pick1 <- round(rookie_apy["1"] * salary_cap, 1)
-rk_pick20 <- round(rookie_apy["20"] * salary_cap, 1)
-qb_fa <- round(fa_costs["QB"] * salary_cap, 1)
-
-cat(paste0(
-  "**Why does the non-premium line slope upward?** This is the Sharpe ratio's core economic argument, ",
-  "made visible.\n\n",
-  "Player return is built from rookie surplus — the gap between what a free-agent replacement costs and what the ",
-  "rookie deal pays, multiplied by how much the player actually plays. For non-premium positions like IOL, ",
-  "free-agent replacement costs just **$", iol_fa, "M/year**. At pick 1, the rookie deal costs **$", rk_pick1,
-  "M/year** — nearly identical to free agency. There is almost no gap to exploit, so surplus is close to zero ",
-  "regardless of how good the player is.\n\n",
-  "At pick 20, the rookie deal drops to **$", rk_pick20, "M/year**, opening a **$",
-  round((fa_costs["IOL"] - rookie_apy["20"]) * salary_cap, 1),
-  "M/year** gap. Over four rookie years, that gap compounds into real surplus.\n\n",
-  "**Worked example — IOL at pick 5 vs pick 20:**\n\n",
-  "| | Pick 5 | Pick 20 |\n",
-  "|---|---|---|\n",
-  "| Rookie APY | $", round(rookie_apy["5"] * salary_cap, 1), "M | $", rk_pick20, "M |\n",
-  "| FA replacement | $", iol_fa, "M | $", iol_fa, "M |\n",
-  "| Annual savings | $", round((fa_costs["IOL"] - rookie_apy["5"]) * salary_cap, 1),
-  "M | $", round((fa_costs["IOL"] - rookie_apy["20"]) * salary_cap, 1), "M |\n",
-  "| 4-year surplus (if starter) | $", round((fa_costs["IOL"] - rookie_apy["5"]) * salary_cap * 4, 1),
-  "M | $", round((fa_costs["IOL"] - rookie_apy["20"]) * salary_cap * 4, 1), "M |\n\n",
-  "At pick 5, the IOL's rookie deal is so expensive that four years of starting barely saves anything. ",
-  "At pick 20, the same player on a cheaper rookie deal generates real surplus. ",
-  "For non-premium positions, the savings only materialize at later picks — which is exactly why the Sharpe ratio ",
-  "says drafting them early is value-destructive.\n\n",
-  "Premium positions don't have this problem. A QB's free-agent replacement costs **$", qb_fa,
-  "M/year** — the gap between that and even the most expensive rookie deal is enormous at every pick. ",
-  "That's why the premium line slopes downward normally: the surplus is always large, and it gets slightly ",
-  "smaller as rookie costs rise at higher picks.\n\n",
-  "This chart is the Sharpe ratio's argument in picture form. Love has to overcome not just the position discount, ",
-  "but the structural economics of a position where rookie deals barely save money over free agency."
-))
-```
+There are two paths through the surplus math for Love: **high snap ratio** and a **big second contract**. An RB who plays 90%+ of snaps (top-decile outcome) and earns a market-resetting second deal can close most of the structural gap. Love's 90th-percentile surplus outcome crosses the premium position average at **pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`**. Before that, the structural economics of the position make it nearly impossible for any RB to beat premium alternatives on surplus alone.
 
 ```{r love-fair-value-narrative, results='asis'}
-love_at_10_av <- love_curve %>% filter(pick == 10) %>% pull(pred_av)
-prem_at_10_av <- premium_avg %>% filter(pick == 10) %>% pull(avg_av)
-nonprem_at_10_av <- non_premium_avg %>% filter(pick == 10) %>% pull(avg_av)
-
 cat(paste0(
-  "Two metrics, two views of the same question.\n\n",
-  "**Career AV** projects Love at **", round(love_at_10_av, 0),
-  "** weighted career AV at pick 10 — above the premium position average (**", round(prem_at_10_av, 0),
-  "**) and well above non-premium (**", round(nonprem_at_10_av, 0),
-  "**). ",
-  if(dead_zone_end > 0) {
-    paste0("The crossover with premium positions lands at **pick ", fair_value_start,
-           "** — before that, premium alternatives project higher career value. ",
-           "After it, Love is the better bet on career production alone.\n\n")
-  } else {
-    "Love projects higher career value than even the premium position average at every pick.\n\n"
-  },
-  "**Player return** — the assembled surplus value that drives Article 1's Sharpe ratio — ",
-  "tells a different story. ",
+  "The career AV chart above showed Love projecting as one of the best prospects in the class on pure production. ",
+  "But the surplus math tells a harder story. ",
   "Love's median projected return at pick 10 is **$", round(love_range$q50[10] * salary_cap, 1),
-  "M** vs **$", round(prem_median$avg_rs[10] * salary_cap, 1), "M** for the premium position average. ",
-  "The gap is **$", round((prem_median$avg_rs[10] - love_range$q50[10]) * salary_cap, 1),
-  "M** — and it's persistent. Even when career production is comparable, ",
-  "premium positions generate more surplus because free-agent replacements cost so much more. ",
-  "This is why the Sharpe ratio says never draft an RB: the surplus math penalizes the position ",
-  "regardless of the individual player.\n\n",
-  "This is the Sharpe ratio's blind spot made visible. Career AV says Love is the best prospect in ",
-  "the class. Surplus value says premium positions still generate more efficient returns. Both are true.\n\n",
+  "M** vs **$", round(prem_median$avg_rs[10] * salary_cap, 1), "M** for the premium position average — ",
+  "a gap of **$", round((prem_median$avg_rs[10] - love_range$q50[10]) * salary_cap, 1),
+  "M**. Even when career production is comparable, ",
+  "premium positions generate more surplus because free-agent replacements cost so much more.\n\n",
   if(!is.na(upside_fair_value) && upside_fair_value < 32) {
     paste0(
-      "But there's a third view: Love's **ceiling**. His 90th-percentile outcome — a Gurley/CMC-level career — ",
+      "Love's path to overcoming that gap runs through the ceiling. His 90th-percentile outcome ",
+      "— a Gurley/CMC-level career with elite snap share and a market-resetting second contract — ",
       "crosses the premium position average at **pick ", upside_fair_value, "**. ",
       "After that pick, even the Sharpe ratio's own surplus math says Love's upside beats premium alternatives. ",
-      "That's the gamble: if a team believes Love can be a generational back, the math supports drafting him ",
-      "from pick ", upside_fair_value, " onward. If they think he's closer to average, the model says wait.\n\n")
+      "Before it, the structural economics of the position make this an uphill bet.\n\n")
   } else "",
-  "The question isn't which metric is right — it's which one your team cares about. ",
-  "A team building for the next decade wants career production. A team optimizing cap efficiency wants surplus. ",
-  "Love is the rare prospect where the career value argument is strong enough to challenge the surplus math."
+  "This is the core tension: the Sharpe ratio isn't wrong about position economics. ",
+  "It's just incomplete when a specific prospect's talent is this far separated from the field."
 ))
 ```
 
@@ -2236,34 +2076,21 @@ ggplot(grouped_curves, aes(x = years_exp, y = avg_fp, color = pos_group)) +
         legend.text = element_text(size = 12))
 ```
 
-```{r rb-age-curve-by-round, fig.height=9, fig.width=10, message=FALSE, warning=FALSE}
-# Facet by draft round — raw total FP
+```{r rb-age-curve-by-round, fig.height=5, fig.width=9, message=FALSE, warning=FALSE}
+# Round 1 only — the picks that matter for this article
 fp_with_round <- fp_joined %>%
-  filter(!is.na(pos_group)) %>%
-  mutate(
-    round_label = case_when(
-      draft_round == 1 ~ "Round 1",
-      draft_round == 2 ~ "Round 2",
-      draft_round == 3 ~ "Round 3",
-      TRUE ~ "Rounds 4-7"
-    ),
-    round_label = factor(round_label, levels = c("Round 1", "Round 2", "Round 3", "Rounds 4-7"))
-  )
+  filter(!is.na(pos_group), draft_round == 1)
 
-curves_by_round <- fp_with_round %>%
-  group_by(pos_group, round_label, years_exp) %>%
+r1_curves <- fp_with_round %>%
+  group_by(pos_group, years_exp) %>%
   summarise(avg_fp = mean(total_fp, na.rm = TRUE), n = n(), .groups = "drop") %>%
   filter(n >= 5)
 
-peaks_by_round <- curves_by_round %>%
-  group_by(pos_group, round_label) %>%
+r1_peaks <- r1_curves %>%
+  group_by(pos_group) %>%
   slice_max(avg_fp, n = 1)
 
-# Round 1 — large hero chart
-r1_data <- curves_by_round %>% filter(round_label == "Round 1")
-r1_peaks <- peaks_by_round %>% filter(round_label == "Round 1")
-
-p_r1 <- ggplot(r1_data, aes(x = years_exp, y = avg_fp, color = pos_group)) +
+ggplot(r1_curves, aes(x = years_exp, y = avg_fp, color = pos_group)) +
   geom_line(linewidth = 1.8) +
   geom_point(data = r1_peaks, size = 5) +
   scale_color_manual(values = pos_colors_curve, name = "") +
@@ -2272,28 +2099,10 @@ p_r1 <- ggplot(r1_data, aes(x = years_exp, y = avg_fp, color = pos_group)) +
   labs(
     title = "Round 1 Picks: RBs Produce Immediately, Then Fade",
     subtitle = "Average season fantasy points | First-round picks only",
-    x = NULL, y = "Fantasy Points per Season"
+    x = "Years of Experience", y = "Fantasy Points per Season"
   ) +
   theme_minimal(base_size = 13) +
   theme(legend.position = "top", legend.text = element_text(size = 12))
-
-# Rounds 2-3 and 4-7 — smaller panels below
-later_data <- curves_by_round %>% filter(round_label != "Round 1")
-later_peaks <- peaks_by_round %>% filter(round_label != "Round 1")
-
-p_later <- ggplot(later_data, aes(x = years_exp, y = avg_fp, color = pos_group)) +
-  geom_line(linewidth = 1.2) +
-  geom_point(data = later_peaks, size = 3) +
-  facet_wrap(~round_label, ncol = 3) +
-  scale_color_manual(values = pos_colors_curve, name = "") +
-  scale_y_continuous(limits = c(0, NA)) +
-  scale_x_continuous(breaks = seq(1, 12, 2)) +
-  labs(x = "Years of Experience", y = "Fantasy Points per Season") +
-  theme_minimal(base_size = 11) +
-  theme(legend.position = "none",
-        strip.text = element_text(face = "bold", size = 11))
-
-gridExtra::grid.arrange(p_r1, p_later, nrow = 2, heights = c(2, 1))
 ```
 
 ```{r rb-age-narrative, results='asis'}
@@ -2375,29 +2184,32 @@ cat(paste0(
 
 ## What the Stress Test Found
 
-We built the Sharpe ratio to answer a simple question: which positions are worth drafting in round 1? The answer was clear — QB, EDGE, OT, and WR. RB was dead last. Then we stress-tested it. The positional hierarchy held up. But we found three blind spots that turn "never draft RB in round 1" from a universal law into a conditional one:
+The Sharpe ratio works. The positional hierarchy held up under every test we threw at it: QB, EDGE, OT, and WR generate more surplus than non-premium positions, and the counterfactual data confirms it. The surplus gap is real and staggering. This article didn't disprove the framework — it stress-tested it and found it sturdy.
+
+But we also found three conditions that turn "never draft RB in round 1" from a universal law into a conditional one:
 
 1. **Roster context matters.** Having a name on the depth chart isn't the same as having the position filled. Nine teams enter 2026 without a long-term answer at RB. For them, the opportunity cost of *not* drafting one is higher than the model assumes.
 
 2. **Class depth varies wildly.** The 2026 RB class is thin — Love is the only Elite prospect. Pass on him and there's no comparable alternative in round 2 or 3. Meanwhile, IOL, CB, and WR are loaded. The positions the model says to take instead will still be available later. The RB won't be.
 
-3. **Not all prospects are average.** Love's 94.3 Prospect Score ranks 5th among all RB prospects since 2010. The model averages over all RBs. Love isn't average. Two pre-draft models — both validated out-of-time on 2020-2022 — confirm this: Love's predicted career AV exceeds all but one non-RB prospect in the 2026 class (Spencer Fano, OT), and his 90th-percentile surplus outcome crosses the premium position average at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`.
+3. **Not all prospects are average.** Love's 94.3 Prospect Score ranks 5th among all RB prospects since 2010. The model averages over all RBs. Love isn't average. His 90th-percentile surplus outcome crosses the premium position average at pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"` — and RBs produce immediately, peaking in their first two years while QBs and WRs are still developing.
 
-**What still holds:** QB is still king. The surplus math still favors premium positions before pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`. Day 2+ RBs are still the default when the class isn't thin. The Sharpe ratio is a compass, not a GPS — it points the right direction, but roster needs, class depth, and prospect separation require judgment no single metric can capture.
+**What still holds:** QB is still king. The surplus math still favors premium positions before pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`. Day 2+ RBs are still the default when the class isn't thin. The Sharpe ratio is a good framework — one of the best tools we have for draft strategy. It just can't see the difference between "RB" and "*this* RB, in *this* class, for *this* team."
 
 ```{r love-final-verdict, results='asis'}
 cat(paste0(
-  "**The bottom line:** Nine teams need a running back. The 2026 class is thin. Love is separated from ",
-  "every other RB prospect by 17 points. His ceiling case crosses the premium surplus line at **pick ",
-  fair_value_pick, "**.\n\n",
+  "**The bottom line:** The Sharpe ratio is right that premium positions generate more surplus, and the ",
+  "data backs it up convincingly. But within that framework, we found a slightly more generous outlook for Love ",
+  "than 'never draft an RB' suggests. Nine teams need a running back. The 2026 class is thin. Love is separated ",
+  "from every other RB prospect by 17 points. His ceiling crosses the premium surplus line at **pick ",
+  fair_value_pick, "**. And RBs produce immediately — Love's peak years align with the rookie contract window.\n\n",
   if(nrow(best_fits) > 0) paste0(
     "The best fits are **", paste(paste0(best_fits$team, " (", best_fits$pick, ")"), collapse = ", "),
-    "** — teams that need a back, pick at or after ", fair_value_pick,
-    ", and can't find a comparable RB later in this thin class. ",
-    "A team like **MIN (18)** — aging Aaron Jones, no long-term answer — ",
-    "has every reason to trade up if Love slides past the early picks. ",
-    "That's the scenario where all three counter-arguments align: ",
-    "need, class scarcity, and prospect separation. The model built in Part 1 can't see it. This article can."
+    "** — teams that need a back, pick where the upside math works, ",
+    "and can't find a comparable RB later in this thin class. ",
+    "For a team like **MIN (18)** — aging Aaron Jones, no long-term answer — ",
+    "Love is a reasonable first-round pick, not in spite of the Sharpe ratio, but because the framework ",
+    "leaves room for exactly this kind of exception: elite talent, genuine need, no alternative."
   ) else
   "No team perfectly combines need, pick position, and fair value — which means Love could slide, or a team trades up."
 ))
