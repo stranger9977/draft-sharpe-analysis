@@ -1637,12 +1637,8 @@ cat(paste0(
 ))
 ```
 
-### Love's Fair Value: Where the Gamble Makes Sense
-
-The model lets us do something the raw averages can't: predict career value for *specific* prospects in *this* draft class. Instead of comparing Love to a historical median, we plug in the actual top prospect at every position, predict their career AV, and ask: at what pick does Love become the better bet?
-
-```{r love-fair-value, fig.height=6, fig.width=8}
-# Top prospect at each position in the 2026 class
+```{r love-fair-value-calcs}
+# Top prospect at each position in the 2026 class (needed for surplus calcs)
 # Note: NGS doesn't separately score EDGE or OT (mapped to DL and IOL)
 top_2026 <- ngs_prospects %>%
   filter(!is.na(cmbn_score), pos_group %in% key_positions) %>%
@@ -1684,152 +1680,6 @@ non_premium_avg <- prospect_curves %>%
   filter(!pos_group %in% c(premium_pos, "RB")) %>%
   group_by(pick) %>%
   summarise(avg_av = mean(pred_av), avg_rs = mean(pred_rs), .groups = "drop")
-
-# Keep combined non-RB avg for backward compatibility
-non_rb_avg <- prospect_curves %>%
-  filter(pos_group != "RB") %>%
-  group_by(pick) %>%
-  summarise(avg_av = mean(pred_av), avg_rs = mean(pred_rs), .groups = "drop")
-
-# Find crossover: where premium avg exceeds Love's predicted AV
-above <- premium_avg$avg_av > love_curve$pred_av
-if(any(above)) {
-  dead_zone_start <- premium_avg$pick[which(above)[1]]
-  first_false <- which(!above & premium_avg$pick > dead_zone_start)
-  dead_zone_end <- if(length(first_false) > 0) premium_avg$pick[first_false[1] - 1] else premium_avg$pick[max(which(above))]
-} else {
-  dead_zone_start <- 0; dead_zone_end <- 0
-}
-fair_value_start <- dead_zone_end + 1
-
-# Historical non-RB top prospects (2018-2022): predict their career AV at each pick
-hist_top_av <- ngs_historical %>%
-  filter(season >= 2018, season <= 2022, !is.na(cmbn_score),
-         pos_group %in% key_positions, pos_group != "RB") %>%
-  group_by(season, pos_group) %>%
-  slice_max(cmbn_score, n = 1) %>%
-  ungroup()
-
-hist_av_curves <- map_dfr(1:32, function(p) {
-  map_dfr(1:nrow(hist_top_av), function(i) {
-    row <- data.frame(
-      cmbn_score = hist_top_av$cmbn_score[i],
-      pick = p,
-      pos_group = factor(hist_top_av$pos_group[i], levels = levels(model_data$pos_group))
-    )
-    tibble(pick = p, pos_group = hist_top_av$pos_group[i],
-           pred_av = predict(av_lm, newdata = row))
-  })
-})
-
-hist_non_rb <- hist_av_curves %>%
-  group_by(pick) %>%
-  summarise(hist_av = mean(pred_av), .groups = "drop")
-
-# Plot: Image 13 style
-no_dead_zone <- dead_zone_end == 0
-has_dead_zone <- dead_zone_end > 0 && dead_zone_end < 32
-
-ggplot() +
-  # Shading
-  { if(has_dead_zone)
-    annotate("rect", xmin = 0.5, xmax = dead_zone_end + 0.5,
-             ymin = -Inf, ymax = Inf, fill = "#ffcdd2", alpha = 0.3) } +
-  { if(has_dead_zone)
-    annotate("rect", xmin = dead_zone_end + 0.5, xmax = 32.5,
-             ymin = -Inf, ymax = Inf, fill = "#c8e6c9", alpha = 0.15) } +
-  { if(no_dead_zone)
-    annotate("rect", xmin = 0.5, xmax = 32.5,
-             ymin = -Inf, ymax = Inf, fill = "#c8e6c9", alpha = 0.15) } +
-  # Historical non-RB avg (gray dashed line)
-  geom_line(data = hist_non_rb, aes(x = pick, y = hist_av),
-            color = "gray50", linewidth = 1, linetype = "dashed") +
-  # 2026 non-premium avg (orange line)
-  geom_line(data = non_premium_avg, aes(x = pick, y = avg_av),
-            color = "#E67E22", linewidth = 1.2) +
-  # 2026 premium avg (red line)
-  geom_line(data = premium_avg, aes(x = pick, y = avg_av),
-            color = "#c62828", linewidth = 1.5) +
-  # Love's predicted AV (blue line)
-  geom_line(data = love_curve, aes(x = pick, y = pred_av),
-            color = "#377EB8", linewidth = 1.5) +
-  # Labels at right edge
-  annotate("text", x = 32.5, y = love_curve$pred_av[32],
-           label = "Love (predicted)", color = "#377EB8",
-           fontface = "bold", size = 3.2, hjust = 0) +
-  annotate("text", x = 32.5, y = premium_avg$avg_av[32],
-           label = "2026 premium avg", color = "#c62828",
-           fontface = "bold", size = 3.2, hjust = 0) +
-  annotate("text", x = 32.5, y = non_premium_avg$avg_av[32],
-           label = "2026 non-premium avg", color = "#E67E22",
-           fontface = "bold", size = 3.2, hjust = 0) +
-  annotate("text", x = 32.5, y = hist_non_rb$hist_av[nrow(hist_non_rb)],
-           label = "Historical avg", color = "gray50",
-           fontface = "bold", size = 3.2, hjust = 0) +
-  # Zone labels
-  { if(has_dead_zone)
-    annotate("text", x = (dead_zone_start + dead_zone_end) / 2,
-             y = max(premium_avg$avg_av, love_curve$pred_av) * 0.95,
-             label = paste0("Dead zone (", dead_zone_start, "-", dead_zone_end, ")"),
-             color = "#c62828", fontface = "bold", size = 4) } +
-  { if(has_dead_zone)
-    annotate("text", x = (fair_value_start + 32) / 2,
-             y = max(premium_avg$avg_av, love_curve$pred_av) * 0.95,
-             label = paste0("Fair value (", fair_value_start, "+)"),
-             color = "#2e7d32", fontface = "bold", size = 4) } +
-  { if(has_dead_zone)
-    geom_vline(xintercept = dead_zone_end + 0.5, linetype = "dashed", color = "#c62828", linewidth = 0.8) } +
-  { if(no_dead_zone)
-    annotate("text", x = 16, y = max(love_curve$pred_av) * 0.95,
-             label = "Love projects higher at every pick",
-             color = "#2e7d32", fontface = "bold", size = 4) } +
-  scale_x_continuous(breaks = seq(1, 32, 2),
-                     expand = expansion(mult = c(0.02, 0.25))) +
-  labs(
-    title = "Love's Fair Value: Where the Gamble Makes Sense",
-    subtitle = "Premium = QB/EDGE/OT/WR | Non-premium = TE/IOL/DL/LB/CB/S",
-    x = "Pick Number", y = "Predicted Career AV"
-  ) +
-  theme_minimal(base_size = 13)
-```
-
-```{r love-vs-class-table, results='asis'}
-# Table: predicted AV and player return at key picks for each prospect
-pick_slices <- c(5, 10, 15, 20)
-prospect_table <- prospect_curves %>%
-  filter(pick %in% pick_slices) %>%
-  mutate(pred_av = round(pred_av, 0),
-         pred_rs = round(pred_rs * salary_cap, 1)) %>%
-  select(player, pos_group, cmbn_score, pick, pred_av, pred_rs) %>%
-  pivot_wider(names_from = pick,
-              values_from = c(pred_av, pred_rs),
-              names_sep = "_") %>%
-  arrange(desc(cmbn_score))
-
-prospect_table %>%
-  gt() %>%
-  cols_label(
-    player = "Prospect", pos_group = "Pos", cmbn_score = "Score",
-    pred_av_5 = "Pick 5", pred_av_10 = "Pick 10",
-    pred_av_15 = "Pick 15", pred_av_20 = "Pick 20",
-    pred_rs_5 = "Pick 5", pred_rs_10 = "Pick 10",
-    pred_rs_15 = "Pick 15", pred_rs_20 = "Pick 20"
-  ) %>%
-  tab_spanner(label = "Predicted Career AV", columns = starts_with("pred_av_")) %>%
-  tab_spanner(label = "Rookie Surplus ($M)", columns = starts_with("pred_rs_")) %>%
-  tab_style(
-    style = cell_fill(color = "#e3f2fd"),
-    locations = cells_body(rows = player == "Jeremiyah Love")
-  ) %>%
-  tab_style(
-    style = cell_text(weight = "bold"),
-    locations = cells_body(rows = player == "Jeremiyah Love")
-  ) %>%
-  tab_header(
-    title = md("**2026 Draft Class: Predicted Career AV & Rookie Surplus by Pick**"),
-    subtitle = "Top prospect at each position | Prospect Score drives the prediction"
-  ) %>%
-  tab_options(table.font.size = px(12))
 ```
 
 ### The Surplus Value View
@@ -1900,8 +1750,8 @@ ggplot(component_features, aes(x = estimate, y = feature, fill = direction)) +
 
 **Model performance:** The snap ratio model (OLS R² = `r round(sr_r2, 3)`, test R² = `r round(sr_test_r2, 3)`) captures how much a player plays. Prospect Score is the strongest predictor — higher-graded prospects earn more snaps. The second contract model (test R² = `r round(sc_test_r2, 3)`) predicts the market's verdict after the rookie deal. When we assemble the full player return from these components plus the known FA costs and rookie APY, the combined median out-of-sample R² is **`r round(rs_test_r2, 3)`**.
 
-```{r love-surplus-calcs}
-# Love's curve at 10th, 50th, 90th percentile outcomes (needed downstream)
+```{r love-player-return, fig.height=7, fig.width=9}
+# Love's curve at 10th, 50th, 90th percentile outcomes
 love_range <- map_dfr(1:32, function(p) {
   row <- data.frame(cmbn_score = 94.3, pick = p,
                     pos_group = factor("RB", levels = levels(model_data$pos_group)))
@@ -1917,17 +1767,112 @@ prem_median <- prospect_curves %>%
   group_by(pick) %>%
   summarise(avg_rs = mean(pred_rs), .groups = "drop")
 
+# 2026 non-premium avg (median outcomes, excluding RB)
+nonprem_median <- prospect_curves %>%
+  filter(!pos_group %in% c(premium_pos, "RB")) %>%
+  group_by(pick) %>%
+  summarise(avg_rs = mean(pred_rs), .groups = "drop")
+
+# Historical top prospects (2018-2022): median player return
+hist_top <- ngs_historical %>%
+  filter(season >= 2018, season <= 2022, !is.na(cmbn_score),
+         pos_group %in% key_positions, pos_group != "RB") %>%
+  group_by(season, pos_group) %>%
+  slice_max(cmbn_score, n = 1) %>%
+  ungroup()
+
+hist_curves <- map_dfr(1:32, function(p) {
+  map_dfr(1:nrow(hist_top), function(i) {
+    row <- data.frame(
+      cmbn_score = hist_top$cmbn_score[i], pick = p,
+      pos_group = factor(hist_top$pos_group[i], levels = levels(model_data$pos_group)))
+    tibble(pick = p, pos_group = hist_top$pos_group[i],
+           pred_rs = predict_rs(row))
+  })
+})
+
+hist_prem <- hist_curves %>%
+  filter(pos_group %in% premium_pos) %>%
+  group_by(pick) %>% summarise(avg_rs = mean(pred_rs), .groups = "drop")
+
+hist_nonprem <- hist_curves %>%
+  filter(!pos_group %in% premium_pos) %>%
+  group_by(pick) %>% summarise(avg_rs = mean(pred_rs), .groups = "drop")
+
 # Find where Love Q90 first crosses above the 2026 premium median
 q90_cross <- which(love_range$q90 >= prem_median$avg_rs)
 upside_fair_value <- if(length(q90_cross) > 0) min(q90_cross) else NA
+
+# Build label data — collect all end values, sort descending, spread apart
+labels_df <- tibble(
+  y_raw = c(love_range$q90[32], hist_prem$avg_rs[32], prem_median$avg_rs[32],
+            love_range$q50[32], hist_nonprem$avg_rs[32], nonprem_median$avg_rs[32],
+            love_range$q10[32]) * salary_cap,
+  label = c("Love ceiling (Q90)", "Hist. premium", "2026 premium",
+            "Love median (Q50)", "Hist. non-premium", "2026 non-premium",
+            "Love floor (Q10)"),
+  color = c("#377EB8", "gray50", "#c62828", "#377EB8", "gray70", "#E67E22", "#377EB8")
+) %>% arrange(desc(y_raw))
+
+# Spread labels so they don't overlap (min 3M gap)
+labels_df$y <- labels_df$y_raw
+for(i in 2:nrow(labels_df)) {
+  if(labels_df$y[i] > labels_df$y[i-1] - 3) {
+    labels_df$y[i] <- labels_df$y[i-1] - 3
+  }
+}
+
+ggplot() +
+  # Love's range band (Q10-Q90)
+  geom_ribbon(data = love_range,
+              aes(x = pick, ymin = q10 * salary_cap, ymax = q90 * salary_cap),
+              fill = "#377EB8", alpha = 0.15) +
+  geom_line(data = love_range, aes(x = pick, y = q10 * salary_cap),
+            color = "#377EB8", linewidth = 0.8, linetype = "dashed") +
+  geom_line(data = love_range, aes(x = pick, y = q90 * salary_cap),
+            color = "#377EB8", linewidth = 0.8, linetype = "dashed") +
+  geom_line(data = love_range, aes(x = pick, y = q50 * salary_cap),
+            color = "#377EB8", linewidth = 1.5) +
+  # Historical lines (gray dashed)
+  geom_line(data = hist_prem, aes(x = pick, y = avg_rs * salary_cap),
+            color = "gray50", linewidth = 1, linetype = "dashed") +
+  geom_line(data = hist_nonprem, aes(x = pick, y = avg_rs * salary_cap),
+            color = "gray70", linewidth = 1, linetype = "dashed") +
+  # 2026 premium avg median (red)
+  geom_line(data = prem_median, aes(x = pick, y = avg_rs * salary_cap),
+            color = "#c62828", linewidth = 1.5) +
+  # 2026 non-premium avg median (orange)
+  geom_line(data = nonprem_median, aes(x = pick, y = avg_rs * salary_cap),
+            color = "#E67E22", linewidth = 1.2) +
+  # Vertical line where Love Q90 crosses premium
+  { if(!is.na(upside_fair_value) && upside_fair_value < 32)
+    geom_vline(xintercept = upside_fair_value, linetype = "dotted", color = "#377EB8", linewidth = 0.8) } +
+  { if(!is.na(upside_fair_value) && upside_fair_value < 32)
+    annotate("text", x = upside_fair_value + 0.5,
+             y = max(love_range$q90 * salary_cap) * 0.75,
+             label = paste0("Upside fair value\n(pick ", upside_fair_value, ")"),
+             color = "#377EB8", fontface = "bold", size = 3.2, hjust = 0) } +
+  # Labels
+  {lapply(1:nrow(labels_df), function(i)
+    annotate("text", x = 32.5, y = labels_df$y[i], label = labels_df$label[i],
+             color = labels_df$color[i], fontface = "bold", size = 2.8, hjust = 0)
+  )} +
+  scale_x_continuous(breaks = seq(1, 32, 2),
+                     expand = expansion(mult = c(0.02, 0.30))) +
+  scale_y_continuous(labels = function(x) paste0("$", round(x), "M")) +
+  labs(
+    title = "Love's Projected Surplus Value: Floor to Ceiling",
+    subtitle = "Player Return = Salary Savings x Playing Time + Second Contract Value\nBlue band = Love Q10-Q90 | Solid = 2026 class | Dashed = historical (2018-2022)",
+    x = "Pick Number", y = "Total Surplus Value Over Rookie Deal ($M)"
+  ) +
+  theme_minimal(base_size = 13)
 ```
 
 There are two paths through the surplus math for Love: **high snap ratio** and a **big second contract**. An RB who plays 90%+ of snaps (top-decile outcome) and earns a market-resetting second deal can close most of the structural gap. Love's 90th-percentile surplus outcome crosses the premium position average at **pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`**. Before that, the structural economics of the position make it nearly impossible for any RB to beat premium alternatives on surplus alone.
 
 ```{r love-fair-value-narrative, results='asis'}
 cat(paste0(
-  "The career AV chart above showed Love projecting as one of the best prospects in the class on pure production. ",
-  "But the surplus math tells a harder story. ",
+  "The surplus math tells a hard story. ",
   "Love's median projected return at pick 10 is **$", round(love_range$q50[10] * salary_cap, 1),
   "M** vs **$", round(prem_median$avg_rs[10] * salary_cap, 1), "M** for the premium position average — ",
   "a gap of **$", round((prem_median$avg_rs[10] - love_range$q50[10]) * salary_cap, 1),
@@ -2020,10 +1965,10 @@ Everything we've built in this article converges on a single question. Which tea
 There's one more factor the surplus math can't see: **RBs peak early and decline fast.**
 
 ```{r rb-age-curve, fig.height=5, fig.width=9, message=FALSE, warning=FALSE}
-# Build production curves from fantasy points per game (skill positions)
+# Build production curves from fantasy points (skill positions)
 library(nflreadr)
 
-# Seasonal fantasy points per game
+# Seasonal fantasy points
 season_fp <- load_player_stats(2012:2024) %>%
   filter(season_type == "REG", position_group %in% c("QB", "RB", "WR", "TE")) %>%
   group_by(player_id, player_display_name, position, position_group, season) %>%
@@ -2037,7 +1982,7 @@ fp_pos_map <- c("QB" = "QB", "RB" = "RB", "WR" = "WR", "TE" = "TE")
 season_fp <- season_fp %>%
   mutate(pos_group = fp_pos_map[position])
 
-# Get draft year + round — join via gsis_id (player_id in nflreadr = gsis_id)
+# Get draft year + round
 draft_info <- df %>%
   select(gsis_id, season, round) %>%
   rename(draft_season = season, draft_round = round) %>%
@@ -2049,7 +1994,7 @@ fp_joined <- season_fp %>%
   mutate(years_exp = season - draft_season + 1) %>%
   filter(years_exp >= 1, years_exp <= 12)
 
-# All positions chart — raw total fantasy points per season
+# All-rounds grouped curves (needed for narrative stats)
 grouped_curves <- fp_joined %>%
   filter(!is.na(pos_group)) %>%
   group_by(pos_group, years_exp) %>%
@@ -2060,28 +2005,11 @@ peak_yrs <- grouped_curves %>% group_by(pos_group) %>% slice_max(avg_fp, n = 1)
 
 pos_colors_curve <- c("QB" = "#c62828", "RB" = "#377EB8", "WR" = "#4CAF50", "TE" = "#984EA3")
 
-ggplot(grouped_curves, aes(x = years_exp, y = avg_fp, color = pos_group)) +
-  geom_line(linewidth = 1.8) +
-  geom_point(data = peak_yrs, size = 5) +
-  scale_color_manual(values = pos_colors_curve, name = "") +
-  scale_y_continuous(limits = c(0, NA)) +
-  scale_x_continuous(breaks = 1:12) +
-  labs(
-    title = "The RB Clock: Total Fantasy Points by Experience",
-    subtitle = "Average season fantasy points | Drafted 2010-2022, min 4 games/season",
-    x = "Years of Experience", y = "Fantasy Points per Season"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(legend.position = "top",
-        legend.text = element_text(size = 12))
-```
-
-```{r rb-age-curve-by-round, fig.height=5, fig.width=9, message=FALSE, warning=FALSE}
-# Round 1 only — the picks that matter for this article
-fp_with_round <- fp_joined %>%
+# Round 1 only chart
+r1_data <- fp_joined %>%
   filter(!is.na(pos_group), draft_round == 1)
 
-r1_curves <- fp_with_round %>%
+r1_curves <- r1_data %>%
   group_by(pos_group, years_exp) %>%
   summarise(avg_fp = mean(total_fp, na.rm = TRUE), n = n(), .groups = "drop") %>%
   filter(n >= 5)
