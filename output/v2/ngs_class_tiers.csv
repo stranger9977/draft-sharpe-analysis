@@ -15,623 +15,694 @@ season,pos_group,ngs_tier,n
 1998,EDGE,Average,1
 1998,IOL,Below Avg,1
 1999,CB,Below Avg,1
-2003,CB,Elite,1
-2003,CB,Good,17
 2003,CB,Average,9
 2003,CB,Below Avg,2
-2003,DL,Good,6
+2003,CB,Elite,1
+2003,CB,Good,17
 2003,DL,Average,9
-2003,EDGE,Good,9
+2003,DL,Good,6
 2003,EDGE,Average,7
 2003,EDGE,Below Avg,1
-2003,IOL,Good,9
+2003,EDGE,Good,9
 2003,IOL,Average,8
 2003,IOL,Below Avg,1
-2003,LB,Good,7
+2003,IOL,Good,9
 2003,LB,Average,9
 2003,LB,Below Avg,1
+2003,LB,Good,7
+2003,OT,Average,5
 2003,OT,Elite,1
 2003,OT,Good,7
-2003,OT,Average,5
-2003,QB,Good,5
 2003,QB,Average,5
 2003,QB,Below Avg,1
-2003,RB,Elite,1
-2003,RB,Good,8
+2003,QB,Good,5
 2003,RB,Average,1
 2003,RB,Below Avg,1
-2003,TE,Good,9
+2003,RB,Elite,1
+2003,RB,Good,8
 2003,TE,Average,2
-2003,WR,Elite,2
-2003,WR,Good,12
+2003,TE,Good,9
 2003,WR,Average,8
 2003,WR,Below Avg,3
-2004,CB,Good,12
+2003,WR,Elite,2
+2003,WR,Good,12
 2004,CB,Average,14
-2004,DL,Good,9
+2004,CB,Good,12
 2004,DL,Average,6
 2004,DL,Below Avg,1
-2004,EDGE,Good,7
+2004,DL,Good,9
 2004,EDGE,Average,8
-2004,IOL,Good,6
+2004,EDGE,Good,7
 2004,IOL,Average,9
-2004,LB,Good,17
+2004,IOL,Good,6
 2004,LB,Average,7
-2004,OT,Good,2
+2004,LB,Good,17
 2004,OT,Average,9
-2004,QB,Good,6
+2004,OT,Good,2
 2004,QB,Average,5
 2004,QB,Below Avg,2
-2004,RB,Good,7
+2004,QB,Good,6
 2004,RB,Average,3
-2004,TE,Good,8
+2004,RB,Good,7
 2004,TE,Average,1
 2004,TE,Below Avg,2
-2004,WR,Good,19
+2004,TE,Good,8
 2004,WR,Average,7
 2004,WR,Below Avg,1
+2004,WR,Good,19
+2005,CB,Average,9
 2005,CB,Elite,1
 2005,CB,Good,21
-2005,CB,Average,9
-2005,DL,Good,2
 2005,DL,Average,9
-2005,EDGE,Elite,1
-2005,EDGE,Good,6
+2005,DL,Good,2
 2005,EDGE,Average,6
 2005,EDGE,Below Avg,1
-2005,IOL,Good,16
+2005,EDGE,Elite,1
+2005,EDGE,Good,6
 2005,IOL,Average,4
-2005,LB,Good,10
+2005,IOL,Good,16
 2005,LB,Average,5
 2005,LB,Below Avg,2
-2005,OT,Good,8
+2005,LB,Good,10
 2005,OT,Average,9
+2005,OT,Good,8
+2005,QB,Average,6
 2005,QB,Elite,1
 2005,QB,Good,5
-2005,QB,Average,6
-2005,RB,Good,11
 2005,RB,Average,4
 2005,RB,Below Avg,2
-2005,TE,Good,3
+2005,RB,Good,11
 2005,TE,Average,4
+2005,TE,Good,3
+2005,WR,Average,8
 2005,WR,Elite,1
 2005,WR,Good,14
-2005,WR,Average,8
-2006,CB,Good,13
 2006,CB,Average,7
+2006,CB,Good,13
+2006,DL,Average,10
 2006,DL,Elite,1
 2006,DL,Good,5
-2006,DL,Average,10
+2006,EDGE,Average,11
 2006,EDGE,Elite,1
 2006,EDGE,Good,7
-2006,EDGE,Average,11
-2006,IOL,Elite,1
-2006,IOL,Good,9
 2006,IOL,Average,6
 2006,IOL,Below Avg,1
-2006,LB,Elite,1
-2006,LB,Good,10
+2006,IOL,Elite,1
+2006,IOL,Good,9
 2006,LB,Average,8
 2006,LB,Below Avg,1
+2006,LB,Elite,1
+2006,LB,Good,10
+2006,OT,Average,5
 2006,OT,Elite,1
 2006,OT,Good,4
-2006,OT,Average,5
-2006,QB,Good,8
 2006,QB,Average,2
+2006,QB,Good,8
+2006,RB,Average,2
 2006,RB,Elite,1
 2006,RB,Good,9
-2006,RB,Average,2
+2006,TE,Average,4
 2006,TE,Elite,1
 2006,TE,Good,8
-2006,TE,Average,4
-2006,WR,Good,16
 2006,WR,Average,7
-2007,CB,Good,9
+2006,WR,Good,16
 2007,CB,Average,12
 2007,CB,Below Avg,1
-2007,DL,Good,6
+2007,CB,Good,9
 2007,DL,Average,9
-2007,EDGE,Good,10
+2007,DL,Good,6
 2007,EDGE,Average,2
-2007,IOL,Good,6
+2007,EDGE,Good,10
 2007,IOL,Average,8
-2007,LB,Good,9
+2007,IOL,Good,6
 2007,LB,Average,2
 2007,LB,Below Avg,3
+2007,LB,Good,9
+2007,OT,Average,4
 2007,OT,Elite,1
 2007,OT,Good,5
-2007,OT,Average,4
-2007,QB,Good,6
 2007,QB,Average,3
-2007,RB,Good,8
+2007,QB,Good,6
 2007,RB,Average,6
 2007,RB,Below Avg,1
-2007,TE,Good,2
+2007,RB,Good,8
 2007,TE,Average,7
-2007,WR,Elite,1
-2007,WR,Good,17
+2007,TE,Good,2
 2007,WR,Average,8
 2007,WR,Below Avg,3
-2008,CB,Good,20
+2007,WR,Elite,1
+2007,WR,Good,17
 2008,CB,Average,4
-2008,DL,Good,5
+2008,CB,Good,20
 2008,DL,Average,8
 2008,DL,Below Avg,1
+2008,DL,Good,5
+2008,EDGE,Average,2
 2008,EDGE,Elite,1
 2008,EDGE,Good,8
-2008,EDGE,Average,2
-2008,IOL,Good,3
 2008,IOL,Average,5
-2008,LB,Elite,1
-2008,LB,Good,10
+2008,IOL,Good,3
 2008,LB,Average,3
 2008,LB,Below Avg,1
-2008,OT,Good,8
+2008,LB,Elite,1
+2008,LB,Good,10
 2008,OT,Average,6
 2008,OT,Below Avg,2
-2008,QB,Good,6
+2008,OT,Good,8
 2008,QB,Average,5
-2008,RB,Elite,3
-2008,RB,Good,9
+2008,QB,Good,6
 2008,RB,Average,9
 2008,RB,Below Avg,2
+2008,RB,Elite,3
+2008,RB,Good,9
+2008,TE,Average,3
 2008,TE,Elite,1
 2008,TE,Good,9
-2008,TE,Average,3
-2008,WR,Good,17
 2008,WR,Average,9
 2008,WR,Below Avg,3
-2009,CB,Good,9
+2008,WR,Good,17
 2009,CB,Average,13
 2009,CB,Below Avg,2
-2009,DL,Good,6
+2009,CB,Good,9
 2009,DL,Average,6
-2009,EDGE,Good,5
+2009,DL,Good,6
 2009,EDGE,Average,5
 2009,EDGE,Below Avg,1
-2009,IOL,Good,5
+2009,EDGE,Good,5
 2009,IOL,Average,8
 2009,IOL,Below Avg,1
+2009,IOL,Good,5
+2009,LB,Average,3
 2009,LB,Elite,1
 2009,LB,Good,7
-2009,LB,Average,3
-2009,OT,Good,9
 2009,OT,Average,3
-2009,QB,Good,4
+2009,OT,Good,9
 2009,QB,Average,5
-2009,RB,Good,6
+2009,QB,Good,4
 2009,RB,Average,9
 2009,RB,Below Avg,1
-2009,TE,Good,7
+2009,RB,Good,6
 2009,TE,Average,7
-2009,WR,Good,16
+2009,TE,Good,7
 2009,WR,Average,11
 2009,WR,Below Avg,1
-2010,CB,Good,10
+2009,WR,Good,16
 2010,CB,Average,8
-2010,DL,Elite,1
-2010,DL,Good,8
+2010,CB,Good,10
 2010,DL,Average,5
 2010,DL,Below Avg,2
-2010,EDGE,Good,13
+2010,DL,Elite,1
+2010,DL,Good,8
 2010,EDGE,Average,10
 2010,EDGE,Below Avg,2
-2010,IOL,Good,6
+2010,EDGE,Good,13
 2010,IOL,Average,9
 2010,IOL,Below Avg,1
-2010,LB,Elite,1
-2010,LB,Good,9
+2010,IOL,Good,6
 2010,LB,Average,10
 2010,LB,Below Avg,1
-2010,OT,Good,7
+2010,LB,Elite,1
+2010,LB,Good,9
 2010,OT,Average,5
-2010,QB,Good,4
+2010,OT,Good,7
 2010,QB,Average,4
 2010,QB,Below Avg,2
-2010,RB,Good,9
+2010,QB,Good,4
 2010,RB,Average,1
-2010,TE,Good,6
+2010,RB,Good,9
 2010,TE,Average,9
 2010,TE,Below Avg,1
+2010,TE,Good,6
+2010,WR,Average,7
 2010,WR,Elite,1
 2010,WR,Good,16
-2010,WR,Average,7
-2011,CB,Elite,1
-2011,CB,Good,8
 2011,CB,Average,16
 2011,CB,Below Avg,5
-2011,DL,Good,7
+2011,CB,Elite,1
+2011,CB,Good,8
 2011,DL,Average,6
 2011,DL,Below Avg,1
-2011,EDGE,Elite,1
-2011,EDGE,Good,9
+2011,DL,Good,7
 2011,EDGE,Average,1
 2011,EDGE,Below Avg,2
-2011,IOL,Good,8
+2011,EDGE,Elite,1
+2011,EDGE,Good,9
 2011,IOL,Average,6
 2011,IOL,Below Avg,1
-2011,LB,Good,12
+2011,IOL,Good,8
 2011,LB,Average,1
 2011,LB,Below Avg,2
-2011,OT,Good,9
+2011,LB,Good,12
 2011,OT,Average,4
 2011,OT,Below Avg,1
-2011,QB,Elite,1
-2011,QB,Good,6
+2011,OT,Good,9
 2011,QB,Average,4
 2011,QB,Below Avg,1
-2011,RB,Good,13
+2011,QB,Elite,1
+2011,QB,Good,6
 2011,RB,Average,7
 2011,RB,Below Avg,1
-2011,TE,Good,8
+2011,RB,Good,13
 2011,TE,Average,2
-2011,WR,Elite,1
-2011,WR,Good,13
+2011,TE,Good,8
 2011,WR,Average,7
 2011,WR,Below Avg,2
-2012,CB,Elite,1
-2012,CB,Good,11
+2011,WR,Elite,1
+2011,WR,Good,13
 2012,CB,Average,10
 2012,CB,Below Avg,1
-2012,DL,Good,11
+2012,CB,Elite,1
+2012,CB,Good,11
 2012,DL,Average,3
 2012,DL,Below Avg,1
-2012,EDGE,Good,10
+2012,DL,Good,11
 2012,EDGE,Average,5
-2012,IOL,Good,6
+2012,EDGE,Good,10
 2012,IOL,Average,10
+2012,IOL,Good,6
+2012,LB,Average,8
 2012,LB,Elite,1
 2012,LB,Good,5
-2012,LB,Average,8
-2012,OT,Good,6
 2012,OT,Average,2
 2012,OT,Below Avg,3
+2012,OT,Good,6
+2012,QB,Average,3
 2012,QB,Elite,2
 2012,QB,Good,5
-2012,QB,Average,3
-2012,RB,Good,10
 2012,RB,Average,4
 2012,RB,Below Avg,1
+2012,RB,Good,10
+2012,TE,Average,1
 2012,TE,Elite,1
 2012,TE,Good,5
-2012,TE,Average,1
-2012,WR,Good,21
 2012,WR,Average,7
-2013,CB,Good,17
+2012,WR,Good,21
 2013,CB,Average,8
-2013,DL,Good,8
+2013,CB,Good,17
 2013,DL,Average,4
 2013,DL,Below Avg,1
-2013,EDGE,Good,9
+2013,DL,Good,8
 2013,EDGE,Average,8
 2013,EDGE,Below Avg,3
-2013,IOL,Good,8
+2013,EDGE,Good,9
 2013,IOL,Average,6
 2013,IOL,Below Avg,1
-2013,LB,Good,10
+2013,IOL,Good,8
 2013,LB,Average,6
 2013,LB,Below Avg,1
+2013,LB,Good,10
+2013,OT,Average,3
 2013,OT,Elite,2
 2013,OT,Good,3
-2013,OT,Average,3
-2013,QB,Good,2
 2013,QB,Average,6
 2013,QB,Below Avg,2
-2013,RB,Good,9
+2013,QB,Good,2
 2013,RB,Average,8
 2013,RB,Below Avg,2
-2013,TE,Good,8
+2013,RB,Good,9
 2013,TE,Average,5
-2013,WR,Good,13
+2013,TE,Good,8
 2013,WR,Average,7
-2014,CB,Elite,3
-2014,CB,Good,11
+2013,WR,Good,13
 2014,CB,Average,12
 2014,CB,Below Avg,3
-2014,DL,Elite,1
-2014,DL,Good,5
+2014,CB,Elite,3
+2014,CB,Good,11
 2014,DL,Average,7
 2014,DL,Below Avg,1
+2014,DL,Elite,1
+2014,DL,Good,5
+2014,EDGE,Average,7
 2014,EDGE,Elite,1
 2014,EDGE,Good,6
-2014,EDGE,Average,7
-2014,IOL,Good,11
 2014,IOL,Average,11
 2014,IOL,Below Avg,3
-2014,LB,Elite,1
-2014,LB,Good,8
+2014,IOL,Good,11
 2014,LB,Average,7
 2014,LB,Below Avg,1
+2014,LB,Elite,1
+2014,LB,Good,8
+2014,OT,Average,3
 2014,OT,Elite,2
 2014,OT,Good,3
-2014,OT,Average,3
-2014,QB,Good,7
 2014,QB,Average,4
-2014,RB,Good,11
+2014,QB,Good,7
 2014,RB,Average,6
+2014,RB,Good,11
+2014,TE,Average,3
 2014,TE,Elite,1
 2014,TE,Good,4
-2014,TE,Average,3
-2014,WR,Elite,1
-2014,WR,Good,16
 2014,WR,Average,10
 2014,WR,Below Avg,1
-2015,CB,Good,15
+2014,WR,Elite,1
+2014,WR,Good,16
 2015,CB,Average,4
 2015,CB,Below Avg,1
-2015,DL,Good,9
+2015,CB,Good,15
 2015,DL,Average,8
-2015,EDGE,Elite,2
-2015,EDGE,Good,17
+2015,DL,Good,9
 2015,EDGE,Average,5
 2015,EDGE,Below Avg,5
-2015,IOL,Good,8
+2015,EDGE,Elite,2
+2015,EDGE,Good,17
 2015,IOL,Average,7
+2015,IOL,Good,8
+2015,LB,Average,5
 2015,LB,Elite,1
 2015,LB,Good,3
-2015,LB,Average,5
-2015,OT,Good,7
 2015,OT,Average,6
 2015,OT,Below Avg,1
+2015,OT,Good,7
+2015,QB,Average,1
 2015,QB,Elite,1
 2015,QB,Good,4
-2015,QB,Average,1
-2015,RB,Good,12
 2015,RB,Average,4
 2015,RB,Below Avg,2
-2015,S,Good,5
+2015,RB,Good,12
 2015,S,Average,3
-2015,TE,Good,4
+2015,S,Good,5
 2015,TE,Average,10
-2015,WR,Good,21
+2015,TE,Good,4
 2015,WR,Average,4
 2015,WR,Below Avg,3
-2016,CB,Good,10
+2015,WR,Good,21
 2016,CB,Average,16
-2016,DL,Good,8
+2016,CB,Good,10
 2016,DL,Average,8
-2016,EDGE,Good,10
+2016,DL,Good,8
 2016,EDGE,Average,6
 2016,EDGE,Below Avg,1
-2016,IOL,Good,10
+2016,EDGE,Good,10
 2016,IOL,Average,3
 2016,IOL,Below Avg,1
-2016,LB,Good,3
+2016,IOL,Good,10
 2016,LB,Average,4
 2016,LB,Below Avg,1
-2016,OT,Good,8
+2016,LB,Good,3
 2016,OT,Average,6
 2016,OT,Below Avg,1
-2016,QB,Good,11
+2016,OT,Good,8
 2016,QB,Average,3
+2016,QB,Good,11
+2016,RB,Average,3
 2016,RB,Elite,1
 2016,RB,Good,12
-2016,RB,Average,3
-2016,S,Good,6
 2016,S,Average,5
-2016,TE,Good,6
+2016,S,Good,6
 2016,TE,Average,3
-2016,WR,Good,17
+2016,TE,Good,6
 2016,WR,Average,7
 2016,WR,Below Avg,1
-2017,CB,Elite,1
-2017,CB,Good,17
+2016,WR,Good,17
 2017,CB,Average,6
 2017,CB,Below Avg,1
-2017,DL,Good,8
+2017,CB,Elite,1
+2017,CB,Good,17
 2017,DL,Average,5
 2017,DL,Below Avg,1
-2017,EDGE,Elite,1
-2017,EDGE,Good,16
+2017,DL,Good,8
 2017,EDGE,Average,5
 2017,EDGE,Below Avg,3
+2017,EDGE,Elite,1
+2017,EDGE,Good,16
+2017,IOL,Average,8
 2017,IOL,Elite,1
 2017,IOL,Good,5
-2017,IOL,Average,8
-2017,LB,Good,7
 2017,LB,Average,4
-2017,OT,Good,4
+2017,LB,Good,7
 2017,OT,Average,5
 2017,OT,Below Avg,2
+2017,OT,Good,4
+2017,QB,Average,2
 2017,QB,Elite,1
 2017,QB,Good,6
-2017,QB,Average,2
-2017,RB,Good,13
 2017,RB,Average,8
 2017,RB,Below Avg,1
-2017,S,Good,9
+2017,RB,Good,13
 2017,S,Average,4
 2017,S,Below Avg,1
+2017,S,Good,9
+2017,TE,Average,1
 2017,TE,Elite,3
 2017,TE,Good,8
-2017,TE,Average,1
+2017,WR,Average,3
 2017,WR,Elite,1
 2017,WR,Good,25
-2017,WR,Average,3
+2018,CB,Average,6
 2018,CB,Elite,1
 2018,CB,Good,11
-2018,CB,Average,6
-2018,DL,Good,10
 2018,DL,Average,3
-2018,EDGE,Good,14
+2018,DL,Good,10
 2018,EDGE,Average,4
-2018,IOL,Elite,1
-2018,IOL,Good,8
+2018,EDGE,Good,14
 2018,IOL,Average,5
 2018,IOL,Below Avg,1
-2018,LB,Elite,1
-2018,LB,Good,9
+2018,IOL,Elite,1
+2018,IOL,Good,8
 2018,LB,Average,5
 2018,LB,Below Avg,1
-2018,OT,Good,5
+2018,LB,Elite,1
+2018,LB,Good,9
 2018,OT,Average,6
 2018,OT,Below Avg,1
-2018,QB,Good,8
+2018,OT,Good,5
 2018,QB,Average,3
 2018,QB,Below Avg,1
+2018,QB,Good,8
+2018,RB,Average,4
 2018,RB,Elite,1
 2018,RB,Good,11
-2018,RB,Average,4
-2018,S,Good,7
 2018,S,Average,2
-2018,TE,Good,7
+2018,S,Good,7
 2018,TE,Average,7
-2018,WR,Good,21
+2018,TE,Good,7
 2018,WR,Average,5
 2018,WR,Below Avg,2
-2019,CB,Elite,1
-2019,CB,Good,17
+2018,WR,Good,21
 2019,CB,Average,3
 2019,CB,Below Avg,1
-2019,DL,Elite,2
-2019,DL,Good,7
+2019,CB,Elite,1
+2019,CB,Good,17
 2019,DL,Average,5
 2019,DL,Below Avg,3
-2019,EDGE,Good,7
+2019,DL,Elite,2
+2019,DL,Good,7
 2019,EDGE,Average,10
+2019,EDGE,Good,7
+2019,IOL,Average,3
 2019,IOL,Elite,1
 2019,IOL,Good,10
-2019,IOL,Average,3
-2019,LB,Elite,2
-2019,LB,Good,11
 2019,LB,Average,5
 2019,LB,Below Avg,1
-2019,OT,Good,8
+2019,LB,Elite,2
+2019,LB,Good,11
 2019,OT,Average,5
+2019,OT,Good,8
+2019,QB,Average,4
 2019,QB,Elite,1
 2019,QB,Good,6
-2019,QB,Average,4
-2019,RB,Good,14
 2019,RB,Average,5
 2019,RB,Below Avg,1
-2019,S,Good,10
+2019,RB,Good,14
 2019,S,Average,4
-2019,TE,Elite,1
-2019,TE,Good,10
+2019,S,Good,10
 2019,TE,Average,3
 2019,TE,Below Avg,1
-2019,WR,Good,16
+2019,TE,Elite,1
+2019,TE,Good,10
 2019,WR,Average,5
 2019,WR,Below Avg,1
-2020,CB,Elite,2
-2020,CB,Good,18
+2019,WR,Good,16
 2020,CB,Average,2
 2020,CB,Below Avg,1
-2020,DL,Good,8
+2020,CB,Elite,2
+2020,CB,Good,18
 2020,DL,Average,6
 2020,DL,Below Avg,1
+2020,DL,Good,8
+2020,EDGE,Average,7
 2020,EDGE,Elite,1
 2020,EDGE,Good,8
-2020,EDGE,Average,7
-2020,IOL,Good,10
 2020,IOL,Average,6
 2020,IOL,Below Avg,1
+2020,IOL,Good,10
+2020,LB,Average,9
 2020,LB,Elite,1
 2020,LB,Good,16
-2020,LB,Average,9
+2020,OT,Average,2
 2020,OT,Elite,2
 2020,OT,Good,9
-2020,OT,Average,2
+2020,QB,Average,5
 2020,QB,Elite,1
 2020,QB,Good,4
-2020,QB,Average,5
+2020,RB,Average,3
 2020,RB,Elite,1
 2020,RB,Good,13
-2020,RB,Average,3
-2020,S,Good,12
 2020,S,Average,5
 2020,S,Below Avg,1
-2020,TE,Good,9
+2020,S,Good,12
 2020,TE,Average,1
 2020,TE,Below Avg,1
-2020,WR,Elite,1
-2020,WR,Good,25
+2020,TE,Good,9
 2020,WR,Average,7
 2020,WR,Below Avg,1
-2021,CB,Elite,2
-2021,CB,Good,17
+2020,WR,Elite,1
+2020,WR,Good,25
 2021,CB,Average,8
 2021,CB,Below Avg,3
-2021,DL,Good,11
+2021,CB,Elite,2
+2021,CB,Good,17
 2021,DL,Average,4
 2021,DL,Below Avg,1
-2021,EDGE,Good,5
+2021,DL,Good,11
 2021,EDGE,Average,8
-2021,IOL,Elite,2
-2021,IOL,Good,12
+2021,EDGE,Good,5
 2021,IOL,Average,8
 2021,IOL,Below Avg,1
-2021,LB,Good,11
+2021,IOL,Elite,2
+2021,IOL,Good,12
 2021,LB,Average,4
 2021,LB,Below Avg,2
-2021,OT,Good,5
+2021,LB,Good,11
 2021,OT,Average,1
+2021,OT,Good,5
 2021,QB,Elite,1
 2021,QB,Good,9
-2021,RB,Elite,2
-2021,RB,Good,8
 2021,RB,Average,5
 2021,RB,Below Avg,1
-2021,S,Good,4
+2021,RB,Elite,2
+2021,RB,Good,8
 2021,S,Average,3
 2021,S,Below Avg,1
+2021,S,Good,4
+2021,TE,Average,4
 2021,TE,Elite,1
 2021,TE,Good,6
-2021,TE,Average,4
+2021,WR,Average,11
 2021,WR,Elite,1
 2021,WR,Good,19
-2021,WR,Average,11
-2022,CB,Good,15
 2022,CB,Average,13
-2022,DL,Good,5
+2022,CB,Good,15
 2022,DL,Average,6
 2022,DL,Below Avg,2
+2022,DL,Good,5
+2022,EDGE,Average,6
 2022,EDGE,Elite,1
 2022,EDGE,Good,7
-2022,EDGE,Average,6
+2022,IOL,Average,9
 2022,IOL,Elite,2
 2022,IOL,Good,10
-2022,IOL,Average,9
-2022,LB,Good,20
 2022,LB,Average,1
-2022,OT,Good,3
+2022,LB,Good,20
 2022,OT,Average,3
-2022,QB,Good,7
+2022,OT,Good,3
 2022,QB,Average,1
-2022,RB,Elite,1
-2022,RB,Good,11
+2022,QB,Good,7
 2022,RB,Average,7
 2022,RB,Below Avg,2
-2022,S,Good,6
+2022,RB,Elite,1
+2022,RB,Good,11
 2022,S,Average,2
-2022,TE,Good,10
+2022,S,Good,6
 2022,TE,Average,4
+2022,TE,Good,10
+2022,WR,Average,3
 2022,WR,Elite,2
 2022,WR,Good,17
-2022,WR,Average,3
-2024,IOL,Average,1
-2025,CB,Good,39
-2025,CB,Average,16
-2025,DL,Good,14
-2025,DL,Average,27
-2025,DL,Below Avg,3
-2025,IOL,Elite,1
-2025,IOL,Good,39
-2025,IOL,Average,15
-2025,IOL,Below Avg,2
-2025,LB,Elite,1
-2025,LB,Good,21
-2025,LB,Average,19
-2025,LB,Below Avg,4
-2025,QB,Good,10
-2025,QB,Average,5
+2023,CB,Average,6
+2023,CB,Below Avg,2
+2023,CB,Elite,1
+2023,CB,Good,20
+2023,DL,Average,7
+2023,DL,Below Avg,1
+2023,DL,Good,5
+2023,EDGE,Average,6
+2023,EDGE,Below Avg,1
+2023,EDGE,Elite,2
+2023,EDGE,Good,9
+2023,IOL,Average,7
+2023,IOL,Below Avg,1
+2023,IOL,Good,13
+2023,LB,Average,8
+2023,LB,Below Avg,2
+2023,LB,Good,15
+2023,OT,Average,1
+2023,OT,Good,13
+2023,QB,Average,1
+2023,QB,Below Avg,1
+2023,QB,Elite,1
+2023,QB,Good,7
+2023,RB,Average,1
+2023,RB,Elite,1
+2023,RB,Good,12
+2023,S,Average,3
+2023,S,Below Avg,1
+2023,S,Good,7
+2023,TE,Average,3
+2023,TE,Below Avg,1
+2023,TE,Good,13
+2023,WR,Average,4
+2023,WR,Below Avg,1
+2023,WR,Good,22
+2024,CB,Average,12
+2024,CB,Good,21
+2024,DL,Average,9
+2024,DL,Below Avg,2
+2024,DL,Good,9
+2024,EDGE,Average,4
+2024,EDGE,Below Avg,2
+2024,EDGE,Good,3
+2024,IOL,Average,12
+2024,IOL,Below Avg,1
+2024,IOL,Good,15
+2024,LB,Average,15
+2024,LB,Good,17
+2024,OT,Average,2
+2024,OT,Below Avg,1
+2024,OT,Elite,1
+2024,OT,Good,16
+2024,QB,Average,1
+2024,QB,Good,8
+2024,RB,Average,2
+2024,RB,Below Avg,1
+2024,RB,Good,16
+2024,S,Average,5
+2024,S,Good,8
+2024,TE,Average,2
+2024,TE,Good,9
+2024,WR,Average,5
+2024,WR,Elite,2
+2024,WR,Good,25
+2025,CB,Average,6
+2025,CB,Below Avg,9
+2025,CB,Good,15
+2025,DL,Average,11
+2025,DL,Below Avg,7
+2025,DL,Good,17
+2025,EDGE,Average,3
+2025,EDGE,Below Avg,1
+2025,EDGE,Elite,1
+2025,EDGE,Good,12
+2025,IOL,Average,3
+2025,IOL,Below Avg,5
+2025,IOL,Good,13
+2025,LB,Average,8
+2025,LB,Below Avg,1
+2025,LB,Good,26
+2025,OT,Average,5
+2025,OT,Good,15
+2025,QB,Average,2
+2025,QB,Good,8
+2025,RB,Average,7
+2025,RB,Below Avg,6
 2025,RB,Elite,1
-2025,RB,Good,7
-2025,RB,Average,8
-2025,RB,Below Avg,4
-2025,TE,Elite,1
-2025,TE,Good,14
-2025,TE,Average,13
-2025,WR,Good,32
-2025,WR,Average,9
-2025,WR,Below Avg,3
+2025,RB,Good,24
+2025,S,Average,13
+2025,S,Below Avg,5
+2025,S,Good,10
+2025,TE,Average,4
+2025,TE,Good,12
+2025,WR,Average,13
+2025,WR,Below Avg,5
+2025,WR,Elite,1
+2025,WR,Good,22

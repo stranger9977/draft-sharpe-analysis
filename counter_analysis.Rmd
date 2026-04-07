@@ -280,12 +280,11 @@ We'll start with RB -- the position at the center of the Sharpe debate -- then s
 
 ```{r ngs-rb-depth-big, fig.height=5, fig.width=8}
 ngs_rb_tiers <- ngs_class_tiers %>%
-  filter(pos_group == "RB", season >= 2010, season <= 2026,
-         !season %in% 2023:2025,
+  filter(pos_group == "RB", season >= 2010, season <= 2025,
          ngs_tier %in% c("Elite", "Good")) %>%
   mutate(
     ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
-    draft_year = factor(as.integer(season), levels = setdiff(2010:2026, 2023:2025))
+    draft_year = factor(as.integer(season), levels = 2010:2026)
   )
 
 # Add 2026 class tiers computed from ngs_prospects (mapped positions)
@@ -295,7 +294,7 @@ ngs_rb_2026 <- ngs_prospects %>%
   filter(!is.na(ngs_tier)) %>%
   count(ngs_tier, name = "n") %>%
   mutate(pos_group = "RB", season = 2026, ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
-         draft_year = factor(2026L, levels = levels(ngs_rb_tiers$draft_year)))
+         draft_year = factor(2026L, levels = 2010:2026))
 ngs_rb_tiers <- bind_rows(ngs_rb_tiers, ngs_rb_2026)
 
 ggplot(ngs_rb_tiers, aes(x = draft_year, y = n, fill = ngs_tier)) +
@@ -324,13 +323,12 @@ Now the same view across every position:
 
 ```{r ngs-all-depth-small, fig.height=12, fig.width=8}
 ngs_other_tiers <- ngs_class_tiers %>%
-  filter(pos_group %in% key_positions, season >= 2010, season <= 2026,
-         !season %in% 2023:2025,
+  filter(pos_group %in% key_positions, season >= 2010, season <= 2025,
          ngs_tier %in% c("Elite", "Good")) %>%
   mutate(
     ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
     pos_group = factor(pos_group, levels = key_positions),
-    draft_year = factor(as.integer(season), levels = setdiff(2010:2026, 2023:2025))
+    draft_year = factor(as.integer(season), levels = 2010:2026)
   )
 
 # Add 2026 class tiers from ngs_prospects (mapped positions)
@@ -341,7 +339,7 @@ ngs_all_2026 <- ngs_prospects %>%
   count(pos_group, ngs_tier, name = "n") %>%
   mutate(season = 2026, ngs_tier = factor(ngs_tier, levels = c("Elite", "Good")),
          pos_group = factor(pos_group, levels = key_positions),
-         draft_year = factor(2026L, levels = levels(ngs_other_tiers$draft_year)))
+         draft_year = factor(2026L, levels = 2010:2026))
 ngs_other_tiers <- bind_rows(ngs_other_tiers, ngs_all_2026)
 
 ggplot(ngs_other_tiers, aes(x = draft_year, y = n, fill = ngs_tier)) +
