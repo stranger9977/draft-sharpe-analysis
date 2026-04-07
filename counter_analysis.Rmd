@@ -1684,7 +1684,7 @@ non_premium_avg <- prospect_curves %>%
 
 ### The Surplus Value View
 
-Career AV is a production metric, and it's kind to RBs. But the Sharpe ratio doesn't measure production; it measures **surplus value** — how much cheaper a drafted player is than a free-agent replacement. This is the metric that says "never draft an RB," and the counterfactual table above shows why. So how does Love overcome a structural disadvantage this large? The formula:
+Career AV showed Love projecting as one of the best prospects in the 2026 class on pure production. That's a real finding. But it's not the metric Article 1 used, and for good reason. The Sharpe ratio measures **surplus value** — how much cheaper a drafted player is than a free-agent replacement. Production tells you how good a player is. Surplus tells you how much value you captured by drafting him instead of signing a free agent. The counterfactual table above showed that gap in action. Now let's put Love through the same lens. The formula:
 
 > **Surplus Value** = Rookie Surplus + Second Contract APY (as % of cap)
 
@@ -1868,26 +1868,29 @@ ggplot() +
   theme_minimal(base_size = 13)
 ```
 
-There are two paths through the surplus math for Love: **high snap ratio** and a **big second contract**. An RB who plays 90%+ of snaps (top-decile outcome) and earns a market-resetting second deal can close most of the structural gap. Love's 90th-percentile surplus outcome crosses the premium position average at **pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`**. Before that, the structural economics of the position make it nearly impossible for any RB to beat premium alternatives on surplus alone.
+The chart confirms what the counterfactual data already told us: the surplus gap is structural. Love's median outcome (solid blue) runs well below the premium position average at every pick. The Sharpe ratio's core argument holds up.
+
+But the ceiling tells a different story. There are two paths through the surplus math: **high snap ratio** and a **big second contract**. An RB who plays 90%+ of snaps and earns a market-resetting second deal can close most of the structural gap. Love's 90th-percentile outcome crosses the premium position average at **pick `r if(!is.na(upside_fair_value)) upside_fair_value else "N/A"`**. That's the narrow window where the bet makes sense.
 
 ```{r love-fair-value-narrative, results='asis'}
 cat(paste0(
-  "The surplus math tells a hard story. ",
-  "Love's median projected return at pick 10 is **$", round(love_range$q50[10] * salary_cap, 1),
+  "At pick 10, Love's median surplus is **$", round(love_range$q50[10] * salary_cap, 1),
   "M** vs **$", round(prem_median$avg_rs[10] * salary_cap, 1), "M** for the premium position average — ",
   "a gap of **$", round((prem_median$avg_rs[10] - love_range$q50[10]) * salary_cap, 1),
   "M**. Even when career production is comparable, ",
-  "premium positions generate more surplus because free-agent replacements cost so much more.\n\n",
+  "premium positions generate more surplus because free-agent replacements cost so much more. ",
+  "The Sharpe ratio's framework is doing exactly what it was built to do.\n\n",
   if(!is.na(upside_fair_value) && upside_fair_value < 32) {
     paste0(
-      "Love's path to overcoming that gap runs through the ceiling. His 90th-percentile outcome ",
+      "The ceiling case is the only path through. Love's 90th-percentile outcome ",
       "— a Gurley/CMC-level career with elite snap share and a market-resetting second contract — ",
       "crosses the premium position average at **pick ", upside_fair_value, "**. ",
-      "After that pick, even the Sharpe ratio's own surplus math says Love's upside beats premium alternatives. ",
-      "Before it, the structural economics of the position make this an uphill bet.\n\n")
+      "That's the bet: a team drafting Love after pick ", upside_fair_value,
+      " isn't ignoring the surplus math. They're betting that his talent ceiling is high enough to overcome it.\n\n")
   } else "",
-  "This is the core tension: the Sharpe ratio isn't wrong about position economics. ",
-  "It's just incomplete when a specific prospect's talent is this far separated from the field."
+  "This is where the stress test lands. The Sharpe ratio's position economics are sound. ",
+  "But the framework assumes an average prospect at each position. Love isn't average — ",
+  "and the gap between his talent and the next RB in this class is wide enough to matter."
 ))
 ```
 
