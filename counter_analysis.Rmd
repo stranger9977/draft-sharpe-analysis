@@ -599,6 +599,8 @@ ngs_with_outcomes <- blue_chip %>%
 
 ### Pre-Draft Elite vs Career Elite
 
+*Note: This section uses 2010-2022 draft classes only. The 2023-2025 classes haven't played enough NFL seasons to evaluate career outcomes.*
+
 The Sharpe ratio treats all prospects at a position the same. But if we can identify which prospects are likely to become great *before the draft*, the average-case advice becomes less relevant. We can define "elite" two ways: retrospectively (top 10% of weighted career AV at the position) and prospectively (top 10% of Prospect Score at the position). How much do they overlap, and does it differ by position?
 
 If high NGS scores actually predict career success, the top-scoring prospects should cluster toward the top of the career value axis. Here's every RB with an NGS score, with the pre-draft elite prospects (top 10% NGS) highlighted:
