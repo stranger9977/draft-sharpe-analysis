@@ -1,6 +1,6 @@
 ---
 title: "What the Sharpe Ratio Can't See"
-subtitle: "Stress-testing our NFL Draft model and finding where it falls short"
+subtitle: "Adding roster context, class depth, and prospect talent to our NFL Draft model"
 author: "Nick Gurol — [X/Twitter](https://x.com/run_the_sims) | [LinkedIn](https://www.linkedin.com/in/nick-gurol-87738a1b7/)"
 output:
   html_document:
@@ -88,27 +88,25 @@ r1_picks <- r1_picks %>% mutate(tier = factor(tier, levels = tier_order))
 
 ## TL;DR
 
-[Part 1](https://stranger9977.github.io/draft-sharpe-analysis/) said **never draft an RB in round 1**. We stress-tested that advice and found three blind spots: roster context matters (9 teams enter 2026 needing an RB), class depth varies wildly (2026 is the thinnest RB class in years, and Jeremiyah Love is the only Elite prospect), and not all prospects are average (Love's 94.3 Prospect Score ranks 5th all-time among RBs). The model's positional hierarchy still holds. QB is king, and early picks are loaded with premium talent. But Love's 90th-percentile outcome crosses the premium surplus line at a mid-first-round pick, meaning teams drafting after that point who need a back can justify the gamble. It's a bet on a Gurley/CMC-level career. Love's pre-draft profile says the bet is worth making.
+[Part 1](https://stranger9977.github.io/draft-sharpe-analysis/) built the case that RB is the worst first-round investment by Sharpe ratio. That positional hierarchy holds up — we validated it here. But the model deliberately strips away context to isolate position economics. This article adds three layers back in: roster context (9 teams enter 2026 needing an RB), class depth (2026 is the thinnest RB class in years, with Jeremiyah Love as the only Elite prospect), and prospect separation (Love's 94.3 Prospect Score ranks 5th all-time among RBs). QB is still king. Premium positions still generate more surplus. But Love's 90th-percentile outcome crosses the premium surplus line at a mid-first-round pick, meaning teams drafting after that point who need a back can justify the gamble. The framework has room for this kind of exception — elite talent, genuine need, no alternative.
 
 ---
 
-## The Sharpe Ratio Was Incomplete.
+## Building on the Foundation
 
-In [Part 1](https://stranger9977.github.io/draft-sharpe-analysis/), we built a quasi-Sharpe ratio for NFL draft picks. The math was clean. The conclusion was clear: **RB shows negative returns across all tiers -- never draft one in round 1.**
+In [Part 1](https://stranger9977.github.io/draft-sharpe-analysis/), we built a quasi-Sharpe ratio for NFL draft picks. The positional hierarchy was clear: **QB leads, OT and EDGE peak late first, and RB shows negative returns across all tiers.**
 
-That was the takeaway from our initial analysis. But if we break down some key assumptions and approach this from a different angle, does it make sense to draft an RB early?
+That framework is deliberately reductive — it strips away context to isolate position economics. That's its strength. But GMs don't draft in a vacuum. They draft in specific years, with specific rosters, facing specific prospects.
 
-GMs don't draft on average. They draft in specific years, with specific rosters, facing specific prospects. A model that can't account for context isn't wrong -- it's incomplete. This is Part 2: an honest stress test that defines where Article 1's advice falls short.
-
-The gap between the model's advice and what teams actually do isn't always inefficiency -- sometimes it's intelligence. We tested three assumptions behind Part 1:
+This is Part 2: we take the Sharpe ratio's positional hierarchy as given, then layer in three dimensions it intentionally ignores. The goal isn't to overturn the model — it's to define the conditions under which its general advice needs a specific adjustment.
 
 ```{r assumptions-table, results='asis'}
 cat("
-| Assumption | What Could Break It |
+| Part 1 Simplification | What Context Adds |
 |---|---|
-| Teams should always draft the highest-Sharpe position | Roster needs make some positions irrelevant for some teams |
-| All draft classes are interchangeable | Class depth varies wildly year to year |
-| Snaps measure quality, and all prospects are fungible | Career value tells a different story, and elite prospects break the averages |
+| Teams should always draft the highest-Sharpe position | Roster needs make some positions more or less valuable for specific teams |
+| All draft classes are interchangeable | Class depth varies wildly — scarcity changes the calculus |
+| All prospects at a position are interchangeable | Elite prospects separate from the pack and break the averages |
 ")
 ```
 
@@ -123,45 +121,30 @@ best_late1 <- sharpe %>% filter(tier == "Late 1st", !is.na(sharpe_elite)) %>%
   slice_max(sharpe_elite, n = 1)
 
 cat(paste0(
-  "The quasi-Sharpe ratio combined three things: rookie contract surplus (how much cheaper ",
-  "a drafted starter is than a free agent), second-contract value (the market's verdict), ",
-  "and elite probability (the chance of a top-decile outcome). We measured risk-adjusted ",
-  "returns by position and draft tier from 2010--2022.\n\n",
-  "**Key findings:** QB leads all positions in top-10 Sharpe (",
-  round(qb_top10$sharpe_elite, 2), "). OT and EDGE peak in the late first round (",
+  "The quasi-Sharpe ratio measured risk-adjusted returns by position and draft tier from 2010-2022. ",
+  "([Full methodology here.](https://stranger9977.github.io/draft-sharpe-analysis/))\n\n",
+  "**The hierarchy:** QB leads the top 10 (",
+  round(qb_top10$sharpe_elite, 2), "). OT and EDGE peak in the late first (",
   round(best_late1$sharpe_elite, 2), " for ", best_late1$pos_group,
   "). RB was the worst first-round investment: Sharpe of **",
   round(rb_top10$sharpe_elite, 2), "** in the top 10, negative across every tier.\n\n",
-  "The advice was simple: if you want a running back, wait until Day 2 or sign a free agent. ",
-  "The data said so.\n\n",
-  "But data without context is just math. Let's break down the assumptions and see where they fall short."
+  "That hierarchy is the foundation for everything that follows. We're not revisiting it — we're adding context."
 ))
 ```
 
-### Weighted Career AV: Our Measuring Stick
+### A Note on Metrics: Career AV
 
-This article leans heavily on a single metric, so it's worth understanding exactly what it is and why we chose it.
+Part 1 measured returns using contract value — what the market pays a player. That's the right lens for surplus analysis, but it has a known feature: **the NFL market systematically underpays running backs** relative to their on-field production. A back who rushes for 1,200 yards might walk in free agency, while a league-average edge rusher commands $15M/year.
 
-**[Weighted Career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm)** (weighted career AV) is Pro Football Reference's attempt to boil an entire NFL career into one number. It works in two steps:
+This article uses **[weighted career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm)** (career AV) from Pro Football Reference alongside Part 1's contract-based metrics. Career AV measures production directly — it rewards peak seasons and penalizes inactivity, without the market layer. When we need to compare what a player *produced* rather than what the market *paid*, career AV is the better tool.
 
-1. **Season-level AV** assigns each player a value for every season based on playing time, statistical production, and team success. A quarterback who throws 4,500 yards on a playoff team earns more AV than a backup who plays four games on a 4-win team.
-2. **Career weighting** sums those seasons but gives extra credit to peak years. The formula weights the best season at 100%, the second-best at 95%, the third at 90%, and so on. A player who had five great years and five mediocre ones scores higher than a player who was merely okay for ten straight.
-
-The result: career AV rewards sustained excellence. Derrick Henry's 86 career AV reflects a decade of elite rushing production. A replacement-level back who hung around for eight years as a committee member might accumulate 25. The gap between those numbers is real -- it maps to Pro Bowls, All-Pro selections, and the kind of production that wins games.
-
-**Why not use Part 1's Sharpe ratio?** Part 1 measured "return" using second-contract value -- what the market paid a player after his rookie deal. That's a reasonable proxy for quality, but it has a blind spot: **the NFL market systematically underpays running backs**. A back who rushes for 1,200 yards a season for four years might walk in free agency or get a modest extension, while a league-average edge rusher commands $15M/year. The Sharpe ratio captures what the *market* values, not what the *player* produced.
-
-Weighted career AV strips out the market layer entirely. When we ran Part 1's Sharpe formula with career AV as the return metric instead of snap-based contract returns, **RB jumped from dead last (negative Sharpe) to 6th out of 11 positions** with a positive Sharpe of 0.249. That gap is the market inefficiency at work: RBs produce more than the market pays them for.
-
-For this article, we need a metric that measures production, not market sentiment. That's career AV.
-
-We define an **elite outcome** as finishing in the **top 10% of weighted career AV at their position** (90th percentile). This is a much stricter bar than Part 1's snap-based "hit" -- it doesn't just ask whether a player became a starter, but whether they became *great*.
+We define an **elite outcome** as finishing in the **top 10% of weighted career AV at their position** — a stricter bar than Part 1's snap-based "hit." It doesn't just ask whether a player became a starter, but whether they became *great*.
 
 ---
 
 ## Assumption 1: Teams Should Always Draft the Highest-Sharpe Position
 
-Article 1 implicitly assumed that every team should always draft the highest-Sharpe position available. But what if you already have a starter? A committee back averaging 3.8 YPC isn't the same as Saquon Barkley. The depth chart says "RB is filled." The roster has a hole.
+Part 1's framework ranks positions in the abstract — which is exactly what a general model should do. But a specific team might already have a franchise QB. For them, QB's league-leading Sharpe is irrelevant. The question shifts from "which position has the best average return?" to "which position fills a real hole on *this* roster?"
 
 We added a quality gate: a position is only "filled" when the starter plays above the snap threshold, earned a second contract above the free-agent replacement cost, and isn't on an expiring deal. A replacement-level player who plays a lot doesn't count. With that filter in place, we re-ranked every team's draft efficiency.
 
@@ -485,7 +468,7 @@ cat(paste0(
   "The mismatches are revealing. 2010 had the highest mean NGS score but produced zero hits. ",
   "athletic profiles alone don't guarantee production. Meanwhile, 2017 was the best actual class ",
   "(23.3% hit rate) because six different backs all found NFL roles.\n\n",
-  "The model says \"never draft RB.\" The class data says \"it depends on the year.\" ",
+  "The model's general advice — avoid RB early — averages across all classes. The class data says \"it depends on the year.\" ",
   "And the NGS tier breakdown gives GMs a real window into which kind of year it is. ",
   "before the first pick is made."
 ))
@@ -835,9 +818,9 @@ cat(paste0(
   round(best_elite$elite_rate * 100, 1),
   "%. **", worst_elite$pos_group, "** has the weakest pre-draft-to-career translation (",
   round(worst_elite$elite_rate * 100, 1),
-  "%). The model's \"never draft RB\" ",
-  "is really \"never draft an *average* RB.\" When the pre-draft signal says a prospect is ",
-  "separated from the class, they become *great* at dramatically higher rates."
+  "%). The model's RB penalty is driven by the average prospect. ",
+  "When the pre-draft signal says a prospect is clearly separated from the class, ",
+  "they become *great* at dramatically higher rates."
 ))
 ```
 
@@ -2090,7 +2073,7 @@ cat(paste0(
 
 The Sharpe ratio works. The positional hierarchy held up under every test we threw at it: QB, EDGE, OT, and WR generate more surplus than non-premium positions, and the counterfactual data confirms it. The surplus gap is real and staggering. This article didn't disprove the framework — it stress-tested it and found it sturdy.
 
-But we also found three conditions that turn "never draft RB in round 1" from a universal law into a conditional one:
+But we also found three conditions that turn Part 1's general RB advice from a universal rule into a conditional one:
 
 1. **Roster context matters.** Having a name on the depth chart isn't the same as having the position filled. Nine teams enter 2026 without a long-term answer at RB. For them, the opportunity cost of *not* drafting one is higher than the model assumes.
 
@@ -2103,8 +2086,8 @@ But we also found three conditions that turn "never draft RB in round 1" from a 
 ```{r love-final-verdict, results='asis'}
 cat(paste0(
   "**The bottom line:** The Sharpe ratio is right that premium positions generate more surplus, and the ",
-  "data backs it up convincingly. But within that framework, we found a slightly more generous outlook for Love ",
-  "than 'never draft an RB' suggests. Nine teams need a running back. The 2026 class is thin. Love is separated ",
+  "data backs it up convincingly. But within that framework, there's a narrow path for Love. ",
+  "Nine teams need a running back. The 2026 class is thin. Love is separated ",
   "from every other RB prospect by 17 points. His ceiling crosses the premium surplus line at **pick ",
   fair_value_pick, "**. And RBs produce immediately — Love's peak years align with the rookie contract window.\n\n",
   if(nrow(best_fits) > 0) paste0(
@@ -2118,6 +2101,16 @@ cat(paste0(
   "No team perfectly combines need, pick position, and fair value — which means Love could slide, or a team trades up."
 ))
 ```
+
+---
+
+## Coming in Part 3: How Sharpe Was Your Draft?
+
+Parts 1 and 2 gave us the framework and the context. After the draft, we'll put them together and grade every team's picks. Not "did you draft good players?" — we can't know that yet — but "did you make Sharpe-optimal decisions given what we know?"
+
+Each pick gets scored on four dimensions: Was it a positive-Sharpe position for that tier? Did it fill a genuine roster need? Was the class deep enough that you could have waited? And if you took a non-premium position, was the prospect clearly separated from the field?
+
+The Love pick — wherever it lands — will be the headline test case. But every first-round pick tells a story about how a front office weighs position economics against context. We'll find out who followed the model, who broke the rules for good reasons, and who left surplus on the table.
 
 ---
 

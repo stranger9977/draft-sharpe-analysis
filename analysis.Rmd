@@ -232,8 +232,9 @@ cat(paste0(
   " — both short of the ", percent(elite_threshold, accuracy = 0.1), " elite threshold.\n\n",
 
   "At pick #3, the positions that *do* produce elite returns are QB, EDGE, and OT — ",
-  "the positions where top-10 Sharpe is positive. If you need a running back, ",
-  "Round 2 or Round 3 gets you nearly equivalent production at a fraction of the draft capital cost."
+  "the positions where top-10 Sharpe is positive. On average, Round 2 or Round 3 RBs deliver ",
+  "nearly equivalent production at a fraction of the draft capital cost — though as we'll see in ",
+  "[Part 2](counter_analysis.html), averages can obscure what happens when the class is thin and the prospect is elite."
 ))
 ```
 
@@ -1301,7 +1302,12 @@ cat(paste0(
 
   "6. **Rookie surplus makes up the majority of a draft pick's total return.** ",
   "For most positions, getting starter-level production at rookie-scale wages for 4 years ",
-  "is worth more than the second contract itself.\n"
+  "is worth more than the second contract itself.\n\n",
+
+  "These findings come from a model that deliberately treats every draft class the same, every prospect at a ",
+  "position as interchangeable, and every team's roster as a blank slate. In [Part 2](counter_analysis.html), ",
+  "we keep the positional hierarchy intact and layer in three dimensions the model intentionally ignores: ",
+  "roster needs, class depth, and individual prospect talent."
 ))
 ```
 
@@ -1404,10 +1410,11 @@ gtsave(top10_non_qb_gt, filename = "charts/player_lookup_non_qb.png", vwidth = 9
 cat("![Top 10 Non-QB Draft Picks by Total Surplus Value](charts/player_lookup_non_qb.png)\n")
 ```
 
-## Assumptions & Potential Improvements
+## Assumptions & What Comes Next
 
 Every model makes simplifying assumptions. Here's what this analysis assumes and how each could be
-refined in future work.
+refined. Three of these — uniform talent across classes, ignoring roster context, and treating all
+prospects as interchangeable — are directly tested in [Part 2](counter_analysis.html).
 
 | Assumption | Why it matters |
 |---|---|
