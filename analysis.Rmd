@@ -137,419 +137,37 @@ second contract itself. These findings come with important caveats (see Assumpti
 end): snap share is an imperfect proxy for production, the model doesn't capture positional
 scarcity or team-specific needs, and some sample sizes are small.
 
-## What About Love at 3?
+## Should a Team Love Love at #4 Overall?
 
-```{r love-hook, results='asis'}
-rb_top10 <- sharpe %>% filter(pos_group == "RB", tier == "Top 10")
-rb_fa <- fa_replacement %>% filter(pos_group == "RB")
+Mock drafts have Jeremiah Love going as high as [**#4 overall**](https://grindingthemocks.shinyapps.io/Dashboard/). He's been mocked to RB-needy teams like the Titans, Cardinals, Commanders, and Giants — all teams with top-10 picks and needs outside of the running back position.
 
-qb_top10 <- sharpe %>% filter(pos_group == "QB", tier == "Top 10") %>% pull(sharpe_elite)
-best_late1 <- sharpe %>% filter(tier == "Late 1st", !is.na(sharpe_elite)) %>%
-  slice_max(sharpe_elite, n = 1)
-wr_day2 <- sharpe %>% filter(pos_group == "WR", tier == "Round 2") %>% pull(sharpe_elite)
+Analytic intuition says that spending premium draft capital on a "non-premium" position like RB is a horrible idea. On the other side, others cite Love's elite prospect profile and the impact a running back like Saquon Barkley can have on a team's Super Bowl run (see the [Eagles' Super Bowl LIX victory in 2024](https://en.wikipedia.org/wiki/Super_Bowl_LIX)).
 
-n_top10_rb <- nrow(player_lookup %>% filter(pos_group == "RB", pick <= 10, season <= 2022))
-
-cat(paste0(
-  "Mock drafts have Jeremiah Love going as high as **#3 overall**. Pick #3 falls in the top-10 tier, ",
-  "where the Sharpe ratio for RB is **", round(rb_top10$sharpe_elite, 2),
-  "** — the worst of any offensive position. Here's why:\n\n",
-
-  "- **Hit rate is fine** (", percent(rb_top10$hit_rate, accuracy = 0.1),
-  ") — top-10 RBs usually become starters.\n",
-  "- **But the rookie surplus is tiny.** FA RBs cost just ",
-  percent(rb_fa$fa_median_apy_cap_pct, accuracy = 0.1),
-  " of the cap — the cheapest position to replace in free agency.\n",
-  "- **And the second-contract ceiling is low.** The best RB deal is ~",
-  round(max(df_eligible %>% filter(pos_group == "RB") %>% pull(second_apy_cap_pct)) * 100),
-  "% of cap. The best WR deal is ~",
-  round(max(df_eligible %>% filter(pos_group == "WR") %>% pull(second_apy_cap_pct)) * 100),
-  "%. The upside is structurally capped.\n",
-  "- **The opportunity cost is real.** QB leads all positions in top-10 Sharpe (",
-  round(qb_top10, 2), "), and the best risk-adjusted slot in the draft is ",
-  best_late1$pos_group, " in the late first (Sharpe: ",
-  round(best_late1$sharpe_elite, 2), "). Even a Round 2 WR (Sharpe: ",
-  round(wr_day2, 2), ") shows stronger risk-adjusted returns than a top-10 RB.\n\n",
-
-  "What does -0.62 look like in practice? Here are all ", n_top10_rb,
-  " RBs drafted in the top 10 since 2010:"
-))
-```
-
-```{r rb-top10-gt}
-top10_rb <- player_lookup %>%
-  filter(pos_group == "RB", pick <= 10, season <= 2022) %>%
-  arrange(desc(player_return)) %>%
-  mutate(
-    elite = player_return >= elite_threshold
-  ) %>%
-  select(pfr_player_name, pick, season, is_hit, player_return)
-
-top10_rb %>%
-  gt() %>%
-  cols_label(
-    pfr_player_name = "Player",
-    pick = "Pick",
-    season = "Year",
-    is_hit = "Hit?",
-    player_return = "Player Return"
-  ) %>%
-  fmt_percent(columns = player_return, decimals = 1) %>%
-  text_transform(
-    locations = cells_body(columns = is_hit),
-    fn = function(x) ifelse(x == "TRUE", "Yes", "No")
-  ) %>%
-  text_transform(
-    locations = cells_body(columns = pick),
-    fn = function(x) paste0("#", x)
-  ) %>%
-  tab_style(
-    style = cell_text(weight = "bold"),
-    locations = cells_body(rows = player_return == max(player_return))
-  ) %>%
-  tab_footnote(
-    footnote = paste0("Elite threshold: ", percent(elite_threshold, accuracy = 0.1),
-                      " | None of these players reached it."),
-    locations = cells_column_labels(columns = player_return)
-  ) %>%
-  tab_options(
-    table.width = pct(100),
-    table.font.size = 14
-  )
-```
-
-```{r rb-top10-commentary, results='asis'}
-top10_rb_data <- player_lookup %>% filter(pos_group == "RB", pick <= 10, season <= 2022)
-best_rb <- top10_rb_data %>% slice_max(player_return, n = 1)
-second_rb <- top10_rb_data %>% arrange(desc(player_return)) %>% slice(2)
-
-cat(paste0(
-  "Five of seven became starters — the hit rate (",
-  percent(mean(top10_rb_data$is_hit), accuracy = 1),
-  ") is solid. But **zero produced an elite return**. The highest return belongs to ",
-  best_rb$pfr_player_name, " at ", percent(best_rb$player_return, accuracy = 0.1),
-  ", followed by ", second_rb$pfr_player_name, " at ", percent(second_rb$player_return, accuracy = 0.1),
-  " — both short of the ", percent(elite_threshold, accuracy = 0.1), " elite threshold.\n\n",
-
-  "At pick #3, the positions that *do* produce elite returns are QB, EDGE, and OT — ",
-  "the positions where top-10 Sharpe is positive. On average, Round 2 or Round 3 RBs deliver ",
-  "nearly equivalent production at a fraction of the draft capital cost — though as we'll see in ",
-  "[Part 2](counter_analysis.html), averages can obscure what happens when the class is thin and the prospect is elite."
-))
-```
-
-```{r love-chart, fig.height=8, fig.width=10}
-# The Sharpe heatmap as the hook — shows the full landscape at a glance
-ggplot(sharpe, aes(x = tier, y = reorder(pos_group, sharpe_elite), fill = sharpe_elite)) +
-  geom_tile(color = "white", linewidth = 0.5) +
-  geom_text(aes(label = round(sharpe_elite, 2)),
-            size = 3.5, color = "white", fontface = "bold") +
-  scale_fill_gradient2(
-    low = "#c62828", mid = "#f9a825", high = "#2e7d32",
-    midpoint = 0
-  ) +
-  labs(
-    title = "The Draft Pick Value Landscape",
-    subtitle = "Quasi-Sharpe Ratio by position and draft tier | Green = beats free agency, Red = doesn't",
-    x = NULL, y = NULL, fill = "Sharpe\nRatio"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(
-    axis.text.x = element_text(angle = 30, hjust = 1),
-    panel.grid = element_blank()
-  )
-```
-
-This is the whole story in one chart. Green cells are where the draft beats free agency;
-red cells are where it doesn't. Most of the green is in the late first and Round 2 — not the
-top 10. The rest of this analysis explains why.
+In Part 1 of this series, I'll lean more into the analytics side of things — empirically defining what a "hit" means while building my own version of a [Sharpe ratio](https://en.wikipedia.org/wiki/Sharpe_ratio), a risk-adjusted return metric originally used in finance to evaluate investments relative to their volatility. In [Part 2](counter_analysis.html), we'll address some of the shortcomings of the Sharpe ratio to round out the argument about where exactly it makes sense to take a running back like Jeremiah Love. By the end of the series, hopefully there's a better understanding of what it means to successfully make the leap from college to pros across all position groups, how the actual NFL market views different positions, and how different teams approach the NFL draft.
 
 ---
 
 ## The Setup
 
-Traditional draft pick valuation treats picks as interchangeable assets — a "top 10 pick" has
-one value regardless of whether you're drafting a quarterback or a running back. But the return
-on investment varies enormously by position. A quasi-Sharpe ratio lets us quantify this: which
-positions justify premium draft capital, and which ones are better addressed later — or in
-free agency?
+In the last few years, much has been made about the value of the running back position. ["Running backs don't matter"](https://rbsdm.com/) has become a battle cry of sorts for the analytics community. The discourse on whether Jeremiah Love is worth a top-5 pick has [ignited weeks before the draft](https://x.com/minakimes/status/2041543125831926051?s=20).
 
-This analysis combines three frameworks:
+Essentially, one side of the aisle says the market is the market and spending a premium pick on a running back doesn't make sense given how cheap it is to find starter-level talent in free agency. The other says that truly elite talent has an on-field impact that the market and the nerds don't understand because they didn't play the game.
 
-1. **Hit Rate ([Riske/PFF](https://www.pff.com/news/draft-what-historical-hit-rates-reveal-about-positional-success)):**
-   A player is a "hit" if their average snap percentage over their first 4 NFL seasons reaches at
-   least 75% of the positional baseline. Snap % is averaged over ALL expected games (including
-   seasons not played as zero), so injuries and busts are properly penalized.
+Let's take a step back and first do our best to actually put some numbers to what the nerds are talking about. To quantify a few aspects of what it means to contribute to the NFL and what value the market places on different positions. To do that, we need to stand on the shoulders of giants.
 
-2. **Nonlinear Upside ([Brill & Wyner 2024](https://arxiv.org/abs/2407.00730)):** Not all hits are
-   equal. I capture the right-tail with a **player return** that combines rookie-deal surplus AND
-   second-contract value.
+- **Timo Riske's hit rate methodology** ([PFF, 2022](https://www.pff.com/news/draft-what-historical-hit-rates-reveal-about-positional-success)): Riske defined what a draft "hit" means. A hit in his framework is a player whose snap share over their first 4 seasons exceeds a fraction of the positional baseline. I tighten his original 2/3 threshold to 75% to set a higher bar: this analysis cares about players who are on the field *more* than a replacement-level player during their rookie contract and play to a level where they earn a top-of-market second contract. Those thresholds are lofty, but they help us evaluate what kinds of players should be taken in the first round. Snap % is averaged over ALL expected games (including seasons not played as zero), so injuries and busts are properly penalized.
 
-3. **Salary data** from [OverTheCap](https://overthecap.com/contracts) via
-   [nflreadr](https://nflreadr.nflverse.com/). All contract values normalized to % of salary cap
-   to control for cap inflation across eras.
+- **Brill & Wyner (2024)** ([arXiv:2407.00730](https://arxiv.org/abs/2407.00730), with analysis popularized by **Eric Eager** at PFF): Their key insight is that draft pick value is **nonlinear** and variance decays convexly across rounds, meaning earlier picks have fatter right tails. I operationalize this through the elite probability component of the Sharpe ratio: P(elite) captures the right-tail upside that a simple average would miss. Where Brill & Wyner measured upside through career approximate value, I extend it with cap-normalized contract data to make cross-era and cross-position comparisons possible, thereby capturing who the market deems as a truly valuable player.
 
-**Why 2022?** A fair evaluation requires at least 4 NFL seasons — enough to complete a rookie
-deal and either earn a second contract or wash out. Players drafted after 2022 haven't had
-that runway yet, so including them would bias results toward high rookie surplus and $0 second
-contracts. By stopping at 2022, every player in the dataset has had a real chance to prove
-(or not prove) their value.
+- **Salary data** from [OverTheCap](https://overthecap.com/contracts) via [nflreadr](https://nflreadr.nflverse.com/). All contract values normalized to % of salary cap to control for cap inflation across eras.
 
-### Standing on Shoulders
+My contribution is combining these frameworks into a single risk-adjusted metric (the quasi-Sharpe ratio) and adding two new dimensions: **rookie contract surplus** (the hidden majority of draft value) and **supply-controlled FA replacement** (because certain positions in high demand have fewer starting-level players available in free agency).
 
-This analysis builds directly on two key pieces of work:
+**Why 2022?** A fair evaluation requires at least 4 NFL seasons. Enough to complete a rookie deal and either earn a second contract or wash out. Players drafted after 2022 haven't had that runway yet, so including them would bias results toward high rookie surplus and $0 second contracts. By stopping at 2022, every player in the dataset has had a real chance to prove (or not prove) their value.
 
-- **Timo Riske's hit rate methodology** ([PFF, 2022](https://www.pff.com/news/draft-what-historical-hit-rates-reveal-about-positional-success)):
-  Riske defined what a draft "hit" means — a player whose snap share over their first 4 seasons
-  exceeds a fraction of the positional baseline. I tighten his original 2/3 threshold to 75%
-  to better align with the elite-probability Sharpe formulation, but use the same positional
-  baselines as the foundation for the snap ratio. His work also informs the Eric Eager
-  collaboration below.
+## What Is a "Hit"?
 
-- **Brill & Wyner (2024)** ([arXiv:2407.00730](https://arxiv.org/abs/2407.00730), with analysis
-  popularized by **Eric Eager** at PFF): Their key insight is that draft pick value is **nonlinear** —
-  variance decays convexly across rounds, meaning earlier picks have fatter right tails. I
-  operationalize this through the elite probability component of the Sharpe ratio: P(elite)
-  captures the right-tail upside that a simple average would miss. Where Brill & Wyner measured
-  upside through career approximate value, I extend it with cap-normalized contract data to make
-  cross-era and cross-position comparisons possible.
-
-My contribution is combining these frameworks into a single risk-adjusted metric (the
-quasi-Sharpe ratio) and adding two new dimensions: **rookie contract surplus** (the hidden
-majority of draft value) and **supply-controlled FA replacement** (because "just sign a free
-agent" isn't equally realistic at every position).
-
-## The Formula
-
-The return on a draft pick comes from two sources:
-
-**1. Rookie Contract Surplus** — You get starter-level production at a fraction of market cost.
-
-$$\text{Rookie Surplus} = \text{Snap Ratio} \times (\text{FA Replacement Cost} - \text{Rookie Salary}) \times 4 \text{ years}$$
-
-**2. Second Contract** — The market's verdict on whether the player was worth it.
-
-$$\text{Player Return} = \text{Second Contract Cap\%} + \text{Rookie Surplus}$$
-
-Then the Sharpe ratio measures risk-adjusted return above the free-agency alternative:
-
-$$\text{Sharpe} = \frac{P(\text{elite}) \times \text{Elite Threshold} - \text{FA Replacement Cost}}{SD(\text{Player Return})}$$
-
-```{r formula-table, results='asis'}
-cat("
-| Component | What it measures | How it's computed |
-|---|---|---|
-| **Snap Ratio** | Playing time vs positional baseline | avg snap % / hit threshold (1.0 = starter) |
-| **Rookie Surplus** | Cap savings during rookie deal | snap_ratio x (FA cost - rookie salary) x 4 years |
-| **Second Contract** | Market value after rookie deal | APY as % of salary cap on next deal |
-| **Player Return** | Total value of the pick | second contract + rookie surplus |
-| **Elite Threshold** | Top-tier outcome bar | 90th percentile of all player returns |
-| **FA Replacement** | Cost of buying a starter instead | Median of top-N FA contracts/yr; N = avg number of starter-caliber FAs per position per year (calibrated to Riske hit earnings) |
-| **Volatility** | Outcome variance in that bucket | Std dev of player returns (including busts at $0) |
-")
-```
-
-### Worked Example: QB Top 10 vs RB Top 10
-
-```{r sharpe-example, results='asis'}
-qb_t10 <- sharpe %>% filter(pos_group == "QB", tier == "Top 10")
-rb_t10 <- sharpe %>% filter(pos_group == "RB", tier == "Top 10")
-
-qb_num <- qb_t10$elite_prob * elite_threshold - qb_t10$fa_replacement
-rb_num <- rb_t10$elite_prob * elite_threshold - rb_t10$fa_replacement
-
-cat(paste0(
-  "Walking through the formula with real numbers:\n\n",
-
-  "| Step | What it means | QB Top 10 | RB Top 10 |\n",
-  "|---|---|---|---|\n",
-  "| **P(elite)** | % of picks producing a top-10% return | ",
-    percent(qb_t10$elite_prob, accuracy = 0.1), " | ",
-    percent(rb_t10$elite_prob, accuracy = 0.1), " |\n",
-  "| **Elite Threshold** | The top-10% return bar (same for all positions) | ",
-    percent(elite_threshold, accuracy = 0.1), " | ",
-    percent(elite_threshold, accuracy = 0.1), " |\n",
-  "| **P(elite) × Threshold** | Expected payoff from elite outcomes | ",
-    percent(qb_t10$elite_prob * elite_threshold, accuracy = 0.1), " | ",
-    percent(rb_t10$elite_prob * elite_threshold, accuracy = 0.1), " |\n",
-  "| **FA Replacement** | Cost to sign a starter instead | ",
-    percent(qb_t10$fa_replacement, accuracy = 0.1), " | ",
-    percent(rb_t10$fa_replacement, accuracy = 0.1), " |\n",
-  "| **Numerator** | Expected value over replacement | ",
-    round(qb_num, 4), " | ", round(rb_num, 4), " |\n",
-  "| **SD (volatility)** | How risky is this bet? | ",
-    percent(qb_t10$sd_player_return, accuracy = 0.1), " | ",
-    percent(rb_t10$sd_player_return, accuracy = 0.1), " |\n",
-  "| **Sharpe** | Risk-adjusted return | **",
-    round(qb_num / qb_t10$sd_player_return, 2), "** | **",
-    round(rb_num / rb_t10$sd_player_return, 2), "** |\n\n",
-
-  "**QB Top 10:** 73% of top-10 QBs produce elite returns, and FA QBs are expensive (14.6% of cap), ",
-  "but the expected elite payoff (24.2%) still exceeds the FA cost — so the numerator is positive. ",
-  "Even with high variance, the Sharpe is +0.37.\n\n",
-
-  "**RB Top 10:** 0% of top-10 RBs produced an elite return — none cracked the top 10% of all players. ",
-  "So the expected elite payoff is zero, but you're still paying 6.0% in FA opportunity cost. ",
-  "The numerator goes negative, giving a Sharpe of -0.62. The math says: just sign a free agent.\n"
-))
-```
-
-### Player Example: Saquon Barkley
-
-```{r saquon-example}
-saquon <- player_lookup %>% filter(grepl("Saquon", pfr_player_name))
-
-tibble(
-  Metric = c("Avg snap %", "Snap ratio", "Rookie deal APY", "FA median (RB)",
-             "Rookie surplus", "Second contract APY", "Player return", "Elite threshold"),
-  Value = c(
-    percent(saquon$avg_snap_pct, accuracy = 0.1),
-    paste0(round(saquon$snap_ratio, 2), "×"),
-    percent(saquon$rookie_apy_cap_pct, accuracy = 0.1),
-    percent(saquon$fa_median_apy_cap_pct, accuracy = 0.1),
-    percent(saquon$rookie_surplus, accuracy = 0.1),
-    percent(saquon$second_apy_cap_pct, accuracy = 0.1),
-    percent(saquon$player_return, accuracy = 0.1),
-    percent(elite_threshold, accuracy = 0.1)
-  ),
-  Meaning = c(
-    "Averaged over first 4 NFL seasons",
-    "Relative to RB starter baseline — he was a hit",
-    "Cost of his rookie contract as % of cap",
-    "What a starting RB costs in free agency",
-    "4 years of savings from paying a starter on a rookie deal",
-    paste0("His second deal was only ", percent(saquon$second_apy_cap_pct, accuracy = 0.1), " of cap"),
-    "Rookie surplus + second contract = total value generated",
-    "Top 10% of all player returns across all positions"
-  )
-) %>%
-  gt() %>%
-  tab_header(
-    title = "Saquon Barkley — Pick #2, 2018"
-  ) %>%
-  tab_style(
-    style = cell_text(weight = "bold"),
-    locations = cells_body(rows = Metric %in% c("Player return", "Elite threshold"))
-  ) %>%
-  tab_style(
-    style = cell_fill(color = "#E8F5E9"),
-    locations = cells_body(rows = Metric == "Player return")
-  ) %>%
-  tab_style(
-    style = cell_fill(color = "#FFEBEE"),
-    locations = cells_body(rows = Metric == "Elite threshold")
-  ) %>%
-  cols_label(Meaning = "What it means") %>%
-  tab_options(
-    table.width = pct(100),
-    table.font.size = 14
-  )
-```
-
-```{r saquon-narrative, results='asis'}
-cat(paste0(
-  "Saquon *was* a hit — he started, he produced, he earned a second contract. ",
-  "But his total return (", percent(saquon$player_return, accuracy = 0.1),
-  ") is well below the elite threshold (", percent(elite_threshold, accuracy = 0.1),
-  "). That's because RB second contracts are small — Saquon's ",
-  percent(saquon$second_apy_cap_pct, accuracy = 0.1),
-  " of cap is a fraction of what a QB or WR earns. ",
-  "His rookie surplus (", percent(saquon$rookie_surplus, accuracy = 0.1),
-  ") does the heavy lifting, but it's not enough to reach elite territory.\n\n",
-
-  "This is exactly why RB Top 10 has a Sharpe of **-0.62**: even when the pick *works*, ",
-  "the return doesn't justify the draft capital. Zero of 7 top-10 RBs in the dataset ",
-  "reached the elite threshold. The best outcome for a top-10 RB still looks mediocre ",
-  "compared to what that pick could have been."
-))
-```
-
-```{r saquon-comparison, results='asis'}
-cmc <- player_lookup %>% filter(grepl("McCaffrey", pfr_player_name))
-
-cat(paste0(
-  "For comparison, **Christian McCaffrey** (Pick #8, 2017) — often cited as the best-case RB — ",
-  "returned ", percent(cmc$player_return, accuracy = 0.1),
-  " of cap. Even that is below the ", percent(elite_threshold, accuracy = 0.1),
-  " elite threshold, though it's the closest any top-10 RB got. ",
-  "His second contract (", percent(cmc$second_apy_cap_pct, accuracy = 0.1),
-  ") was larger than Saquon's, but the real difference was snap share — ",
-  "CMC averaged ", percent(cmc$avg_snap_pct, accuracy = 0.1),
-  " of snaps (ratio: ", round(cmc$snap_ratio, 2),
-  "×), generating a much larger rookie surplus of ",
-  percent(cmc$rookie_surplus, accuracy = 0.1), "."
-))
-```
-
-### Where Each Piece Comes From
-
-This formula combines two existing frameworks with new additions:
-
-- **P(elite) and Elite Threshold** come from [Brill & Wyner (2024)](https://arxiv.org/abs/2407.00730). Their key insight: draft pick value is **nonlinear** — earlier picks have fatter right tails. Using P(elite) instead of the average return captures this. A simple average would miss the boom outcomes that make top picks valuable.
-
-- **FA Replacement and the hit classification** build on [Timo Riske's methodology at PFF](https://www.pff.com/news/draft-what-historical-hit-rates-reveal-about-positional-success). His snap share baselines define what a "starter" looks like at each position, which determines both the hit threshold and the snap ratio used in rookie surplus.
-
-- **Rookie contract surplus** and **supply-controlled FA replacement** are new. Neither source quantified the cap savings from having a starter on a rookie deal, or calibrated FA cost to actual market supply by position.
-
-```{r rookie-surplus-pct, results='asis'}
-surplus_pcts <- df_eligible %>%
-  filter(player_return > 0, rookie_surplus > 0) %>%
-  summarise(
-    low = round(quantile(rookie_surplus / player_return, 0.25) * 100),
-    high = round(quantile(rookie_surplus / player_return, 0.75) * 100)
-  )
-cat(paste0(
-  "**Why rookie surplus matters:** For most players with positive returns, the rookie contract ",
-  "accounts for **", surplus_pcts$low, "–", surplus_pcts$high, "% of the total return** ",
-  "(interquartile range). When you draft a player who starts, you're getting production at a ",
-  "fraction of what it costs in free agency — and that gap, multiplied by 4 years, adds up."
-))
-```
-
-```{r rookie-surplus-chart, fig.height=7}
-surplus_data <- df_eligible %>%
-  filter(player_return > 0, rookie_surplus > 0) %>%
-  group_by(pos_group, tier) %>%
-  summarise(
-    med_surplus = median(rookie_surplus),
-    med_2nd = median(second_apy_cap_pct),
-    med_return = median(player_return),
-    surplus_pct = median(rookie_surplus / player_return) * 100,
-    .groups = "drop"
-  ) %>%
-  filter(tier %in% c("Top 10", "Late 1st", "Round 2"))
-
-# Dumbbell chart — shows the gap between rookie surplus and second contract
-dumbbell_data <- surplus_data %>%
-  filter(tier == "Top 10") %>%
-  mutate(pos_group = fct_reorder(pos_group, med_return))
-
-ggplot(dumbbell_data, aes(y = pos_group)) +
-  geom_segment(
-    aes(x = med_2nd, xend = med_surplus, yend = pos_group),
-    linewidth = 1.5, color = "gray70"
-  ) +
-  geom_point(aes(x = med_2nd, color = "Second Contract"), size = 4.5) +
-  geom_point(aes(x = med_surplus, color = "Rookie Surplus"), size = 4.5) +
-  geom_text(
-    aes(x = med_return + 0.005,
-        label = paste0(round(surplus_pct), "% surplus")),
-    hjust = 0, size = 3.2, color = "gray40"
-  ) +
-  scale_color_manual(values = c("Rookie Surplus" = "#2196F3", "Second Contract" = "#FF9800")) +
-  scale_x_continuous(labels = percent_format(), expand = expansion(mult = c(0.02, 0.15))) +
-  labs(
-    title = "What a Top-10 Pick Actually Returns",
-    subtitle = "Median rookie surplus vs second contract value | Line = gap between the two",
-    x = "Median Cap %", y = NULL, color = NULL
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "top")
-```
-
-## Hit Rates by Position and Tier
-
-How often does a draft pick become a starter? I classify a player as a "hit" if they play at least 75% as much as an established starter at their position over their first 4 NFL seasons. The threshold varies by position because not every position plays every snap:
+Before building the Sharpe ratio, let's first introduce the idea of a draft "hit" — the foundation everything else rests on. I classify a player as a "hit" if they play at least 75% as much as an established starter at their position over their first 4 NFL seasons. The threshold varies by position because not every position plays every snap:
 
 | Position | What a starter plays | Hit threshold (75% of that) | What it means |
 |---|---|---|---|
@@ -626,17 +244,75 @@ ggplot(hit_rates, aes(x = tier, y = reorder(pos_group, hit_rate), fill = hit_rat
   )
 ```
 
-## Supply-Controlled Free Agency Replacement Cost
+```{r round5-hit-analysis, results='asis'}
+# 5th round hit rate analysis
+r5_data <- df_eligible %>%
+  filter(pick > 135, pick <= 170)  # Round 5
 
-The "risk-free rate" in the Sharpe ratio. Instead of drafting, a team could sign a free agent.
-But not every position has the same FA market depth.
+r5_hit_rate <- mean(r5_data$is_hit)
+r5_hits <- r5_data %>% filter(is_hit == TRUE)
+
+# Top 5 teams by 5th round hits
+r5_by_team <- r5_hits %>%
+  group_by(team) %>%
+  summarise(
+    n_hits = n(),
+    players = paste(paste0(pfr_player_name, " (", pos_group, ")"), collapse = ", "),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_hits)) %>%
+  head(5)
+
+# Total 5th round picks per team for context
+r5_total_by_team <- r5_data %>%
+  group_by(team) %>%
+  summarise(n_picks = n(), .groups = "drop")
+
+r5_by_team <- r5_by_team %>%
+  left_join(r5_total_by_team, by = "team")
+
+cat(paste0(
+  "Look at the 5th round: a hit rate of just **", percent(r5_hit_rate, accuracy = 0.1),
+  "**. That's roughly one starter per decade per team. The draft's late rounds are essentially ",
+  "lottery tickets — but some teams buy more tickets than others."
+))
+```
+
+```{r round5-team-table, results='asis'}
+r5_gt <- r5_by_team %>%
+  gt() %>%
+  gt_nfl_wordmarks(columns = "team", height = 25) %>%
+  cols_label(
+    team = "TEAM",
+    n_hits = "HITS",
+    n_picks = "5TH RD PICKS",
+    players = "WHO"
+  ) %>%
+  tab_header(
+    title = md("**Top 5 Teams by 5th-Round Hits (2010–2022)**"),
+    subtitle = "Teams that found starters where most find roster fillers"
+  ) %>%
+  tab_options(table.font.size = px(13), table.width = pct(100))
+
+gtsave(r5_gt, filename = "charts/r5_hits_by_team.png", vwidth = 900)
+cat("![Top 5 Teams by 5th-Round Hits](charts/r5_hits_by_team.png)\n\n")
+
+cat("The teams that find the most late-round starters tend to be the same teams that aggressively trade back to accumulate extra picks — more lottery tickets means more chances to hit.")
+```
+
+## The Only Reliable Path to Elite Talent
+
+For certain positions, the draft isn't just a good way to acquire talent — it's the *only* reliable way. The free agency market for premium positions like QB and OT is so thin that teams can't count on signing elite players when they need them.
 
 ```{r fa-supply-inline, results='asis'}
 ot_n <- fa_replacement %>% filter(pos_group == "OT") %>% pull(fa_top_n)
 qb_n <- fa_replacement %>% filter(pos_group == "QB") %>% pull(fa_top_n)
 iol_n <- fa_replacement %>% filter(pos_group == "IOL") %>% pull(fa_top_n)
+rb_n <- fa_replacement %>% filter(pos_group == "RB") %>% pull(fa_top_n)
 cat(paste0("Only **", ot_n, " starter-caliber OTs** and **", qb_n, " QBs** hit free agency ",
-           "per year, while **", iol_n, " IOL** are available."))
+           "per year — compare that to **", rb_n, " RBs** and **", iol_n, " IOL**. ",
+           "When the supply of free agents is this low, the draft becomes the only reliable pipeline ",
+           "for building at that position."))
 ```
 
 I define "starter-caliber" by connecting FA contracts back to the Riske hit methodology:
@@ -647,8 +323,7 @@ telling us they're starter-caliber. I count how many such contracts are signed p
 per year (the **supply**, N), and the FA replacement cost is the median contract among those
 top-N signings each year.
 
-This matters because positions with thin FA markets (OT, QB) have inflated top-contract prices
-that don't represent realistic alternatives.
+This is why the Sharpe ratio penalizes RB so heavily and rewards QB and OT: when a position has an abundant free agency market, the "just sign a free agent" alternative is cheap and realistic. When it doesn't, the draft is the only game in town — and that scarcity drives up the value of getting it right with a draft pick.
 
 ```{r fa-replacement-bar, fig.height=7}
 fa_plot <- fa_replacement %>%
@@ -719,6 +394,544 @@ ggplot(fa_recent, aes(x = reorder(pos_group, fa_median_recent),
   theme(legend.position = "none")
 ```
 
+## The Formula
+
+There are two metrics borne out of this analysis: a supply-controlled **player return value** and a position-controlled **Sharpe ratio** we can use to evaluate the risk-adjusted return of taking different positions at different points in the NFL draft.
+
+The return on a draft pick comes from two sources:
+
+**1. Rookie Contract Surplus** — You get starter-level production at a fraction of market cost.
+
+$$\text{Rookie Surplus} = \text{Snap Ratio} \times (\text{FA Replacement Cost} - \text{Rookie Salary}) \times 4 \text{ years}$$
+
+**2. Second Contract** — The market's verdict on whether the player was worth it.
+
+$$\text{Player Return} = \text{Second Contract Cap\%} + \text{Rookie Surplus}$$
+
+Then the Sharpe ratio measures risk-adjusted return above the free-agency alternative:
+
+$$\text{Sharpe} = \frac{P(\text{elite}) \times \text{Elite Threshold} - \text{FA Replacement Cost}}{SD(\text{Player Return})}$$
+
+```{r formula-table, results='asis'}
+cat("
+| Component | What it measures | How it's computed |
+|---|---|---|
+| **Snap Ratio** | Playing time vs positional baseline | avg snap % / hit threshold (1.0 = starter) |
+| **Rookie Surplus** | Cap savings during rookie deal | snap_ratio x (FA cost - rookie salary) x 4 years |
+| **Second Contract** | Market value after rookie deal | APY as % of salary cap on next deal |
+| **Player Return** | Total value of the pick | second contract + rookie surplus |
+| **Elite Threshold** | Top-tier outcome bar | 90th percentile of all player returns |
+| **FA Replacement** | Cost of buying a starter instead | Median of top-N FA contracts/yr; N = avg number of starter-caliber FAs per position per year (calibrated to Riske hit earnings) |
+| **Volatility** | Outcome variance in that bucket | Std dev of player returns (including busts at $0) |
+")
+```
+
+### Player Examples: How the Formula Works
+
+Before looking at aggregate results, let's see how the formula plays out for three real top-10 picks — one QB, one WR, and one RB.
+
+```{r player-examples}
+josh <- player_lookup %>% filter(grepl("Josh Allen", pfr_player_name))
+djm <- player_lookup %>% filter(grepl("D.J. Moore", pfr_player_name))
+saquon <- player_lookup %>% filter(grepl("Saquon", pfr_player_name))
+
+make_player_example <- function(p, pos_label) {
+  tibble(
+    Metric = c("Avg snap %", "Snap ratio", "Rookie deal APY", paste0("FA median (", pos_label, ")"),
+               "Rookie surplus", "Second contract APY", "Player return", "Elite threshold"),
+    Value = c(
+      percent(p$avg_snap_pct, accuracy = 0.1),
+      paste0(round(p$snap_ratio, 2), "×"),
+      percent(p$rookie_apy_cap_pct, accuracy = 0.1),
+      percent(p$fa_median_apy_cap_pct, accuracy = 0.1),
+      percent(p$rookie_surplus, accuracy = 0.1),
+      percent(p$second_apy_cap_pct, accuracy = 0.1),
+      percent(p$player_return, accuracy = 0.1),
+      percent(elite_threshold, accuracy = 0.1)
+    ),
+    Calculation = c(
+      "Averaged over first 4 NFL seasons (missed games = 0%)",
+      paste0(percent(p$avg_snap_pct, accuracy = 0.1), " / hit threshold = ", round(p$snap_ratio, 2), "× (≥1.0 = hit)"),
+      "Cost of his rookie contract as % of cap",
+      paste0("What a starting ", pos_label, " costs in free agency"),
+      paste0(round(p$snap_ratio, 2), "× × (", percent(p$fa_median_apy_cap_pct, accuracy = 0.1), " − ", percent(p$rookie_apy_cap_pct, accuracy = 0.1), ") × 4 yrs = ", percent(p$rookie_surplus, accuracy = 0.1)),
+      paste0("His second deal as % of cap"),
+      paste0(percent(p$rookie_surplus, accuracy = 0.1), " + ", percent(p$second_apy_cap_pct, accuracy = 0.1), " = ", percent(p$player_return, accuracy = 0.1)),
+      "Top 10% of all player returns across all positions"
+    )
+  )
+}
+
+make_player_example(josh, "QB") %>%
+  gt() %>%
+  tab_header(title = paste0("Josh Allen — Pick #", josh$pick, ", ", josh$season)) %>%
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_body(rows = Metric %in% c("Player return", "Elite threshold"))) %>%
+  tab_style(style = cell_fill(color = "#E8F5E9"),
+            locations = cells_body(rows = Metric == "Player return")) %>%
+  tab_style(style = cell_fill(color = if (josh$player_return >= elite_threshold) "#E8F5E9" else "#FFEBEE"),
+            locations = cells_body(rows = Metric == "Elite threshold")) %>%
+  tab_options(table.width = pct(100), table.font.size = 14)
+```
+
+```{r player-example-chase}
+make_player_example(djm, "WR") %>%
+  gt() %>%
+  tab_header(title = paste0("D.J. Moore — Pick #", djm$pick, ", ", djm$season)) %>%
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_body(rows = Metric %in% c("Player return", "Elite threshold"))) %>%
+  tab_style(style = cell_fill(color = "#E8F5E9"),
+            locations = cells_body(rows = Metric == "Player return")) %>%
+  tab_style(style = cell_fill(color = if (djm$player_return >= elite_threshold) "#E8F5E9" else "#FFEBEE"),
+            locations = cells_body(rows = Metric == "Elite threshold")) %>%
+  tab_options(table.width = pct(100), table.font.size = 14)
+```
+
+```{r player-example-saquon}
+make_player_example(saquon, "RB") %>%
+  gt() %>%
+  tab_header(title = paste0("Saquon Barkley — Pick #", saquon$pick, ", ", saquon$season)) %>%
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_body(rows = Metric %in% c("Player return", "Elite threshold"))) %>%
+  tab_style(style = cell_fill(color = "#E8F5E9"),
+            locations = cells_body(rows = Metric == "Player return")) %>%
+  tab_style(style = cell_fill(color = "#FFEBEE"),
+            locations = cells_body(rows = Metric == "Elite threshold")) %>%
+  tab_options(table.width = pct(100), table.font.size = 14)
+```
+
+```{r player-examples-narrative, results='asis'}
+cat(paste0(
+  "All three players were drafted in 2018. Josh Allen's player return (",
+  percent(josh$player_return, accuracy = 0.1),
+  ") clears the elite threshold (", percent(elite_threshold, accuracy = 0.1),
+  ") comfortably — massive rookie surplus from getting a franchise QB at a rookie wage, plus a ",
+  "huge second contract. D.J. Moore (", percent(djm$player_return, accuracy = 0.1),
+  ") was a late first-round pick who earned a solid second contract — drafted 22 picks later than Saquon ",
+  "at a fraction of the draft capital cost. ",
+  "Saquon *was* a hit — he started, he produced, he earned a second contract. ",
+  "But his total return (", percent(saquon$player_return, accuracy = 0.1),
+  ") is well below the elite threshold. That's because RB second contracts are small — Saquon's ",
+  percent(saquon$second_apy_cap_pct, accuracy = 0.1),
+  " of cap is a fraction of what a QB or WR earns. ",
+  "His rookie surplus (", percent(saquon$rookie_surplus, accuracy = 0.1),
+  ") does the heavy lifting, but it's not enough to reach elite territory.\n\n",
+
+  "For comparison, **Christian McCaffrey** (Pick #8, 2017) — often cited as the best-case RB — ",
+  "returned ", percent(
+    (player_lookup %>% filter(grepl("McCaffrey", pfr_player_name)))$player_return, accuracy = 0.1),
+  " of cap. Even that is below the elite threshold, though it's the closest any top-10 RB got."
+))
+```
+
+### Worked Example: Aggregating to the Bucket Level
+
+The player examples above show how the formula works for individuals. But to evaluate whether a *position* is worth a top-10 pick, we need to aggregate all the players in that bucket. When we look at every QB, WR, and RB drafted in the top 10 since 2010, we can calculate what percentage produced elite returns, how much variance there is, and whether the expected payoff beats the free-agency alternative.
+
+```{r sharpe-example, results='asis'}
+qb_t10 <- sharpe %>% filter(pos_group == "QB", tier == "Top 10")
+rb_t10 <- sharpe %>% filter(pos_group == "RB", tier == "Top 10")
+wr_t10 <- sharpe %>% filter(pos_group == "WR", tier == "Top 10")
+
+qb_num <- qb_t10$elite_prob * elite_threshold - qb_t10$fa_replacement
+rb_num <- rb_t10$elite_prob * elite_threshold - rb_t10$fa_replacement
+wr_num <- wr_t10$elite_prob * elite_threshold - wr_t10$fa_replacement
+
+cat(paste0(
+  "Walking through the Sharpe formula with real numbers for every top-10 pick at each position:\n\n",
+
+  "| Step | What it means | QB Top 10 | WR Top 10 | RB Top 10 | Calculation |\n",
+  "|---|---|---|---|---|---|\n",
+  "| **P(elite)** | % of picks producing an elite player return | ",
+    percent(qb_t10$elite_prob, accuracy = 0.1), " | ",
+    percent(wr_t10$elite_prob, accuracy = 0.1), " | ",
+    percent(rb_t10$elite_prob, accuracy = 0.1),
+    " | How often a top-10 pick at this position cracks the top 10% of *all* player returns |\n",
+  "| **Elite Threshold** | The top-10% return bar | ",
+    percent(elite_threshold, accuracy = 0.1), " | ",
+    percent(elite_threshold, accuracy = 0.1), " | ",
+    percent(elite_threshold, accuracy = 0.1),
+    " | 90th percentile of all player returns (rookie surplus + 2nd contract) |\n",
+  "| **P(elite) × Threshold** | Expected payoff | ",
+    percent(qb_t10$elite_prob * elite_threshold, accuracy = 0.1), " | ",
+    percent(wr_t10$elite_prob * elite_threshold, accuracy = 0.1), " | ",
+    percent(rb_t10$elite_prob * elite_threshold, accuracy = 0.1),
+    " | QB: ", percent(qb_t10$elite_prob, accuracy = 0.1), " × ", percent(elite_threshold, accuracy = 0.1),
+    " = ", percent(qb_t10$elite_prob * elite_threshold, accuracy = 0.1), " |\n",
+  "| **FA Replacement** | Cost to sign a starter instead | ",
+    percent(qb_t10$fa_replacement, accuracy = 0.1), " | ",
+    percent(wr_t10$fa_replacement, accuracy = 0.1), " | ",
+    percent(rb_t10$fa_replacement, accuracy = 0.1),
+    " | Median of top-N FA contracts by position |\n",
+  "| **Numerator** | Expected value over replacement | ",
+    percent(qb_num, accuracy = 0.1), " | ",
+    percent(wr_num, accuracy = 0.1), " | ",
+    percent(rb_num, accuracy = 0.1),
+    " | QB: ", percent(qb_t10$elite_prob * elite_threshold, accuracy = 0.1),
+    " − ", percent(qb_t10$fa_replacement, accuracy = 0.1), " = ", percent(qb_num, accuracy = 0.1), " |\n",
+  "| **SD (volatility)** | How much do outcomes vary? | ",
+    percent(qb_t10$sd_player_return, accuracy = 0.1), " | ",
+    percent(wr_t10$sd_player_return, accuracy = 0.1), " | ",
+    percent(rb_t10$sd_player_return, accuracy = 0.1),
+    " | Std dev of all player returns in this bucket |\n",
+  "| **Sharpe** | Risk-adjusted return | **",
+    round(qb_num / qb_t10$sd_player_return, 2), "** | **",
+    round(wr_num / wr_t10$sd_player_return, 2), "** | **",
+    round(rb_num / rb_t10$sd_player_return, 2),
+    "** | QB: ", percent(qb_num, accuracy = 0.1), " / ", percent(qb_t10$sd_player_return, accuracy = 0.1),
+    " = ", round(qb_num / qb_t10$sd_player_return, 2), " |\n\n",
+
+  "**QB Top 10:** ", percent(qb_t10$elite_prob, accuracy = 0.1),
+  " of top-10 QBs produce elite returns, and FA QBs are expensive (",
+  percent(qb_t10$fa_replacement, accuracy = 0.1), " of cap), ",
+  "but the expected elite payoff (", percent(qb_t10$elite_prob * elite_threshold, accuracy = 0.1),
+  ") still exceeds the FA cost — so the numerator is positive. ",
+  "Even with high variance, the Sharpe is +", round(qb_num / qb_t10$sd_player_return, 2), ".\n\n",
+
+  "**WR Top 10:** ", percent(wr_t10$elite_prob, accuracy = 0.1),
+  " of top-10 WRs produce elite returns. The FA replacement cost is ",
+  percent(wr_t10$fa_replacement, accuracy = 0.1),
+  " of cap. The Sharpe lands at ", round(wr_num / wr_t10$sd_player_return, 2), ".\n\n",
+
+  "**RB Top 10:** ", percent(rb_t10$elite_prob, accuracy = 0.1),
+  " of top-10 RBs produced an elite return. Remember, the elite threshold (",
+  percent(elite_threshold, accuracy = 0.1),
+  ") is the 90th percentile of *all* player returns across every position — that's the bar for a player ",
+  "whose combined rookie surplus and second-contract value puts them in the top 10% of all drafted players ",
+  "since 2010. Not a single top-10 RB cleared it. ",
+  "So the expected elite payoff is zero, but you're still paying ",
+  percent(rb_t10$fa_replacement, accuracy = 0.1), " in FA opportunity cost. ",
+  "The numerator goes negative, giving a Sharpe of ",
+  round(rb_num / rb_t10$sd_player_return, 2), ". The math says: just sign a free agent.\n"
+))
+```
+
+## RB in the Top 10
+
+```{r love-hook-vars}
+rb_top10 <- sharpe %>% filter(pos_group == "RB", tier == "Top 10")
+rb_fa <- fa_replacement %>% filter(pos_group == "RB")
+
+qb_top10 <- sharpe %>% filter(pos_group == "QB", tier == "Top 10") %>% pull(sharpe_elite)
+best_late1 <- sharpe %>% filter(tier == "Late 1st", !is.na(sharpe_elite)) %>%
+  slice_max(sharpe_elite, n = 1)
+wr_day2 <- sharpe %>% filter(pos_group == "WR", tier == "Round 2") %>% pull(sharpe_elite)
+
+n_top10_rb <- nrow(player_lookup %>% filter(pos_group == "RB", pick <= 10, season <= 2022))
+```
+
+```{r love-hook-stats, results='asis'}
+cat(paste0(
+  "Now that we have the tools, let's come back to the question that started this: should a team Love Love at #4?\n\n",
+
+  "Pick #4 falls in the top-10 tier, ",
+  "where the Sharpe ratio for RB is **", round(rb_top10$sharpe_elite, 2),
+  "** — the worst of any offensive position. Here's why:\n\n",
+
+  "- **Hit rate is fine** (", percent(rb_top10$hit_rate, accuracy = 0.1),
+  ") — top-10 RBs usually become starters.\n",
+  "- **But the rookie surplus is tiny.** FA RBs cost just ",
+  percent(rb_fa$fa_median_apy_cap_pct, accuracy = 0.1),
+  " of the cap — the cheapest position to replace in free agency. ",
+  "Running backs have the most to overcome in this framework because the free-agent market for them is so cheap — ",
+  "the gap between a rookie deal and a FA deal is razor thin, which means even a starter-level RB ",
+  "generates almost no surplus.\n",
+  "- **And the second-contract ceiling is low.** The best RB deal is ~",
+  round(max(df_eligible %>% filter(pos_group == "RB") %>% pull(second_apy_cap_pct)) * 100),
+  "% of cap. The best WR deal is ~",
+  round(max(df_eligible %>% filter(pos_group == "WR") %>% pull(second_apy_cap_pct)) * 100),
+  "%. The upside is structurally capped.\n",
+  "- **The opportunity cost is real.** QB leads all positions in top-10 Sharpe (",
+  round(qb_top10, 2), "), and the best risk-adjusted slot in the draft is ",
+  best_late1$pos_group, " in the late first (Sharpe: ",
+  round(best_late1$sharpe_elite, 2), "). Even a Round 2 WR (Sharpe: ",
+  round(wr_day2, 2), ") shows stronger risk-adjusted returns than a top-10 RB.\n\n",
+
+  "What does ", round(rb_top10$sharpe_elite, 2), " look like in practice? Here are all ", n_top10_rb,
+  " RBs drafted in the top 10 since 2010:"
+))
+```
+
+```{r rb-top10-gt}
+top10_rb <- player_lookup %>%
+  filter(pos_group == "RB", pick <= 10, season <= 2022) %>%
+  arrange(desc(player_return)) %>%
+  mutate(
+    elite = player_return >= elite_threshold
+  ) %>%
+  select(pfr_player_name, pick, season, is_hit, player_return)
+
+top10_rb %>%
+  gt() %>%
+  cols_label(
+    pfr_player_name = "Player",
+    pick = "Pick",
+    season = "Year",
+    is_hit = "Hit?",
+    player_return = "Player Return"
+  ) %>%
+  fmt_percent(columns = player_return, decimals = 1) %>%
+  text_transform(
+    locations = cells_body(columns = is_hit),
+    fn = function(x) ifelse(x == "TRUE", "Yes", "No")
+  ) %>%
+  text_transform(
+    locations = cells_body(columns = pick),
+    fn = function(x) paste0("#", x)
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(rows = player_return == max(player_return))
+  ) %>%
+  tab_footnote(
+    footnote = paste0("Elite threshold: ", percent(elite_threshold, accuracy = 0.1),
+                      " | None of these players reached it."),
+    locations = cells_column_labels(columns = player_return)
+  ) %>%
+  tab_options(
+    table.width = pct(100),
+    table.font.size = 14
+  )
+```
+
+```{r rb-top10-commentary, results='asis'}
+top10_rb_data <- player_lookup %>% filter(pos_group == "RB", pick <= 10, season <= 2022)
+best_rb <- top10_rb_data %>% slice_max(player_return, n = 1)
+second_rb <- top10_rb_data %>% arrange(desc(player_return)) %>% slice(2)
+
+cat(paste0(
+  "Five of seven became starters — the hit rate (",
+  percent(mean(top10_rb_data$is_hit), accuracy = 1),
+  ") is solid. But **zero produced an elite return on the top-10 draft capital investment**. ",
+  "The highest return belongs to ",
+  best_rb$pfr_player_name, " at ", percent(best_rb$player_return, accuracy = 0.1),
+  ", followed by ", second_rb$pfr_player_name, " at ", percent(second_rb$player_return, accuracy = 0.1),
+  " — both short of the ", percent(elite_threshold, accuracy = 0.1), " elite threshold.\n\n",
+
+  "At pick #4, the positions that *do* produce elite returns are QB, EDGE, and OT — ",
+  "the positions where top-10 Sharpe is positive. On average, Round 2 or Round 3 RBs deliver ",
+  "nearly equivalent production at a fraction of the draft capital cost — though as we'll see in ",
+  "[Part 2](counter_analysis.html), averages can obscure what happens when the class is thin and the prospect is elite."
+))
+```
+
+One thing that may stand out: no RB has *ever* reached the elite threshold as we've defined it. This isn't because we've never seen a talented back hit an elite level of play — it's because the market has never rewarded a running back in a way that overcomes the opportunity cost of having a more expensive premium-position player on a cost-controlled contract for 4 years. And it's not just running backs — this is the structural challenge facing every non-premium position.
+
+```{r rookie-surplus-pct, results='asis'}
+surplus_pcts <- df_eligible %>%
+  filter(player_return > 0, rookie_surplus > 0) %>%
+  summarise(
+    low = round(quantile(rookie_surplus / player_return, 0.25) * 100),
+    high = round(quantile(rookie_surplus / player_return, 0.75) * 100)
+  )
+cat(paste0(
+  "**Why rookie surplus matters:** For most players with positive returns, the rookie contract ",
+  "accounts for **", surplus_pcts$low, "–", surplus_pcts$high, "% of the total return** ",
+  "(interquartile range). When you draft a player who starts, you're getting production at a ",
+  "fraction of what it costs in free agency — and that gap, multiplied by 4 years, adds up."
+))
+```
+
+```{r rookie-surplus-chart, fig.height=7}
+surplus_data <- df_eligible %>%
+  filter(player_return > 0, rookie_surplus > 0) %>%
+  group_by(pos_group, tier) %>%
+  summarise(
+    med_surplus = median(rookie_surplus),
+    med_2nd = median(second_apy_cap_pct),
+    med_return = median(player_return),
+    surplus_pct = median(rookie_surplus / player_return) * 100,
+    .groups = "drop"
+  ) %>%
+  filter(tier %in% c("Top 10", "Late 1st", "Round 2"))
+
+# Dumbbell chart — shows the gap between rookie surplus and second contract
+dumbbell_data <- surplus_data %>%
+  filter(tier == "Top 10") %>%
+  mutate(pos_group = fct_reorder(pos_group, med_return))
+
+ggplot(dumbbell_data, aes(y = pos_group)) +
+  geom_segment(
+    aes(x = med_2nd, xend = med_surplus, yend = pos_group),
+    linewidth = 1.5, color = "gray70"
+  ) +
+  geom_point(aes(x = med_2nd, color = "Second Contract"), size = 4.5) +
+  geom_point(aes(x = med_surplus, color = "Rookie Surplus"), size = 4.5) +
+  geom_text(
+    aes(x = med_return + 0.005,
+        label = paste0(round(surplus_pct), "% surplus")),
+    hjust = 0, size = 3.2, color = "gray40"
+  ) +
+  scale_color_manual(values = c("Rookie Surplus" = "#2196F3", "Second Contract" = "#FF9800")) +
+  scale_x_continuous(labels = percent_format(), expand = expansion(mult = c(0.02, 0.15))) +
+  labs(
+    title = "What a Top-10 Pick Actually Returns",
+    subtitle = "Median rookie surplus vs second contract value | Line = gap between the two",
+    x = "Median Cap %", y = NULL, color = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top")
+```
+
+### What Teams Left on the Table
+
+The Sharpe ratio flags specific position-tier combinations as negative — plays the model says teams shouldn't make. But what actually happened when teams made those picks? Instead of a theoretical counterfactual, we tracked the real one: for each negative-Sharpe first-round pick, we found the actual next QB, EDGE, OT, or WR drafted in the same year and compared surplus outcomes.
+
+```{r neg-sharpe-picks}
+salary_cap <- 275  # $275M
+
+premium_pos <- c("QB", "EDGE", "OT", "WR")
+
+all_r1 <- df_eligible %>%
+  filter(pick <= 32, season >= 2010)
+
+# Identify negative-Sharpe combos (non-premium positions only)
+neg_combos <- sharpe %>%
+  filter(tier %in% c("Top 10", "Late 1st"), sharpe_elite < 0,
+         !pos_group %in% premium_pos) %>%
+  select(pos_group, tier)
+
+# Players at negative-Sharpe combos
+neg_players <- all_r1 %>% semi_join(neg_combos, by = c("pos_group", "tier"))
+n_neg <- nrow(neg_players)
+
+# For each negative-Sharpe pick, find the ACTUAL next premium-position player taken
+neg_with_next <- map_dfr(1:nrow(neg_players), function(i) {
+  row <- neg_players[i, ]
+  candidate <- all_r1 %>%
+    filter(season == row$season, pick > row$pick,
+           pos_group %in% premium_pos) %>%
+    arrange(pick) %>%
+    slice_head(n = 1)
+  if (nrow(candidate) > 0) {
+    row %>% mutate(
+      next_prem_name = candidate$pfr_player_name,
+      next_prem_pos = candidate$pos_group,
+      next_prem_pick = candidate$pick,
+      next_prem_hit = candidate$is_hit,
+      next_prem_pr = candidate$player_return
+    )
+  } else {
+    row %>% mutate(
+      next_prem_name = NA_character_, next_prem_pos = NA_character_,
+      next_prem_pick = NA_real_,
+      next_prem_hit = NA, next_prem_pr = NA_real_
+    )
+  }
+})
+
+neg_with_next <- neg_with_next %>% filter(!is.na(next_prem_pr))
+n_matched <- nrow(neg_with_next)
+
+# Summary by position
+non_prem_summary <- neg_with_next %>%
+  group_by(pos_group) %>%
+  summarise(
+    n = n(),
+    avg_pick = round(mean(pick), 1),
+    avg_pr = round(mean(player_return, na.rm = TRUE) * salary_cap, 1),
+    hit_rate = round(mean(is_hit, na.rm = TRUE) * 100, 1),
+    next_positions = paste(sort(unique(next_prem_pos)), collapse = "/"),
+    cf_avg_pr = round(mean(next_prem_pr, na.rm = TRUE) * salary_cap, 1),
+    cf_hit_rate = round(mean(next_prem_hit, na.rm = TRUE) * 100, 1),
+    .groups = "drop"
+  ) %>%
+  mutate(pr_diff = round(avg_pr - cf_avg_pr, 1)) %>%
+  arrange(desc(n))
+
+overall_actual_pr <- round(mean(neg_with_next$player_return, na.rm = TRUE) * salary_cap, 1)
+overall_cf_pr <- round(mean(neg_with_next$next_prem_pr, na.rm = TRUE) * salary_cap, 1)
+overall_pr_diff <- round(overall_actual_pr - overall_cf_pr, 1)
+```
+
+```{r neg-sharpe-table}
+non_prem_summary %>%
+  filter(pos_group != "DL") %>%
+  gt() %>%
+  cols_label(
+    pos_group = "Position", n = "Picks", avg_pick = "Avg Pick",
+    avg_pr = "Surplus ($M)", hit_rate = "Hit %",
+    next_positions = "Pos",
+    cf_avg_pr = "Surplus ($M)", cf_hit_rate = "Hit %",
+    pr_diff = "Surplus Δ ($M)"
+  ) %>%
+  tab_spanner(label = "What They Got", columns = c(avg_pr, hit_rate)) %>%
+  tab_spanner(label = "Next Premium Player Taken",
+              columns = c(next_positions, cf_avg_pr, cf_hit_rate)) %>%
+  tab_header(
+    title = md("**Negative-Sharpe First-Round Picks (2010-2022)**"),
+    subtitle = md(paste0(n_matched, " picks at negative-Sharpe combos vs the actual next QB/EDGE/OT/WR drafted"))
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "#e3f2fd"),
+    locations = cells_body(rows = pos_group == "RB")
+  ) %>%
+  tab_style(
+    style = cell_text(color = "#c62828", weight = "bold"),
+    locations = cells_body(columns = pr_diff, rows = pr_diff < 0)
+  ) %>%
+  tab_style(
+    style = cell_text(color = "#2e7d32", weight = "bold"),
+    locations = cells_body(columns = pr_diff, rows = pr_diff > 0)
+  ) %>%
+  tab_options(table.font.size = px(12), table.width = pct(100))
+```
+
+```{r neg-sharpe-narrative, results='asis'}
+rb_row <- non_prem_summary %>% filter(pos_group == "RB")
+cat(paste0(
+  "Since 2010, **", n_neg, " first-round picks** went to position-tier combos where the ",
+  "Sharpe ratio was negative. ",
+  "For **", n_matched, "** of those, we found the actual next premium-position player (QB, EDGE, OT, or WR) ",
+  "taken in the same draft. Those negative-Sharpe picks averaged **$", overall_actual_pr, "M** in surplus value. ",
+  "The next premium player taken averaged **$",
+  overall_cf_pr, "M** in surplus — a gap of **",
+  if(overall_pr_diff < 0) "-$" else "+$", abs(overall_pr_diff), "M**.\n\n",
+
+  "**RB specifically:** ", rb_row$n, " first-round RBs at negative-Sharpe tiers, ",
+  "averaging **$", rb_row$avg_pr, "M** in surplus vs **$", rb_row$cf_avg_pr,
+  "M** for the next premium player actually drafted (Δ = **",
+  if(rb_row$pr_diff < 0) "-$" else "+$", abs(rb_row$pr_diff),
+  "M**). The surplus gap is the dagger — it's the value teams left on the table ",
+  "by taking a running back instead of the next QB, EDGE, OT, or WR.\n\n",
+
+  "Why are these numbers so large? Surplus value is driven by the gap between a rookie contract and ",
+  "free-agent replacement cost, compounded over four years. Consider the 2018 draft: Saquon Barkley ",
+  "(pick 2) earned ~4.4% of the cap on his rookie deal, while a replacement RB costs ~6% — ",
+  "a savings of just ~$4M/yr. Sam Darnold (pick 3) earned ~4.3%, but a replacement QB costs ~14.6% — ",
+  "a savings of ~$26M/yr. Over four years, Darnold's rookie surplus alone (~$120M in today's cap terms) ",
+  "dwarfs Barkley's (~$19M), even though Darnold's time with the Jets was a disaster. ",
+  "The cost-controlled advantage at positions with expensive free-agent markets is so massive that ",
+  "even a mediocre QB outcome beats a great RB outcome in surplus terms."
+))
+```
+
+```{r love-chart, fig.height=8, fig.width=10}
+# The Sharpe heatmap — shows the full landscape at a glance
+ggplot(sharpe, aes(x = tier, y = reorder(pos_group, sharpe_elite), fill = sharpe_elite)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(aes(label = round(sharpe_elite, 2)),
+            size = 3.5, color = "white", fontface = "bold") +
+  scale_fill_gradient2(
+    low = "#c62828", mid = "#f9a825", high = "#2e7d32",
+    midpoint = 0
+  ) +
+  labs(
+    title = "The Draft Pick Value Landscape",
+    subtitle = "Quasi-Sharpe Ratio by position and draft tier | Green = beats free agency, Red = doesn't",
+    x = NULL, y = NULL, fill = "Sharpe\nRatio"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    panel.grid = element_blank()
+  )
+```
+
+This is the whole story in one chart. Green cells are where the draft beats free agency;
+red cells are where it doesn't. Most of the green is in the late first and Round 2 — not the
+top 10. The rest of this analysis explains why.
+
 ## Sharpe Ratio Curves
 
 How does the Sharpe ratio decay as you move to later tiers? QB separates immediately.
@@ -744,6 +957,9 @@ ggplot(sharpe_curves, aes(x = tier, y = sharpe_elite, color = pos_group, group =
 ```
 
 ## Is a WR2 Worth More Than an Elite RB1?
+
+<blockquote class="twitter-tweet"><p lang="en" dir="ltr">A top 10 RB's value in this framework doesn't even match a Day 2 WR. The WR market is so much richer that even mid-tier receivers generate more surplus than elite backs.</p>&mdash; The Coach Bear (@TheCoachBear)</blockquote>
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
 
 ```{r wr-vs-rb, results='asis'}
 # Current contract data
@@ -797,7 +1013,13 @@ cat(paste0(
   "committee, which caps the snap-based surplus any single back can generate.\n\n",
   "In this framework, a Round 2 WR looks like a substantially better risk-adjusted investment ",
   "than a top-10 RB — though this model measures contract value, not on-field impact, a ",
-  "distinction that matters most for running backs.\n"
+  "distinction that matters most for running backs.\n\n",
+
+  "The WR market inefficiency extends beyond the draft. Jakobi Meyers (UDFA), Romeo Doubs (4th round), ",
+  "and Rashid Shaheed (UDFA) all signed contracts that would make them the highest-paid running back ",
+  "on most rosters. The market is telling us something: even league-average wide receivers command ",
+  "premium dollars, while elite running backs get paid like average starters at other positions. ",
+  "That gap is the whole argument in one sentence.\n"
 ))
 ```
 
@@ -827,33 +1049,11 @@ ggplot(compare_data, aes(x = player_return, y = label, color = label)) +
   theme(legend.position = "none")
 ```
 
+So how do teams actually behave? If the data says QB drives the most surplus, WR value is concentrated in Day 2, and RB replacement is cheap — are front offices listening?
+
 ## Where Does Draft Capital Matter Most?
 
-Not every position needs a top-10 pick. When Top 10 Sharpe is **positive**, the model says
-you're getting reasonable value — trading down has a real cost (someone else takes your target)
-that may outweigh the marginal Sharpe gain. When Top 10 is **negative** and a later tier is
-positive, the model suggests patience could pay off — though real-world factors like positional
-scarcity and prospect quality can justify going early.
-
-```{r draft-capital-chart, fig.height=6}
-dc_plot <- sharpe %>%
-  filter(pos_group %in% c("QB", "OT", "EDGE", "CB", "WR"),
-         tier %in% c("Top 10", "Late 1st", "Round 2")) %>%
-  mutate(pos_group = factor(pos_group, levels = c("QB", "OT", "EDGE", "CB", "WR")))
-
-ggplot(dc_plot, aes(x = tier, y = sharpe_elite, color = pos_group, group = pos_group)) +
-  geom_line(linewidth = 1.3) +
-  geom_point(size = 4) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
-  scale_color_manual(values = pos_colors) +
-  labs(
-    title = "Sharpe Ratio Across Early Tiers",
-    subtitle = "Above the dashed line = positive risk-adjusted return vs free agency",
-    x = NULL, y = "Sharpe Ratio", color = "Position"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(axis.text.x = element_text(angle = 15, hjust = 1))
-```
+If you do not have a quarterback, you need to be taking as many shots at the position in the top 10 until you hit. Easier said than done — but the math is clear. EDGE, OT, and WR are also positive Sharpe picks in the top 10 and actually get *better* as you move later into the first round, suggesting that trading back is a viable strategy: you get even more of a rookie discount for these premium positions with similar upside.
 
 ```{r draft-capital, results='asis'}
 tiers <- sharpe %>%
@@ -926,14 +1126,80 @@ if (nrow(for_better_late) > 0) {
     cat("\n")
   }
 }
+```
 
+### Efficient Draft Allocation by Round
+
+The following chart shows a round-adjusted Sharpe value that identifies where teams should be allocating their draft capital efficiently. It measures each position's Sharpe *relative to the round average*, controlling for the fact that later rounds naturally have lower absolute Sharpe.
+
+```{r r1-opportunity-cost, results='asis'}
+# Compute relative Sharpe for the heatmap
+relative_sharpe <- sharpe %>%
+  mutate(tier = factor(tier, levels = tier_order)) %>%
+  group_by(tier) %>%
+  mutate(
+    tier_mean = mean(sharpe_elite),
+    relative = sharpe_elite - tier_mean
+  ) %>%
+  ungroup() %>%
+  filter(pos_group %in% c("QB", "RB", "WR", "TE", "EDGE", "OT", "CB", "DL", "IOL"))
+```
+
+```{r draft-curve-relative, fig.height=8, fig.width=11}
+# Heatmap: position × round, colored by relative Sharpe
+ggplot(relative_sharpe, aes(x = tier, y = fct_reorder(pos_group, relative, .fun = mean), fill = relative)) +
+  geom_tile(color = "white", linewidth = 1.5) +
+  geom_text(aes(label = sprintf("%+.2f", relative)), size = 4, fontface = "bold") +
+  scale_fill_gradient2(
+    low = "#D32F2F", mid = "white", high = "#1976D2",
+    midpoint = 0, limits = c(-1, 1),
+    labels = function(x) sprintf("%+.1f", x)
+  ) +
+  labs(
+    title = "Best Positional Bets by Draft Round",
+    subtitle = "Sharpe relative to round average | Blue = above average for the round, Red = below",
+    x = NULL, y = NULL, fill = "Relative\nSharpe"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_text(face = "bold", size = 12)
+  )
+```
+
+```{r draft-curve-narrative, results='asis'}
+# Biggest misallocations in R1
+r1_relative <- relative_sharpe %>% filter(tier %in% c("Top 10", "Late 1st"))
+most_overdrafted <- r1_relative %>% filter(relative < 0) %>% arrange(relative)
+
+# Round 3 surprise: RB is best relative bet
+r3_best <- relative_sharpe %>% filter(tier == "Round 3") %>% slice_max(relative, n = 1)
+
+cat(paste0(
+  "**In Round 1**, QB, EDGE, and OT are significantly above the round ",
+  "average — these are the positions where early draft capital pays off. Meanwhile, positions like ",
+  most_overdrafted$pos_group[1], " and ", most_overdrafted$pos_group[2],
+  " are the worst relative bets in the first round.\n\n",
+
+  "**The later rounds flip the script.** By Round 3, the best relative position is actually **",
+  r3_best$pos_group, "** (+", round(r3_best$relative, 2),
+  " above round average). This doesn't mean Round 3 RBs produce elite returns — the absolute Sharpe ",
+  "is still low — but it means if you're going to draft an RB, Round 3 is where the risk-reward ratio ",
+  "is least unfavorable. Similarly, OT remains an above-average bet deep into the draft.\n\n",
+
+  "**The takeaway for GMs:** it's not just about which positions to draft — it's about *when*. ",
+  "The same position can be a great bet in one round and a terrible one in another."
+))
+```
+
+```{r draft-capital-wait, results='asis'}
 # Wait — value is later
 for_wait <- tiers %>% filter(category == "Wait — value is later")
 if (nrow(for_wait) > 0) {
-  cat("\n### Wait — the value is later\n\n")
-  cat("These positions show *negative* Sharpe in the top 10 but positive returns in a later tier. ",
-      "The model suggests waiting could improve expected value — though individual prospect ",
-      "quality and team-specific needs can override this signal.\n\n")
+  cat("### Wait — the value is later\n\n")
+  cat("There are pockets of the draft where it makes sense to take non-premium positions. ",
+      "Eventually the opportunity cost flips to a point where DL and CB become positive ",
+      "risk-adjusted bets.\n\n")
   for (i in seq_len(nrow(for_wait))) {
     row <- for_wait[i, ]
     best_later <- max(row$`Late 1st`, row$`Round 2`, na.rm = TRUE)
@@ -964,9 +1230,9 @@ if (nrow(neg_all) > 0) {
 }
 ```
 
-## Are Teams Drafting Optimally?
+### Round 1: Where Opportunity Cost Is Highest
 
-```{r draft-efficiency, results='asis'}
+```{r r1-allocation, results='asis'}
 # Optimal R1 allocation based on Sharpe
 optimal <- sharpe %>%
   filter(tier %in% c("Top 10", "Late 1st"), !is.na(sharpe_elite)) %>%
@@ -990,7 +1256,6 @@ efficiency <- optimal %>%
   ) %>%
   arrange(desc(abs(diff)))
 
-# Count wasted picks
 wasted_positions <- sharpe %>%
   filter(tier %in% c("Top 10", "Late 1st"), !is.na(sharpe_elite)) %>%
   group_by(pos_group) %>%
@@ -1016,14 +1281,21 @@ negative_positions <- setdiff(
 )
 
 cat(paste0(
+  "Round 1 is where the opportunity cost is highest. Teams can absolutely take bets on ",
+  "non-premium positions here based on need, but the Sharpe ratio — as we've shown — suggests ",
+  "these are negative expected-value bets. Breaking against the Sharpe means you have high confidence ",
+  "in a player hitting at the upper end of their potential and thus overcoming the opportunity cost. ",
+  "And of course, premium-position picks can bust too — we are trying to maximize expected value over ",
+  "many picks in many drafts so we come out ahead in the long run. At least that's what teams *should* ",
+  "be doing.\n\n",
+
   "**", length(positive_positions), " positions** show a positive Sharpe somewhere in Round 1: ",
   paste(positive_positions, collapse = ", "), ". The remaining ", length(negative_positions),
   " (", paste(negative_positions, collapse = ", "), ") show ",
-  "**negative Sharpe in every first-round slot** — suggesting the model doesn't see enough ",
-  "surplus over free agency to justify the draft capital.\n\n",
+  "**negative Sharpe in every first-round slot**.\n\n",
   "By this measure, **", wasted_n, " of ", total_r1, " first-round picks (",
   round(wasted_n / total_r1 * 100), "%)** went to positions where the model sees negative ",
-  "returns — though team needs and prospect quality can justify picks the model wouldn't make.\n"
+  "returns.\n"
 ))
 ```
 
@@ -1043,29 +1315,6 @@ ggplot(eff_plot, aes(x = pos_group, y = pct, fill = type)) +
   ) +
   theme_minimal(base_size = 14) +
   theme(axis.text.x = element_text(angle = 30, hjust = 1), legend.position = "top")
-```
-
-```{r wasted-picks, results='asis'}
-# Top-10 picks where waiting was better
-wasted_top10 <- sharpe %>%
-  select(pos_group, tier, sharpe_elite) %>%
-  filter(tier %in% c("Top 10", "Late 1st", "Round 2")) %>%
-  pivot_wider(names_from = tier, values_from = sharpe_elite) %>%
-  mutate(top10_is_best = `Top 10` >= pmax(`Late 1st`, `Round 2`, na.rm = TRUE)) %>%
-  filter(!top10_is_best | is.na(top10_is_best))
-
-top10_total <- df_eligible %>% filter(tier == "Top 10") %>% nrow()
-top10_wasted <- df_eligible %>%
-  filter(tier == "Top 10", pos_group %in% wasted_top10$pos_group) %>%
-  nrow()
-
-cat(paste0(
-  "Looking specifically at the **top 10**: for **", top10_wasted, " of ", top10_total,
-  " picks (", round(top10_wasted / top10_total * 100), "%)**, a later tier showed a higher ",
-  "Sharpe ratio for that position. This doesn't mean those picks were wrong — it suggests ",
-  "that on average, the same position has produced better risk-adjusted returns later in the ",
-  "draft. Individual prospect quality matters enormously and isn't captured here.\n"
-))
 ```
 
 ```{r love-placeholder, include=FALSE}
@@ -1106,7 +1355,7 @@ team_avg <- team_picks %>%
   arrange(desc(avg_sharpe))
 
 ggplot(team_avg, aes(x = reorder(team, avg_sharpe), y = avg_sharpe)) +
-  geom_nfl_wordmarks(aes(team_abbr = team), width = 0.065) +
+  geom_nfl_wordmarks(aes(team_abbr = team), width = 0.09) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
   coord_flip() +
   labs(
@@ -1151,7 +1400,7 @@ team_later <- team_picks_all %>%
 make_round_chart <- function(data, round_label) {
   d <- data %>% filter(draft_round == round_label)
   ggplot(d, aes(x = reorder(team, avg_relative), y = avg_relative)) +
-    geom_nfl_wordmarks(aes(team_abbr = team), width = 0.065) +
+    geom_nfl_wordmarks(aes(team_abbr = team), width = 0.09) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
     coord_flip() +
     labs(
@@ -1195,70 +1444,122 @@ cat(paste0(
 ))
 ```
 
-## Best Positional Bets by Round
+### Case Study: The Eagles Model
 
-The team charts show *who* gets it right. But teams draft in every round — and they have to make the pick. The question isn't "should you draft at all in Round 3?" — it's "**given that you're picking in Round 3, which positions give you the best relative return?**"
+```{r eagles-case-study, results='asis'}
+phi_picks <- df_eligible %>%
+  filter(team == "PHI", season >= 2018) %>%
+  mutate(round_num = case_when(
+    pick <= 32 ~ 1, pick <= 64 ~ 2, pick <= 100 ~ 3, TRUE ~ 4
+  ))
 
-To answer that, I measure each position's Sharpe *relative to the round average*. This controls for the fact that later rounds naturally have lower absolute Sharpe, and surfaces which positions are the best and worst bets at each stage of the draft.
-
-```{r draft-curve-relative, fig.height=8, fig.width=11}
-# Compute relative Sharpe: how far above/below round average is each position?
-relative_sharpe <- sharpe %>%
-  mutate(tier = factor(tier, levels = tier_order)) %>%
-  group_by(tier) %>%
-  mutate(
-    tier_mean = mean(sharpe_elite),
-    relative = sharpe_elite - tier_mean
-  ) %>%
-  ungroup() %>%
-  filter(pos_group %in% c("QB", "RB", "WR", "TE", "EDGE", "OT", "CB", "DL", "IOL"))
-
-# Heatmap: position × round, colored by relative Sharpe
-ggplot(relative_sharpe, aes(x = tier, y = fct_reorder(pos_group, relative, .fun = mean), fill = relative)) +
-  geom_tile(color = "white", linewidth = 1.5) +
-  geom_text(aes(label = sprintf("%+.2f", relative)), size = 4, fontface = "bold") +
-  scale_fill_gradient2(
-    low = "#D32F2F", mid = "white", high = "#1976D2",
-    midpoint = 0, limits = c(-1, 1),
-    labels = function(x) sprintf("%+.1f", x)
-  ) +
-  labs(
-    title = "Best Positional Bets by Draft Round",
-    subtitle = "Sharpe relative to round average | Blue = above average for the round, Red = below",
-    x = NULL, y = NULL, fill = "Relative\nSharpe"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(
-    panel.grid = element_blank(),
-    axis.text = element_text(face = "bold", size = 12)
-  )
-```
-
-```{r draft-curve-narrative, results='asis'}
-# Biggest misallocations in R1
-r1_relative <- relative_sharpe %>% filter(tier %in% c("Top 10", "Late 1st"))
-most_overdrafted <- r1_relative %>% filter(relative < 0) %>% arrange(relative)
-most_underdrafted <- r1_relative %>% filter(relative > 0) %>% arrange(desc(relative))
-
-# Round 3 surprise: RB is best relative bet
-r3_best <- relative_sharpe %>% filter(tier == "Round 3") %>% slice_max(relative, n = 1)
+phi_r1 <- phi_picks %>% filter(round_num == 1)
+phi_r1_pos <- phi_r1 %>% count(pos_group) %>% arrange(desc(n))
 
 cat(paste0(
-  "**In Round 1**, QB, EDGE, and OT are significantly above the round ",
-  "average — these are the positions where early draft capital pays off. Meanwhile, positions like ",
-  most_overdrafted$pos_group[1], " and ", most_overdrafted$pos_group[2],
-  " are the worst relative bets in the first round.\n\n",
+  "Philadelphia's Super Bowl LIX roster is the Sharpe framework in action. ",
+  "Their first-round picks since 2018 have gone almost exclusively to premium positions: ",
+  paste(paste0(phi_r1_pos$pos_group, " (", phi_r1_pos$n, ")"), collapse = ", "),
+  ". Meanwhile, they built their skill-position depth through free agency and trades. ",
+  "The Eagles didn't avoid running backs because they don't value the position; they avoided ",
+  "*drafting* running backs early because the market lets you acquire them for less."
+))
+```
 
-  "**The later rounds flip the script.** By Round 3, the best relative position is actually **",
-  r3_best$pos_group, "** (+", round(r3_best$relative, 2),
-  " above round average). This doesn't mean Round 3 RBs produce elite returns — the absolute Sharpe ",
-  "is still low — but it means if you're going to draft an RB, Round 3 is where the risk-reward ratio ",
-  "is least unfavorable. Similarly, OT remains an above-average bet deep into the draft.\n\n",
+```{r eagles-drafted-table, results='asis'}
+# Eagles drafted core — pull all PHI R1/R2 key picks from data
+phi_drafted <- player_lookup %>%
+  filter((team == "PHI" | grepl("PHI", team)),
+         season >= 2018, season <= 2022,
+         pick <= 64) %>%
+  arrange(desc(player_return))
 
-  "**The takeaway for GMs:** it's not just about which positions to draft — it's about *when*. ",
-  "The same position can be a great bet in one round and a terrible one in another. ",
-  "Teams systematically overdraft certain positions early and underdraft ",
-  "others late, relative to what the returns actually justify."
+if (nrow(phi_drafted) > 0) {
+  phi_d_gt <- phi_drafted %>%
+    select(pfr_player_name, pos_group, season, pick, rookie_surplus, second_apy_cap_pct, player_return) %>%
+    gt() %>%
+    cols_label(
+      pfr_player_name = "PLAYER", pos_group = "POS", season = "YEAR",
+      pick = "PICK", rookie_surplus = "ROOKIE SURPLUS",
+      second_apy_cap_pct = "2ND CONTRACT", player_return = "PLAYER RETURN"
+    ) %>%
+    fmt_percent(columns = c(rookie_surplus, second_apy_cap_pct, player_return), decimals = 1) %>%
+    data_color(columns = player_return,
+               palette = c("#f7f7f7", "#c6dbef", "#4292c6", "#08519c")) %>%
+    tab_header(
+      title = md("**Eagles Drafted Core (2018–2022)**"),
+      subtitle = "Round 1 and 2 picks"
+    ) %>%
+    tab_style(style = cell_text(weight = "bold"), locations = cells_column_labels()) %>%
+    tab_options(table.font.size = px(13), table.width = pct(100))
+
+  gtsave(phi_d_gt, filename = "charts/eagles_drafted.png", vwidth = 900)
+  cat("![Eagles Drafted Core](charts/eagles_drafted.png)\n\n")
+}
+```
+
+```{r eagles-fa-table, results='asis'}
+# Eagles FA acquisitions — skill positions acquired through trades/FA
+phi_fa_names <- c("Saquon Barkley", "A.J. Brown")
+
+phi_fa <- player_lookup %>%
+  filter(grepl(paste(phi_fa_names, collapse = "|"), pfr_player_name)) %>%
+  arrange(desc(player_return))
+
+if (nrow(phi_fa) > 0) {
+  phi_fa_gt <- phi_fa %>%
+    select(pfr_player_name, pos_group, season, pick, rookie_surplus, second_apy_cap_pct, player_return) %>%
+    gt() %>%
+    cols_label(
+      pfr_player_name = "PLAYER", pos_group = "POS", season = "YEAR",
+      pick = "PICK", rookie_surplus = "ROOKIE SURPLUS",
+      second_apy_cap_pct = "2ND CONTRACT", player_return = "PLAYER RETURN"
+    ) %>%
+    fmt_percent(columns = c(rookie_surplus, second_apy_cap_pct, player_return), decimals = 1) %>%
+    data_color(columns = player_return,
+               palette = c("#f7f7f7", "#fde0dd", "#fa9fb5", "#c51b8a")) %>%
+    tab_header(
+      title = md("**Eagles FA / Trade Acquisitions**"),
+      subtitle = "Skill positions acquired through the market — drafted by other teams"
+    ) %>%
+    tab_footnote(
+      footnote = "Player return shown is from when they were originally drafted, not their Eagles tenure.",
+      locations = cells_column_labels(columns = player_return)
+    ) %>%
+    tab_style(style = cell_text(weight = "bold"), locations = cells_column_labels()) %>%
+    tab_options(table.font.size = px(13), table.width = pct(100))
+
+  gtsave(phi_fa_gt, filename = "charts/eagles_fa.png", vwidth = 900)
+  cat("![Eagles FA / Trade Acquisitions](charts/eagles_fa.png)\n\n")
+}
+```
+
+```{r eagles-narrative, results='asis'}
+hurts_pr <- phi_drafted %>% filter(grepl("Hurts", pfr_player_name)) %>% pull(player_return)
+smith_pr <- phi_drafted %>% filter(grepl("Smith", pfr_player_name)) %>% pull(player_return)
+mailata_pr <- phi_drafted %>% filter(grepl("Mailata", pfr_player_name)) %>% pull(player_return)
+dickerson_pr <- phi_drafted %>% filter(grepl("Dickerson", pfr_player_name)) %>% pull(player_return)
+
+cat(paste0(
+  "Jalen Hurts was a late first-round QB hit with a massive player return (",
+  percent(hurts_pr, accuracy = 0.1),
+  ") — exactly the kind of outcome the Sharpe ratio says you should be swinging for. ",
+  "DeVonta Smith was a top-10 WR hit (",
+  percent(smith_pr, accuracy = 0.1),
+  "). Jordan Mailata, taken at pick 233, was cost-controlled even on his second contract ",
+  "as he took a little longer to develop — but he's now among the best left tackles in the league. ",
+  "The return on where they got him is remarkable.\n\n",
+
+  "Landon Dickerson as an IOL pick in Round 2 is technically a negative-Sharpe bet, but his player return (",
+  percent(dickerson_pr, accuracy = 0.1),
+  ") just misses the elite threshold — a case where the team's confidence in the player ",
+  "overcoming the opportunity cost was justified.\n\n",
+
+  "On the acquisition side, the Eagles had the rare opportunity to trade for A.J. Brown and sign him ",
+  "to a second contract — an unusual channel for acquiring an elite player outside the draft. ",
+  "The Barkley signing, in retrospect, looks like a steal given his role in the Super Bowl run. ",
+  "Both acquisitions illustrate the strategy: draft premium positions, then use the market to fill ",
+  "skill positions where the FA supply is deep."
 ))
 ```
 
@@ -1529,6 +1830,40 @@ sharpe %>%
     `Sharpe Ratio` = sharpe_elite
   ) %>%
   knitr::kable()
+```
+
+---
+
+## Appendix: Average Sharpe Ratio by Team — All Rounds Combined
+
+```{r team-sharpe-all-rounds-combined, fig.height=11, fig.width=9}
+# All picks, all rounds, with Sharpe joined
+team_allrounds <- df_eligible %>%
+  filter(season >= 2018) %>%
+  left_join(
+    sharpe %>% select(pos_group, tier, sharpe_elite),
+    by = c("pos_group", "tier")
+  ) %>%
+  mutate(sharpe_elite = replace_na(sharpe_elite, 0)) %>%
+  group_by(team) %>%
+  summarise(
+    n_picks = n(),
+    avg_sharpe = mean(sharpe_elite),
+    .groups = "drop"
+  ) %>%
+  filter(n_picks >= 5) %>%
+  arrange(desc(avg_sharpe))
+
+ggplot(team_allrounds, aes(x = reorder(team, avg_sharpe), y = avg_sharpe)) +
+  geom_nfl_wordmarks(aes(team_abbr = team), width = 0.09) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  coord_flip() +
+  labs(
+    title = "Average Sharpe Ratio by Team — All Rounds (2018–2022)",
+    subtitle = "How well has each team allocated draft capital across the entire draft? | Last 5 eligible classes",
+    x = NULL, y = "Average Sharpe of All Picks"
+  ) +
+  theme_minimal(base_size = 13)
 ```
 
 ---
