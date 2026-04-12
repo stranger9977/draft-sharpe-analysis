@@ -1709,7 +1709,7 @@ cat(paste0(
   sprintf("%.1f", prem_row$estimate * 100),
   " points of win percentage. **Non-premium surplus** (β = ", round(np_row$estimate, 3),
   ", p = ", round(np_row$p.value, 3), ") is ", np_sig,
-  "; hitting on day-three picks is nice, but it does not separate teams in the standings."
+  "; hitting on non-premium positions is nice, but it does not separate teams in the standings."
 ))
 ```
 
