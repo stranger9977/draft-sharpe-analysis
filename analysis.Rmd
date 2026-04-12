@@ -921,8 +921,8 @@ ggplot(sharpe, aes(x = tier, y = reorder(pos_group, sharpe_elite), fill = sharpe
 ```
 
 This is the whole story in one chart. Green cells are where the draft beats free agency;
-red cells are where it doesn't. Most of the green is in the late first and Round 2 — not the
-top 10. The rest of this analysis explains why.
+red cells are where it doesn't. Most of the green is in the late first and Round 2 (not the
+top 10). The rest of this analysis explains why.
 
 ## Sharpe Ratio Curves
 
