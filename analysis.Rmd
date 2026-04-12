@@ -889,12 +889,13 @@ cat(paste0(
 
   "Why are these numbers so large? Surplus value is driven by the gap between a rookie contract and ",
   "free-agent replacement cost, compounded over four years. Consider the 2021 draft: Kyle Pitts ",
-  "(pick 4, TE) earned ~4.2% of the cap on his rookie deal, while a replacement TE costs ~5% — ",
-  "a savings of just ~$2–3M/yr. Ja'Marr Chase (pick 5, WR) earned ~4.1%, but a replacement WR costs ~10% — ",
-  "a savings of ~$15M/yr. Both were legitimate hits on the field, but over four years Chase's rookie surplus ",
-  "dwarfs Pitts' purely because WR has a more expensive free-agent market than TE. Same draft, adjacent picks, ",
-  "similar production profiles early on — wildly different surplus value, because the cost-controlled advantage ",
-  "at a premium position is structurally larger."
+  "(pick 4, TE) earned ~4.2% of the cap on his rookie deal, while a replacement TE costs ~5%, ",
+  "a savings of roughly $2–3M/yr, or about **$8–12M over four years**. Ja'Marr Chase (pick 5, WR) ",
+  "earned ~4.1%, but a replacement WR costs ~10%, a savings of roughly $15M/yr, or about **$60M over ",
+  "four years**. Both were legitimate hits on the field, but Chase's four-year rookie surplus dwarfs ",
+  "Pitts' purely because WR has a more expensive free-agent market than TE. Same draft, adjacent picks, ",
+  "similar production profiles early on, wildly different surplus value, because the cost-controlled ",
+  "advantage at a premium position is structurally larger."
 ))
 ```
 
@@ -927,7 +928,7 @@ top 10). The rest of this analysis explains why.
 ## Sharpe Ratio Curves
 
 How does the Sharpe ratio decay as you move to later tiers? QB separates immediately.
-OT and EDGE peak in the late first round — not the top 10.
+OT and EDGE peak in the late first round instead of the top 10.
 
 ```{r sharpe-curves, fig.height=7}
 sharpe_curves <- sharpe %>%
@@ -1134,19 +1135,22 @@ most_overdrafted <- r1_relative %>% filter(relative < 0) %>% arrange(relative)
 # Round 3 surprise: RB is best relative bet
 r3_best <- relative_sharpe %>% filter(tier == "Round 3") %>% slice_max(relative, n = 1)
 
+# Ensure two distinct worst positions in R1 for the narrative
+worst_pair <- unique(most_overdrafted$pos_group)[1:2]
+
 cat(paste0(
   "**In Round 1**, QB, EDGE, and OT are significantly above the round ",
-  "average — these are the positions where early draft capital pays off. Meanwhile, positions like ",
-  most_overdrafted$pos_group[1], " and ", most_overdrafted$pos_group[2],
+  "average (these are the positions where early draft capital pays off). Meanwhile, positions like ",
+  worst_pair[1], " and ", worst_pair[2],
   " are the worst relative bets in the first round.\n\n",
 
   "**The later rounds flip the script.** By Round 3, the best relative position is actually **",
   r3_best$pos_group, "** (+", round(r3_best$relative, 2),
-  " above round average). This doesn't mean Round 3 RBs produce elite returns — the absolute Sharpe ",
-  "is still low — but it means if you're going to draft an RB, Round 3 is where the risk-reward ratio ",
-  "is least unfavorable. Similarly, OT remains an above-average bet deep into the draft.\n\n",
+  " above round average). This doesn't mean Round 3 RBs produce elite returns (the absolute Sharpe ",
+  "is still low), but it means if you're going to draft an RB, Round 3 is where the risk-reward ratio ",
+  "is the most favorable. Similarly, OT remains an above-average bet deep into the draft.\n\n",
 
-  "**The takeaway for GMs:** it's not just about which positions to draft — it's about *when*. ",
+  "**The takeaway for GMs:** it's not just about which positions to draft, it's about *when*. ",
   "The same position can be a great bet in one round and a terrible one in another."
 ))
 ```
@@ -1175,17 +1179,6 @@ if (nrow(for_wait) > 0) {
   }
 }
 
-# Negative everywhere
-neg_all <- tiers %>% filter(category == "Negative everywhere")
-if (nrow(neg_all) > 0) {
-  cat(paste0("\n### Negative everywhere in Round 1\n\n",
-             paste(neg_all$pos_group, collapse = ", "),
-             " — these positions show negative Sharpe in every first-round slot. ",
-             "The combination of low second-contract ceilings, cheap FA alternatives, or both ",
-             "means this model doesn't see enough surplus to justify Round 1 capital. ",
-             "The data suggests Round 2, Round 3, or free agency as more efficient paths — though ",
-             "elite individual prospects can always be exceptions.\n"))
-}
 ```
 
 ### Round 1: Where Opportunity Cost Is Highest
@@ -1486,7 +1479,7 @@ cat(paste0(
 
 ## Does This Actually Translate to Winning?
 
-The Sharpe framework is a story about *expected* surplus value. But the natural next question is: do the teams that generate the most surplus from their drafts actually win more games? To test this, we built a panel of every team-season from 2014 to 2025 and asked: for each team going into season *Y*, how much surplus value did their active rookie-deal class — drafts from *Y-4* through *Y-1* — generate, and how well did the team perform that year?
+The Sharpe framework is a story about *expected* surplus value. But the natural next question is: do the teams that generate the most surplus from their drafts actually win more games? To test this, we built a panel of every team-season from 2014 to 2025 and asked: for each team going into a given season, how much surplus value did their active rookie-deal class (the four most recent draft classes still on rookie contracts) generate, and how well did the team perform that year?
 
 ```{r sharpe-winning-panel, results='asis'}
 suppressMessages({library(purrr)})
@@ -1791,9 +1784,7 @@ cat(paste0(
 ## Assumptions & What Comes Next
 
 These findings come from a model that deliberately treats every draft class the same, every prospect at a
-position as interchangeable, and every team's roster as a blank slate. In [Part 2](counter_analysis.html),
-we keep the positional hierarchy intact and layer in three dimensions the model intentionally ignores:
-roster needs, class depth, and individual prospect talent.
+position as interchangeable, and every team's roster as a blank slate.
 
 Every model makes simplifying assumptions. Here's what this analysis assumes and how each could be
 refined. Three of these — uniform talent across classes, ignoring roster context, and treating all
@@ -1876,7 +1867,7 @@ make_player_gt <- function(data, title, subtitle = NULL) {
         "Seahawks"="SEA","Titans"="TEN","Commanders"="WAS","Redskins"="WAS",
         "Football Team"="WAS")
     ) %>%
-    select(rank, gsis_id, pfr_player_name, pos_group, drafted_by, second_team,
+    select(rank, gsis_id, pfr_player_name, pos_group, second_team, drafted_by,
            season, pick, rookie_surplus, second_apy_cap_pct, player_return)
 
   tbl %>%
@@ -1889,8 +1880,8 @@ make_player_gt <- function(data, title, subtitle = NULL) {
       gsis_id = "",
       pfr_player_name = "PLAYER",
       pos_group = "POS",
-      drafted_by = "DRAFTED BY",
-      second_team = "2ND CONTRACT TEAM",
+      drafted_by = "2ND CONTRACT TEAM",
+      second_team = "DRAFTED BY",
       season = "YEAR",
       pick = "PICK",
       rookie_surplus = "ROOKIE SURPLUS",
