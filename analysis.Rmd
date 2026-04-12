@@ -950,9 +950,6 @@ ggplot(sharpe_curves, aes(x = tier, y = sharpe_elite, color = pos_group, group =
 
 ## Is a WR2 Worth More Than an Elite RB1?
 
-<blockquote class="twitter-tweet"><p lang="en" dir="ltr">A top 10 RB's value in this framework doesn't even match a Day 2 WR. The WR market is so much richer that even mid-tier receivers generate more surplus than elite backs.</p>&mdash; The Coach Bear (@TheCoachBear)</blockquote>
-<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
-
 ```{r wr-vs-rb, results='asis'}
 # Current contract data
 contracts <- load_contracts()
@@ -1569,15 +1566,25 @@ cat("**Sample:** ", nrow(sw_panel), " team-seasons (2014–2025), ",
 We sorted every team-season into deciles by total rookie-deal surplus and plotted win% and playoff rate by decile.
 
 ```{r sharpe-winning-deciles, fig.height=5, fig.width=10}
-sw_quintile <- sw_panel %>%
+sw_quintile_raw <- sw_panel %>%
   mutate(bin = dplyr::ntile(total_surplus, 5)) %>%
   group_by(bin) %>%
   summarise(
     win_pct = mean(win_pct),
     po_rate = mean(made_po),
+    min_s = min(total_surplus),
+    max_s = max(total_surplus),
     n = n(),
     .groups = "drop"
   ) %>%
+  mutate(
+    bin_label = paste0(
+      c("Bottom 20%", "Q2", "Q3", "Q4", "Top 20%"),
+      "\n(", round(min_s, 1), "–", round(max_s, 1), ")"
+    )
+  )
+
+sw_quintile <- sw_quintile_raw %>%
   tidyr::pivot_longer(c(win_pct, po_rate), names_to = "metric", values_to = "value") %>%
   mutate(metric = dplyr::recode(metric,
     win_pct = "Win %",
@@ -1594,8 +1601,7 @@ ggplot(sw_quintile, aes(x = bin, y = value, color = metric, group = metric)) +
   scale_color_manual(values = c("Win %" = "#08519c", "Playoff appearance rate" = "#b45f06"),
                      name = NULL) +
   scale_y_continuous(labels = scales::percent, limits = c(0.15, 0.7)) +
-  scale_x_continuous(breaks = 1:5,
-    labels = c("Bottom 20%", "Q2", "Q3", "Q4", "Top 20%")) +
+  scale_x_continuous(breaks = 1:5, labels = sw_quintile_raw$bin_label) +
   labs(
     title = "More draft surplus → more wins and more playoff berths",
     subtitle = paste0("Team-seasons bucketed into quintiles by rookie-deal surplus (drafts Y–4 to Y–1) | 2014–2025, n = ",
