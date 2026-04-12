@@ -1679,13 +1679,7 @@ cat(paste0(
   ") and **non-premium surplus** (β = ", round(np_row$estimate, 3),
   ", p = ", round(np_row$p.value, 3), ") are both significant at the 5% level. ",
   "**Premium non-QB surplus** (β = ", round(pnq_row$estimate, 3),
-  ", p = ", round(pnq_row$p.value, 3), ") is borderline.\n\n",
-
-  "The striking result is what *doesn't* show up. When we instead use pure strategy variables — ",
-  "**pick-weighted round-adjusted Sharpe** (how much a team allocated toward high-Sharpe positions ",
-  "relative to the round average) and **premium allocation share** (the fraction of draft capital ",
-  "spent on premium positions) — neither predicts wins at all (p = ",
-  round(pw_p, 2), " and p = ", round(alloc_p, 2), " respectively)."
+  ", p = ", round(pnq_row$p.value, 3), ") is borderline."
 ))
 ```
 
