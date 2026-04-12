@@ -888,13 +888,13 @@ cat(paste0(
   "by taking a running back instead of the next QB, EDGE, OT, or WR.\n\n",
 
   "Why are these numbers so large? Surplus value is driven by the gap between a rookie contract and ",
-  "free-agent replacement cost, compounded over four years. Consider the 2018 draft: Saquon Barkley ",
-  "(pick 2) earned ~4.4% of the cap on his rookie deal, while a replacement RB costs ~6% — ",
-  "a savings of just ~$4M/yr. Sam Darnold (pick 3) earned ~4.3%, but a replacement QB costs ~14.6% — ",
-  "a savings of ~$26M/yr. Over four years, Darnold's rookie surplus alone (~$120M in today's cap terms) ",
-  "dwarfs Barkley's (~$19M), even though Darnold's time with the Jets was a disaster. ",
-  "The cost-controlled advantage at positions with expensive free-agent markets is so massive that ",
-  "even a mediocre QB outcome beats a great RB outcome in surplus terms."
+  "free-agent replacement cost, compounded over four years. Consider the 2021 draft: Kyle Pitts ",
+  "(pick 4, TE) earned ~4.2% of the cap on his rookie deal, while a replacement TE costs ~5% — ",
+  "a savings of just ~$2–3M/yr. Ja'Marr Chase (pick 5, WR) earned ~4.1%, but a replacement WR costs ~10% — ",
+  "a savings of ~$15M/yr. Both were legitimate hits on the field, but over four years Chase's rookie surplus ",
+  "dwarfs Pitts' purely because WR has a more expensive free-agent market than TE. Same draft, adjacent picks, ",
+  "similar production profiles early on — wildly different surplus value, because the cost-controlled advantage ",
+  "at a premium position is structurally larger."
 ))
 ```
 
