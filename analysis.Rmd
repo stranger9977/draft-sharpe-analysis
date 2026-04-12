@@ -840,16 +840,16 @@ overall_pr_diff <- round(overall_actual_pr - overall_cf_pr, 1)
 non_prem_summary %>%
   filter(pos_group != "DL") %>%
   gt() %>%
+  cols_hide(columns = next_positions) %>%
   cols_label(
     pos_group = "Position", n = "Picks", avg_pick = "Avg Pick",
     avg_pr = "Surplus ($M)", hit_rate = "Hit %",
-    next_positions = "Pos",
     cf_avg_pr = "Surplus ($M)", cf_hit_rate = "Hit %",
     pr_diff = "Surplus Δ ($M)"
   ) %>%
   tab_spanner(label = "What They Got", columns = c(avg_pr, hit_rate)) %>%
   tab_spanner(label = "Next Premium Player Taken",
-              columns = c(next_positions, cf_avg_pr, cf_hit_rate)) %>%
+              columns = c(cf_avg_pr, cf_hit_rate)) %>%
   tab_header(
     title = md("**Negative-Sharpe First-Round Picks (2010-2022)**"),
     subtitle = md(paste0(n_matched, " picks at negative-Sharpe combos vs the actual next QB/EDGE/OT/WR drafted"))
