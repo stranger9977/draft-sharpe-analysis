@@ -125,17 +125,17 @@ player_lookup <- player_lookup %>%
 
 ## TL;DR
 
-I built a quasi-Sharpe ratio for NFL draft picks — a risk-adjusted measure of what each
-position is worth at each draft slot, accounting for rookie contract surplus, second-contract
-value, and supply-controlled free agency replacement costs. The model suggests that **QB
-produces the strongest risk-adjusted returns in the top 10**, while OT and EDGE peak in the
-late first round and WR offers the best value in Round 2. RB shows negative returns across
-all tiers in this framework — driven by cheap FA alternatives and a low contract ceiling.
-A large share of the total return from any draft pick comes from rookie contract surplus —
-getting starter production at a fraction of free agency cost for 4 years — rather than the
-second contract itself. These findings come with important caveats (see Assumptions at the
-end): snap share is an imperfect proxy for production, the model doesn't capture positional
-scarcity or team-specific needs, and some sample sizes are small.
+A quasi-Sharpe ratio for NFL draft picks: a risk-adjusted measure of what each position is
+worth at each draft slot, built on rookie-contract surplus, second-contract value, and
+supply-controlled free-agent replacement costs. What the framework says:
+
+- **QB** produces the strongest risk-adjusted returns in the top 10.
+- **OT and EDGE** peak in the late first round, not the top 10.
+- **WR** offers the best value in Round 2.
+- **RB** is negative across every tier in this framework: cheap free-agent alternatives and a low second-contract ceiling.
+- **Rookie-contract surplus** (starter production at a fraction of free-agent cost for four years) drives most of a pick's total return, not the second contract.
+- **Premium-position surplus translates to wins.** Across 384 team-seasons (2014–2025), teams in the top quintile of premium-position surplus on their active rookie class win 54% and make the playoffs 50%; the bottom quintile wins 48% and makes it 39%.
+- **Caveats** (see Assumptions): snap share is an imperfect proxy for production, the model ignores team need, class depth, and individual prospect talent, and some position/tier cells are thin.
 
 ## Should a Team Love Love at #4 Overall?
 
