@@ -1,5 +1,5 @@
 ---
-title: "What the Sharpe Ratio Can't See"
+title: "Stress Testing the Sharpe Ratio"
 subtitle: "Adding roster context, class depth, and prospect talent to our NFL Draft model"
 author: "Nick Gurol — [X/Twitter](https://x.com/run_the_sims) | [LinkedIn](https://www.linkedin.com/in/nick-gurol-87738a1b7/)"
 output:
@@ -94,11 +94,13 @@ r1_picks <- r1_picks %>% mutate(tier = factor(tier, levels = tier_order))
 
 ## Building on the Foundation
 
-In [Part 1](https://stranger9977.github.io/draft-sharpe-analysis/), we built a quasi-Sharpe ratio for NFL draft picks. The positional hierarchy was clear: **QB leads, OT and EDGE peak late first, and RB shows negative returns across all tiers.**
+In [Part 1](https://stranger9977.github.io/draft-sharpe-analysis/), I built a quasi-Sharpe ratio for NFL draft picks. The main takeaway was that QB and other premium positions like OT, EDGE, and WR are better risk-adjusted bets in the first round than non-premium positions.
 
-That framework is deliberately reductive — it strips away context to isolate position economics. That's its strength. But GMs don't draft in a vacuum. They draft in specific years, with specific rosters, facing specific prospects.
+The framework in Part 1 was a bit reductive, and GMs don't operate in the aggregate. They need to draft in specific years, with specific rosters, in drafts with specific prospects.
 
-This is Part 2: we take the Sharpe ratio's positional hierarchy as given, then layer in three dimensions it intentionally ignores. The goal isn't to overturn the model — it's to define the conditions under which its general advice needs a specific adjustment.
+In this article, I will take the Sharpe ratio as constructed in the last article and stress test it a little before layering in some extra dimensions to help round out our final hot take: where exactly does it make sense to take Jeremiyah Love in this year's draft?
+
+The first article had to make a few simplifications to build the foundation:
 
 ```{r assumptions-table, results='asis'}
 cat("
@@ -127,18 +129,17 @@ cat(paste0(
   round(qb_top10$sharpe_elite, 2), "). OT and EDGE peak in the late first (",
   round(best_late1$sharpe_elite, 2), " for ", best_late1$pos_group,
   "). RB was the worst first-round investment: Sharpe of **",
-  round(rb_top10$sharpe_elite, 2), "** in the top 10, negative across every tier.\n\n",
-  "That hierarchy is the foundation for everything that follows. We're not revisiting it — we're adding context."
+  round(rb_top10$sharpe_elite, 2), "** in the top 10, negative across every tier."
 ))
 ```
 
-### A Note on Metrics: Career AV
+One of the main components of the Sharpe ratio was contract value. We focused a lot on surplus value, which gives us a sense of the advantage teams get when they draft a player that hits big on a cost-controlled rookie contract. This is mainly determined by a market and we assume that market is efficient.
 
-Part 1 measured returns using contract value — what the market pays a player. That's the right lens for surplus analysis, but it has a known feature: **the NFL market systematically underpays running backs** relative to their on-field production. A back who rushes for 1,200 yards might walk in free agency, while a league-average edge rusher commands $15M/year.
+A valid argument I've seen is that Saquon Barkley and Jakobi Meyers basically make the same in terms of APY, which shows the market doesn't reflect actual player impact on the field. I think that's fair, and as I said in Part 1, it warrants a follow-up investigation.
 
-This article uses **[weighted career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm)** (career AV) from Pro Football Reference alongside Part 1's contract-based metrics. Career AV measures production directly — it rewards peak seasons and penalizes inactivity, without the market layer. When we need to compare what a player *produced* rather than what the market *paid*, career AV is the better tool.
+To take a look at player value from another angle, we introduce **[weighted career Approximate Value](https://www.pro-football-reference.com/about/approximate_value.htm)** (career AV) and define "elite" using the same framework in the [original Brill paper](https://operations.nfl.com/gameday/analytics/big-data-bowl/) we referenced in Part 1. This should help us understand value under a different lens before we return to using rookie surplus alongside it as a way to determine where to take a prospect like Love.
 
-We define an **elite outcome** as finishing in the **top 10% of weighted career AV at their position** — a stricter bar than Part 1's snap-based "hit." It doesn't just ask whether a player became a starter, but whether they became *great*.
+We define an **elite outcome** as finishing in the **top 10% of weighted career AV at their position**, a stricter bar than Part 1's snap-based "hit." It doesn't just ask whether a player became a starter, but whether they became *great*.
 
 ---
 
@@ -326,18 +327,7 @@ ngs_rb_class <- class_depth %>%
 best_class <- ngs_rb_class %>% slice_max(ngs_n_good_plus, n = 1)
 worst_class <- ngs_rb_class %>% slice_min(ngs_n_good_plus, n = 1)
 
-cat(paste0(
-  "The **", best_class$season,
-  "** RB class had **", best_class$ngs_n_good_plus,
-  "** prospects grading Good or better, the deepest pool of pre-draft talent in our sample. ",
-  "The **", worst_class$season, "** class had just **", worst_class$ngs_n_good_plus,
-  "**. That's the difference between a class where you can find value in any round and one ",
-  "where you're chasing a single standout.\n\n",
-  "The same pattern plays out at every position. Some years WR is loaded and EDGE is thin. ",
-  "Some years the OT class is deep while TE is barren. QB class depth is notoriously spiky -- ",
-  "one or two Elite prospects can define the entire class. The Sharpe ratio can't see any of this. ",
-  "it averages across all years as if every class is the same. GMs know better."
-))
+cat("")
 ```
 
 ```{r class-2025-commentary, results='asis'}
@@ -371,9 +361,7 @@ cat(paste0(
   deep_2025$pos_group[1], "** (",  deep_2025$n_good_plus[1], " Good+), **",
   deep_2025$pos_group[2], "** (", deep_2025$n_good_plus[2], "), and **",
   deep_2025$pos_group[3], "** (", deep_2025$n_good_plus[3],
-  ") are the deepest classes this year. The thinnest: **RB** (",
-  if(nrow(rb_2025) > 0) rb_2025$n_good_plus else "few", " Good+) and **QB** (",
-  if(nrow(qb_2025) > 0) qb_2025$n_good_plus else "few", " Good+).\n\n",
+  ") are the deepest classes this year.\n\n",
   "The RB class stands out as especially thin. Only ",
   if(nrow(rb_2025) > 0) rb_2025$n_good_plus else "a handful of",
   " RB prospects grade as Good or better — and Love is the only one in the Elite tier. ",
@@ -387,16 +375,13 @@ cat(paste0(
   if(nrow(deep_2025) > 0 && deep_2025$pos_group[1] == "IOL") paste0(deep_2025$n_good_plus[1], " Good+ prospects") else "the deepest position group",
   " give teams plenty of quality options throughout the draft. ",
   "If you need an interior lineman in 2026, the class will come to you.\n\n",
-  "This is supply and demand, and the Sharpe ratio doesn't account for it. ",
+  "This is supply and demand. ",
   "When a class is deep (IOL, CB, WR this year), supply is high and quality players will be available in later rounds, ",
-  "so the marginal cost of waiting is low. The Sharpe ratio's advice to 'draft premium positions' works well here ",
-  "because you're not giving up much by passing on round 1.\n\n",
-  "But when a class is thin (RB, QB this year), supply is scarce. The drop-off from prospect #1 to #2 is steep, ",
+  "so the marginal cost of waiting is low. Passing on a premium position in round 1 costs less than usual.\n\n",
+  "When a class is thin (RB, QB this year), supply is scarce. The drop-off from prospect #1 to #2 is steep, ",
   "and waiting means the position becomes dramatically harder to fill. In a loaded class, you can find value at pick 50. ",
-  "In a thin class, the value might only exist at pick 10. The Sharpe ratio averages across all classes, ",
-  "it can't tell you that *this year's* supply curve looks completely different from last year's.\n\n",
-  "That's the blind spot. The model says 'don't draft RB early' based on historical averages. ",
-  "But the supply/demand equation changes every year, and in 2026, the RB market is tight."
+  "In a thin class, the value might only exist at pick 10.\n\n",
+  "In 2026, the RB market is tight, which reshapes the calculus for teams that need one."
 ))
 ```
 
@@ -465,12 +450,13 @@ cat(paste0(
   "The colors (pre-draft class depth) and heights (what actually happened) track each other. ",
   "The correlation between a class's Good+ prospect count and its eventual hit rate is **",
   round(ngs_rb_cor, 2), "**.\n\n",
-  "The mismatches are revealing. 2010 had the highest mean NGS score but produced zero hits. ",
-  "athletic profiles alone don't guarantee production. Meanwhile, 2017 was the best actual class ",
+  "The [2010 class](https://www.nfldrafthead.com/new-page-1) was unique in that it produced zero hits by our definition, ",
+  "despite having the highest mean NGS score. The only names that probably ring a bell are ",
+  "[C.J. Spiller](https://www.pro-football-reference.com/players/S/SpilC.00.htm) and ",
+  "[Ryan Mathews](https://www.pro-football-reference.com/players/M/MathRy00.htm), who unfortunately miss the hit threshold due to injuries ",
+  "and not quite making the transition to the NFL. Meanwhile, 2017 was the best actual class ",
   "(23.3% hit rate) because six different backs all found NFL roles.\n\n",
-  "The model's general advice — avoid RB early — averages across all classes. The class data says \"it depends on the year.\" ",
-  "And the NGS tier breakdown gives GMs a real window into which kind of year it is. ",
-  "before the first pick is made."
+  "The NGS tier breakdown gives GMs a real window into which kind of year it is before the first pick is made."
 ))
 ```
 
@@ -1586,10 +1572,7 @@ cat(paste0(
   "a savings of ~$26M/yr. Over four years, Darnold's rookie surplus alone (~$120M in today's cap terms) ",
   "dwarfs Barkley's (~$19M), even though Darnold's rookie contract years with the Jets were a disaster. ",
   "The cost-controlled advantage at positions with expensive free-agent markets is so massive that ",
-  "even a mediocre QB outcome beats a great RB outcome in surplus terms.\n\n",
-  "The numbers are staggering. This isn't a theoretical 'what if' — these are the actual outcomes of the next ",
-  "QB, EDGE, OT, or WR taken in the same draft. The surplus gap is real, it's persistent, ",
-  "and it's the strongest argument in the Sharpe ratio's arsenal."
+  "even a mediocre QB outcome beats a great RB outcome in surplus terms."
 ))
 ```
 
@@ -1640,7 +1623,7 @@ non_premium_avg <- prospect_curves %>%
 
 ### The Surplus Value View
 
-Career AV showed Love projecting as one of the best prospects in the 2026 class on pure production. That's a real finding. But it's not the metric Article 1 used, and for good reason. The Sharpe ratio measures **surplus value** — how much cheaper a drafted player is than a free-agent replacement. Production tells you how good a player is. Surplus tells you how much value you captured by drafting him instead of signing a free agent. The counterfactual table above showed that gap in action. Now let's put Love through the same lens. The formula:
+Since Part 1 showed that surplus value tends to lead to higher win percentage and more frequent playoff berths, we return to it in order to determine where exactly Love should go this year. The optimal place for Love to go is one where it's reasonable to project that his range of outcomes could potentially make the opportunity cost worth it. Now let's put Love through the same lens. The formula:
 
 > **Surplus Value** = Rookie Surplus + Second Contract APY (as % of cap)
 
@@ -1704,7 +1687,6 @@ ggplot(component_features, aes(x = estimate, y = feature, fill = direction)) +
   theme(legend.position = "top", strip.text = element_text(face = "bold", size = 12))
 ```
 
-**Model performance:** The snap ratio model (OLS R² = `r round(sr_r2, 3)`, test R² = `r round(sr_test_r2, 3)`) captures how much a player plays. Prospect Score is the strongest predictor — higher-graded prospects earn more snaps. The second contract model (test R² = `r round(sc_test_r2, 3)`) predicts the market's verdict after the rookie deal. When we assemble the full player return from these components plus the known FA costs and rookie APY, the combined median out-of-sample R² is **`r round(rs_test_r2, 3)`**.
 
 ```{r love-player-return, fig.height=7, fig.width=9}
 # Love's curve at 10th, 50th, 90th percentile outcomes
@@ -1921,7 +1903,9 @@ teams_needing_rb_2026 <- rb_table %>% filter(status == "Need") %>% pull(team)
 
 Everything we've built in this article converges on a single question. Which teams are in the best position to draft Jeremiyah Love?
 
-There's one more factor the surplus math can't see: **RBs peak early and decline fast.**
+There's one more factor the surplus math can't see: **RBs peak early and decline fast.** We use fantasy points here because they give us a clean, position-comparable measure of on-field production that tracks how much a player actually contributes to offensive output season over season. It's the simplest way to see when a player is delivering peak value.
+
+The last piece is who is ready to take advantage of that production right away.
 
 ```{r rb-age-curve, fig.height=5, fig.width=9, message=FALSE, warning=FALSE}
 # Build production curves from fantasy points (skill positions)
@@ -2004,14 +1988,16 @@ qb_yr1 <- grouped_curves %>% filter(pos_group == "QB", years_exp == 1) %>% pull(
 wr_yr1 <- grouped_curves %>% filter(pos_group == "WR", years_exp == 1) %>% pull(avg_fp) %>% round()
 
 cat(paste0(
-  "RBs produce immediately — **", rb_yr1, " fantasy points** in year 1, nearly matching QBs (", qb_yr1,
+  "RBs produce immediately. **", rb_yr1, " fantasy points** in year 1, nearly matching QBs (", qb_yr1,
   ") and dwarfing WRs (", wr_yr1, "). But they peak in **year ", rb_peak_yr, "** and decline fast. ",
   "QBs keep climbing. WRs don't peak until year ", wr_peak_yr, ". ",
   "This creates a draft timing problem: teams picking in the top 10 are usually rebuilding. ",
   "Draft an RB when your team isn't competitive, and by the time you're contending, ",
-  "you've burned the best years. Teams picking later — **pick ", fair_value_pick,
-  " and beyond** — are closer to contention. They can put Love's peak years to use immediately. ",
-  "That's not just a surplus argument. It's a roster construction argument."
+  "you've burned the best years. Teams picking later, at **pick ", fair_value_pick,
+  " and beyond**, are closer to contention. They can put Love's peak years to use immediately. ",
+  "That's not just a surplus argument. It's a roster construction argument.\n\n",
+  "Anecdotally, the Vikings at pick 18 make the most sense. They are ready to make another run in the playoffs ",
+  "if we see Kyler Murray's new change of scenery help him return to his early career level of play."
 ))
 ```
 
