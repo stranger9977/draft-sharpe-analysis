@@ -1563,7 +1563,7 @@ cat("**Sample:** ", nrow(sw_panel), " team-seasons (2014–2025), ",
 
 ### Monotonicity: more rookie-deal surplus, more wins
 
-We sorted every team-season into deciles by total rookie-deal surplus and plotted win% and playoff rate by decile.
+We sorted every team-season into quintiles by total rookie-deal surplus and plotted win% and playoff rate by quintile.
 
 ```{r sharpe-winning-deciles, fig.height=5, fig.width=10}
 sw_quintile_raw <- sw_panel %>%
@@ -1719,7 +1719,7 @@ cat(paste0(
 The evidence lines up cleanly with the framework:
 
 - **The Sharpe framework identifies where *expected* surplus is highest by position and round.** It is a map of the terrain, not a guarantee of wins.
-- **Realized surplus — actually hitting on picks — is what translates to winning.** Teams in the top three deciles win 13 percentage points more and make the playoffs twice as often as teams in the bottom three.
+- **Realized surplus — actually hitting on picks — is what translates to winning.** Teams in the top quintile win meaningfully more than teams in the bottom quintile, and the playoff-rate gap is even larger.
 - **Every category of surplus loads positive on wins.** Teams don't have to choose between premium and non-premium; they need to *hit*, and hits anywhere on the board move the needle.
 - **Positional allocation alone doesn't predict anything.** Choosing the "right" positions by Sharpe adds zero to win probability unless those picks actually produce.
 
