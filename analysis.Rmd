@@ -117,10 +117,7 @@ player_lookup <- player_lookup %>%
   select(-second_apy_cap_pct_fix)
 
 player_lookup <- player_lookup %>%
-  left_join(headshots, by = "gsis_id") %>%
-  left_join(recent_teams, by = "gsis_id") %>%
-  mutate(team = coalesce(recent_team, team)) %>%
-  select(-recent_team)
+  left_join(headshots, by = "gsis_id")
 ```
 
 ## TL;DR
