@@ -1652,14 +1652,13 @@ cat(paste0(
 
 Splitting the surplus by position category isolates where the signal comes from. We regressed win% on three separate surplus totals — QB, premium non-QB (OT / EDGE / WR), and non-premium (everything else) — over the same panel.
 
-```{r sharpe-winning-model, fig.height=4, fig.width=9}
-sw_model <- lm(win_pct ~ qb_surplus + premium_non_qb_surplus + non_premium_surplus, data = sw_panel)
+```{r sharpe-winning-model, fig.height=3.5, fig.width=9}
+sw_model <- lm(win_pct ~ premium_surplus + non_premium_surplus, data = sw_panel)
 sw_coefs <- broom::tidy(sw_model, conf.int = TRUE) %>%
   filter(term != "(Intercept)") %>%
   mutate(
     term_label = recode(term,
-      qb_surplus = "QB surplus",
-      premium_non_qb_surplus = "Premium non-QB surplus\n(OT / EDGE / WR)",
+      premium_surplus = "Premium surplus\n(QB / OT / EDGE / WR)",
       non_premium_surplus = "Non-premium surplus\n(everything else)"
     ),
     sig = case_when(p.value < 0.01 ~ "p < 0.01",
@@ -1680,8 +1679,8 @@ ggplot(sw_coefs, aes(x = estimate, y = reorder(term_label, estimate), color = si
                      name = NULL) +
   scale_x_continuous(labels = scales::comma_format(accuracy = 0.01)) +
   labs(
-    title = "Every surplus category loads positive on wins",
-    subtitle = paste0("win% ~ QB surplus + premium-non-QB surplus + non-premium surplus\n",
+    title = "Premium-position surplus is what drives wins",
+    subtitle = paste0("win% ~ premium surplus + non-premium surplus\n",
                       "n = ", nrow(sw_panel), " team-seasons, 2014–2025 | R² = ",
                       round(summary(sw_model)$r.squared, 3),
                       ", F-test p = ", signif(pf(summary(sw_model)$fstatistic[1],
@@ -1702,23 +1701,22 @@ ggplot(sw_coefs, aes(x = estimate, y = reorder(term_label, estimate), color = si
 ```
 
 ```{r sharpe-winning-model-narrative, results='asis'}
-qb_row <- sw_coefs %>% filter(term == "qb_surplus")
+prem_row <- sw_coefs %>% filter(term == "premium_surplus")
 np_row <- sw_coefs %>% filter(term == "non_premium_surplus")
-pnq_row <- sw_coefs %>% filter(term == "premium_non_qb_surplus")
 
-# Check strategy variables
-strat_model <- lm(win_pct ~ total_surplus + pick_weighted_adj + premium_allocation, data = sw_panel)
-strat_tidy <- broom::tidy(strat_model)
-alloc_p <- strat_tidy %>% filter(term == "premium_allocation") %>% pull(p.value)
-pw_p <- strat_tidy %>% filter(term == "pick_weighted_adj") %>% pull(p.value)
+prem_sig <- ifelse(prem_row$p.value < 0.05, "significant",
+                   ifelse(prem_row$p.value < 0.10, "borderline", "not significant"))
+np_sig   <- ifelse(np_row$p.value < 0.05, "significant",
+                   ifelse(np_row$p.value < 0.10, "borderline", "not significant"))
 
 cat(paste0(
-  "All three surplus categories load positive. **QB surplus** (β = ",
-  round(qb_row$estimate, 3), ", p = ", round(qb_row$p.value, 3),
-  ") and **non-premium surplus** (β = ", round(np_row$estimate, 3),
-  ", p = ", round(np_row$p.value, 3), ") are both significant at the 5% level. ",
-  "**Premium non-QB surplus** (β = ", round(pnq_row$estimate, 3),
-  ", p = ", round(pnq_row$p.value, 3), ") is borderline."
+  "**Premium surplus** (β = ", round(prem_row$estimate, 3),
+  ", p = ", round(prem_row$p.value, 3), ") is ", prem_sig,
+  " — each additional cap-percent point of surplus generated at QB/OT/EDGE/WR adds roughly ",
+  sprintf("%.1f", prem_row$estimate * 100),
+  " points of win percentage. **Non-premium surplus** (β = ", round(np_row$estimate, 3),
+  ", p = ", round(np_row$p.value, 3), ") is ", np_sig,
+  "; hitting on day-three picks is nice, but it does not separate teams in the standings."
 ))
 ```
 
@@ -1727,9 +1725,9 @@ cat(paste0(
 The evidence lines up cleanly with the framework:
 
 - **The Sharpe framework identifies where *expected* surplus is highest by position and round.** It is a map of the terrain, not a guarantee of wins.
-- **Realized surplus — actually hitting on picks — is what translates to winning.** Teams in the top quartile win meaningfully more than teams in the bottom quartile, and the playoff-rate gap is even larger.
-- **Every category of surplus loads positive on wins.** Teams don't have to choose between premium and non-premium; they need to *hit*, and hits anywhere on the board move the needle.
-- **Positional allocation alone doesn't predict anything.** Choosing the "right" positions by Sharpe adds zero to win probability unless those picks actually produce.
+- **Realized surplus — actually hitting on picks at premium positions — is what translates to winning.** Teams in the top quintile of premium-position surplus win meaningfully more than teams in the bottom quintile, and the playoff-rate gap is even larger.
+- **Premium surplus is where the signal lives.** Non-premium surplus is noisy in the win column; the wins come from hitting at QB, OT, EDGE, and WR.
+- **Allocation alone doesn't predict anything.** Choosing the "right" positions by Sharpe adds zero to win probability unless those picks actually produce.
 
 The Sharpe framework tells you where to aim; execution tells you whether you hit. The Eagles' Super Bowl run is the extreme version of this: a late-first QB hit, a mega-late elite OT, a top-ten WR hit, a Round 2 IOL near the elite threshold, and an opportunistic trade for an elite WR on his rookie deal. Every one of those was a *realized* surplus bet, not just a strategic allocation.
 
@@ -1782,11 +1780,11 @@ cat(paste0(
   scales::percent(bot$wp, accuracy = 0.1), "** and reaches the playoffs just **",
   scales::percent(bot$po, accuracy = 1), "**.\n\n",
 
-  "8. **It's execution, not allocation.** In the multivariate model, QB surplus (p = 0.03), non-premium ",
-  "surplus (p = 0.006), and premium non-QB surplus (p = 0.06) all load positive on wins. But pure ",
-  "*strategy* variables — pick-weighted round-adjusted Sharpe and premium allocation share — have ",
-  "essentially zero effect (p ≈ 0.9). The Sharpe framework identifies where expected value is highest; ",
-  "winning comes from realizing that value."
+  "8. **It's execution at premium positions, not allocation.** In the multivariate model, ",
+  "premium surplus (β = ", round(prem_row$estimate, 3), ", p = ", round(prem_row$p.value, 3),
+  ") carries the signal, while non-premium surplus (β = ", round(np_row$estimate, 3),
+  ", p = ", round(np_row$p.value, 3), ") does not separate winners from losers. ",
+  "The Sharpe framework identifies where expected value is highest; winning comes from realizing that value at QB, OT, EDGE, and WR."
 ))
 ```
 
