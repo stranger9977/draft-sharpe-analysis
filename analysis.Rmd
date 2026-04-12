@@ -1521,7 +1521,7 @@ sw_base <- player_lookup %>%
 sw_round_mean <- sw_base %>% group_by(rd) %>% summarise(rm = mean(sharpe_elite, na.rm = TRUE), .groups = "drop")
 sw_base <- sw_base %>% left_join(sw_round_mean, by = "rd") %>% mutate(sharpe_adj = sharpe_elite - rm)
 
-premium_pos_set <- c("QB", "OT", "EDGE", "WR")
+premium_pos_set <- c("QB", "OT", "EDGE", "CB", "WR")
 
 build_team_feats <- function(target_year, lookback = 4) {
   dw <- (target_year - lookback):(target_year - 1)
@@ -1636,7 +1636,7 @@ cat(paste0(
 
 ### The multivariate model: which kind of surplus matters
 
-Splitting the surplus by position category isolates where the signal comes from. We regressed win% on three separate surplus totals — QB, premium non-QB (OT/EDGE/CB/WR), and non-premium (everything else) — over the same 301 team-seasons.
+Splitting the surplus by position category isolates where the signal comes from. We regressed win% on three separate surplus totals — QB, premium non-QB (OT / EDGE / WR), and non-premium (everything else) — over the same panel.
 
 ```{r sharpe-winning-model, fig.height=4, fig.width=9}
 sw_model <- lm(win_pct ~ qb_surplus + premium_non_qb_surplus + non_premium_surplus, data = sw_panel)
@@ -1848,8 +1848,24 @@ make_player_gt <- function(data, title, subtitle = NULL) {
       rank = row_number()
     ) %>%
     # Rename directly so columns are crystal-clear regardless of gt label handling
-    rename(drafted_by = team, `2nd_contract_team` = second_contract_team) %>%
-    select(rank, gsis_id, pfr_player_name, pos_group, drafted_by, `2nd_contract_team`,
+    rename(drafted_by = team, second_team = second_contract_team) %>%
+    # Normalize team codes for nflplotR wordmark rendering
+    mutate(
+      drafted_by = dplyr::recode(drafted_by,
+        "GNB"="GB","KAN"="KC","NOR"="NO","NWE"="NE","SFO"="SF","TAM"="TB",
+        "OAK"="LV","LVR"="LV","SD"="LAC","SDG"="LAC","STL"="LAR","LA"="LAR"),
+      second_team = dplyr::recode(second_team,
+        "Packers"="GB","Chiefs"="KC","Saints"="NO","Patriots"="NE","49ers"="SF",
+        "Buccaneers"="TB","Raiders"="LV","Chargers"="LAC","Rams"="LAR",
+        "Cardinals"="ARI","Falcons"="ATL","Ravens"="BAL","Bills"="BUF",
+        "Panthers"="CAR","Bears"="CHI","Bengals"="CIN","Browns"="CLE",
+        "Cowboys"="DAL","Broncos"="DEN","Lions"="DET","Texans"="HOU",
+        "Colts"="IND","Jaguars"="JAX","Dolphins"="MIA","Vikings"="MIN",
+        "Giants"="NYG","Jets"="NYJ","Eagles"="PHI","Steelers"="PIT",
+        "Seahawks"="SEA","Titans"="TEN","Commanders"="WAS","Redskins"="WAS",
+        "Football Team"="WAS")
+    ) %>%
+    select(rank, gsis_id, pfr_player_name, pos_group, drafted_by, second_team,
            season, pick, rookie_surplus, second_apy_cap_pct, player_return)
 
   tbl %>%
@@ -1863,7 +1879,7 @@ make_player_gt <- function(data, title, subtitle = NULL) {
       pfr_player_name = "PLAYER",
       pos_group = "POS",
       drafted_by = "DRAFTED BY",
-      `2nd_contract_team` = "2ND CONTRACT TEAM",
+      second_team = "2ND CONTRACT TEAM",
       season = "YEAR",
       pick = "PICK",
       rookie_surplus = "ROOKIE SURPLUS",
