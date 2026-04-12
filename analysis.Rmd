@@ -1872,7 +1872,7 @@ make_player_gt <- function(data, title, subtitle = NULL) {
     gt() %>%
     gt_nfl_headshots(columns = "gsis_id", height = 35) %>%
     gt_nfl_wordmarks(columns = "drafted_by", height = 25) %>%
-    gt_nfl_wordmarks(columns = "2nd_contract_team", height = 25) %>%
+    gt_nfl_wordmarks(columns = "second_team", height = 25) %>%
     cols_label(
       rank = "",
       gsis_id = "",
