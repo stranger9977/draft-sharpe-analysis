@@ -88,7 +88,15 @@ r1_picks <- r1_picks %>% mutate(tier = factor(tier, levels = tier_order))
 
 ## TL;DR
 
-[Part 1](https://stranger9977.github.io/draft-sharpe-analysis/) built the case that RB is the worst first-round investment by Sharpe ratio. That positional hierarchy holds up — we validated it here. But the model deliberately strips away context to isolate position economics. This article adds three layers back in: roster context (9 teams enter 2026 needing an RB), class depth (2026 is the thinnest RB class in years, with Jeremiyah Love as the only Elite prospect), and prospect separation (Love's 94.3 Prospect Score ranks 5th all-time among RBs). QB is still king. Premium positions still generate more surplus. But Love's 90th-percentile outcome crosses the premium surplus line at a mid-first-round pick, meaning teams drafting after that point who need a back can justify the gamble. The framework has room for this kind of exception — elite talent, genuine need, no alternative.
+[Part 1](https://stranger9977.github.io/draft-sharpe-analysis/) built a quasi-Sharpe ratio that said premium positions (QB, OT, EDGE, WR) are the better risk-adjusted bets in round one. This article stress tests that framework and layers in the context GMs actually face: specific rosters, specific classes, specific prospects. The big hot take: **the math says Jeremiyah Love at pick 14 or later can make sense for the right team.**
+
+- The positional hierarchy still holds. QB, EDGE, OT, and WR generate more surplus than non-premium positions, and the counterfactual data backs it up.
+- Roster context matters. Nine teams enter 2026 without a long-term answer at RB.
+- Class depth matters. 2026 is the thinnest RB class in years. Love is the only Elite prospect, with a 17-point gap to RB2.
+- Prospect separation matters. Love's 94.3 Prospect Score ranks 5th all-time among RBs since 2010.
+- Love's 90th-percentile outcome crosses the premium surplus line around pick 14. Teams picking at or after that spot who need a back can justify the gamble.
+- RBs peak early and decline fast, so the team drafting Love needs to be ready to contend now. The Vikings at pick 18 are the cleanest fit.
+- For every other team, the Sharpe ratio's general advice still stands: draft a premium position.
 
 ---
 
