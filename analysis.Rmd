@@ -294,7 +294,7 @@ r5_gt <- r5_by_team %>%
   ) %>%
   tab_options(table.font.size = px(13), table.width = pct(100))
 
-gtsave(r5_gt, filename = "charts/r5_hits_by_team.png", vwidth = 900)
+gtsave(r5_gt, filename = "charts/r5_hits_by_team.png", vwidth = 1100)
 cat("![Top 5 Teams by 5th-Round Hits](charts/r5_hits_by_team.png)\n\n")
 ```
 
@@ -1403,26 +1403,6 @@ cat(paste0(
 
 ### Case Study: The Eagles Model
 
-```{r eagles-case-study, results='asis'}
-phi_picks <- df_eligible %>%
-  filter(team == "PHI", season >= 2018) %>%
-  mutate(round_num = case_when(
-    pick <= 32 ~ 1, pick <= 64 ~ 2, pick <= 100 ~ 3, TRUE ~ 4
-  ))
-
-phi_r1 <- phi_picks %>% filter(round_num == 1)
-phi_r1_pos <- phi_r1 %>% count(pos_group) %>% arrange(desc(n))
-
-cat(paste0(
-  "Philadelphia's Super Bowl LIX roster is the Sharpe framework in action. ",
-  "Their first-round picks since 2018 have gone almost exclusively to premium positions: ",
-  paste(paste0(phi_r1_pos$pos_group, " (", phi_r1_pos$n, ")"), collapse = ", "),
-  ". Meanwhile, they built their skill-position depth through free agency and trades. ",
-  "The Eagles didn't avoid running backs because they don't value the position; they avoided ",
-  "*drafting* running backs early because the market lets you acquire them for less."
-))
-```
-
 ```{r eagles-core-data}
 # Only the players discussed in the narrative
 phi_keep <- c("Jalen Hurts", "A.J. Brown", "DeVonta Smith",
@@ -1442,36 +1422,37 @@ phi_table <- phi_all %>%
       grepl("Barkley", pfr_player_name) ~ "FA",
       TRUE ~ "Draft"
     ),
-    second_contract_team = "PHI"
+    # Only show player return for actual Eagles draftees — for FA/Trade it's from the original team
+    player_return = ifelse(channel == "Draft", player_return, NA_real_)
   ) %>%
   select(pfr_player_name, pos_group, season, pick, channel,
-         rookie_surplus, second_apy_cap_pct, second_contract_team, player_return)
+         rookie_surplus, second_apy_cap_pct, player_return)
 
 phi_gt <- phi_table %>%
   gt() %>%
-  gt_nfl_wordmarks(columns = "second_contract_team", height = 20) %>%
   cols_label(
     pfr_player_name = "PLAYER", pos_group = "POS", season = "YEAR",
     pick = "PICK", channel = "CHANNEL", rookie_surplus = "ROOKIE SURPLUS",
     second_apy_cap_pct = "2ND CONTRACT",
-    second_contract_team = "2ND CONTRACT TEAM",
     player_return = "PLAYER RETURN"
   ) %>%
   fmt_percent(columns = c(rookie_surplus, second_apy_cap_pct, player_return), decimals = 1) %>%
+  sub_missing(columns = player_return, missing_text = "—") %>%
   data_color(columns = player_return,
-             palette = c("#f7f7f7", "#c6dbef", "#4292c6", "#08519c")) %>%
+             palette = c("#f7f7f7", "#c6dbef", "#4292c6", "#08519c"),
+             na_color = "#ffffff") %>%
   tab_header(
     title = md("**Eagles Super Bowl LIX Core**"),
     subtitle = "Key drafted and acquired players | 2018–2022 window"
   ) %>%
   tab_style(style = cell_text(weight = "bold"), locations = cells_column_labels()) %>%
   tab_footnote(
-    footnote = "Player return for FA/Trade acquisitions is from when they were originally drafted.",
+    footnote = "Player return only shown for Eagles draftees (not applicable to FA/Trade acquisitions).",
     locations = cells_column_labels(columns = player_return)
   ) %>%
   tab_options(table.font.size = px(13), table.width = pct(100))
 
-gtsave(phi_gt, filename = "charts/eagles_core.png", vwidth = 900)
+gtsave(phi_gt, filename = "charts/eagles_core.png", vwidth = 1100)
 cat("![Eagles Super Bowl LIX Core](charts/eagles_core.png)\n\n")
 ```
 
@@ -1596,22 +1577,40 @@ Higher values mean the player delivered more total value relative to what a
 free-agent replacement would have cost. Unsurprisingly, QBs dominate the overall leaderboard — their second contracts dwarf every other position, which is exactly what makes them the highest-Sharpe pick in the top 10. Below is the top 10 overall, then a separate top 10 excluding QBs.
 
 ```{r gt-helper}
+# Look up each player's 2nd contract team once (first contract signed >= 3 years after draft)
+contracts_raw <- nflreadr::load_contracts()
+second_contract_team_lookup <- contracts_raw %>%
+  filter(!is.na(gsis_id), !is.na(draft_year)) %>%
+  mutate(yrs_since_draft = year_signed - draft_year) %>%
+  filter(yrs_since_draft >= 3) %>%
+  group_by(gsis_id) %>%
+  arrange(year_signed, .by_group = TRUE) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(gsis_id, second_contract_team = team)
+
 make_player_gt <- function(data, title, subtitle = NULL) {
   tbl <- data %>%
-    mutate(rank = row_number()) %>%
-    select(rank, gsis_id, pfr_player_name, pos_group, team,
+    left_join(second_contract_team_lookup, by = "gsis_id") %>%
+    mutate(
+      second_contract_team = ifelse(is.na(second_contract_team), "—", second_contract_team),
+      rank = row_number()
+    ) %>%
+    select(rank, gsis_id, pfr_player_name, pos_group, team, second_contract_team,
            season, pick, rookie_surplus, second_apy_cap_pct, player_return)
 
   tbl %>%
     gt() %>%
     gt_nfl_headshots(columns = "gsis_id", height = 35) %>%
     gt_nfl_wordmarks(columns = "team", height = 25) %>%
+    gt_nfl_wordmarks(columns = "second_contract_team", height = 25) %>%
     cols_label(
       rank = "",
       gsis_id = "",
       pfr_player_name = "PLAYER",
       pos_group = "POS",
-      team = "TEAM",
+      team = "DRAFTED BY",
+      second_contract_team = "2ND CONTRACT TEAM",
       season = "YEAR",
       pick = "PICK",
       rookie_surplus = "ROOKIE SURPLUS",
@@ -1665,7 +1664,7 @@ top10_gt <- make_player_gt(
   subtitle = "Rookie surplus + second contract value vs FA replacement"
 )
 
-gtsave(top10_gt, filename = "charts/player_lookup_top10.png", vwidth = 900)
+gtsave(top10_gt, filename = "charts/player_lookup_top10.png", vwidth = 1100)
 cat("![Top 10 Draft Picks by Total Surplus Value](charts/player_lookup_top10.png)\n")
 ```
 
@@ -1681,69 +1680,25 @@ top10_non_qb_gt <- make_player_gt(
   subtitle = "Excluding quarterbacks | Rookie surplus + second contract value vs FA replacement"
 )
 
-gtsave(top10_non_qb_gt, filename = "charts/player_lookup_non_qb.png", vwidth = 900)
+gtsave(top10_non_qb_gt, filename = "charts/player_lookup_non_qb.png", vwidth = 1100)
 cat("![Top 10 Non-QB Draft Picks by Total Surplus Value](charts/player_lookup_non_qb.png)\n")
 ```
 
 ## Appendix: Round 1 Surplus Leaderboard
 
 ```{r round1-leaderboard, results='asis'}
-# Look up the team that signed each player's second contract
-contracts_raw <- nflreadr::load_contracts()
-
-second_contract_team <- contracts_raw %>%
-  filter(!is.na(gsis_id), !is.na(draft_year)) %>%
-  mutate(yrs_since_draft = year_signed - draft_year) %>%
-  # 2nd contract is the first contract signed after the rookie deal (~4 yrs after draft)
-  filter(yrs_since_draft >= 3) %>%
-  group_by(gsis_id) %>%
-  arrange(year_signed, .by_group = TRUE) %>%
-  slice(1) %>%
-  ungroup() %>%
-  select(gsis_id, second_contract_team = team)
-
 rd1 <- player_lookup %>%
   filter(pick <= 32, !is.na(player_return), player_return > 0, season <= 2022) %>%
   arrange(desc(player_return)) %>%
-  head(25) %>%
-  left_join(second_contract_team, by = "gsis_id") %>%
-  mutate(second_contract_team = ifelse(is.na(second_contract_team), "—", second_contract_team))
+  head(25)
 
-rd1_tbl <- rd1 %>%
-  mutate(rank = row_number()) %>%
-  select(rank, gsis_id, pfr_player_name, pos_group, team, second_contract_team,
-         season, pick, rookie_surplus, second_apy_cap_pct, player_return)
+rd1_gt <- make_player_gt(
+  rd1,
+  title = "Top 25 Round 1 Picks by Total Surplus",
+  subtitle = "First-round picks only | Rookie surplus + second contract value vs FA replacement"
+)
 
-rd1_gt <- rd1_tbl %>%
-  gt() %>%
-  gt_nfl_headshots(columns = "gsis_id", height = 35) %>%
-  gt_nfl_wordmarks(columns = "team", height = 25) %>%
-  gt_nfl_wordmarks(columns = "second_contract_team", height = 25) %>%
-  cols_label(
-    rank = "", gsis_id = "",
-    pfr_player_name = "PLAYER", pos_group = "POS",
-    team = "DRAFTED BY", second_contract_team = "2ND CONTRACT",
-    season = "YEAR", pick = "PICK",
-    rookie_surplus = "ROOKIE SURPLUS",
-    second_apy_cap_pct = "2ND CONTRACT %",
-    player_return = "PLAYER RETURN"
-  ) %>%
-  fmt_percent(columns = c(rookie_surplus, second_apy_cap_pct, player_return), decimals = 1) %>%
-  data_color(columns = player_return,
-             palette = c("#f7f7f7", "#c6dbef", "#4292c6", "#08519c"), domain = NULL) %>%
-  data_color(columns = rookie_surplus,
-             palette = c("#f7f7f7", "#c7e9c0", "#41ab5d", "#006d2c"), domain = NULL) %>%
-  data_color(columns = second_apy_cap_pct,
-             palette = c("#f7f7f7", "#dadaeb", "#9e9ac8", "#6a51a3"), domain = NULL) %>%
-  tab_header(
-    title = "Top 25 Round 1 Picks by Total Surplus",
-    subtitle = "First-round picks only | Rookie surplus + second contract value vs FA replacement"
-  ) %>%
-  tab_style(style = cell_text(weight = "bold"), locations = cells_column_labels()) %>%
-  tab_options(table.font.size = px(13), column_labels.font.size = px(11),
-              data_row.padding = px(4))
-
-gtsave(rd1_gt, filename = "charts/player_lookup_rd1.png", vwidth = 1000)
+gtsave(rd1_gt, filename = "charts/player_lookup_rd1.png", vwidth = 1100)
 cat("![Top 25 Round 1 Picks by Total Surplus](charts/player_lookup_rd1.png)\n")
 ```
 
@@ -1767,7 +1722,7 @@ for (pg in pos_groups) {
   )
 
   fname <- paste0("top5_", tolower(pg), ".png")
-  gtsave(tbl, filename = paste0("charts/", fname), vwidth = 900)
+  gtsave(tbl, filename = paste0("charts/", fname), vwidth = 1100)
   cat(paste0("![Top 5 ", pg, "](charts/", fname, ")\n\n"))
 }
 ```
@@ -1790,7 +1745,7 @@ for (pg in pos_groups) {
   )
 
   fname <- paste0("top5_rd1_", tolower(pg), ".png")
-  gtsave(tbl, filename = paste0("charts/", fname), vwidth = 900)
+  gtsave(tbl, filename = paste0("charts/", fname), vwidth = 1100)
   cat(paste0("![Top 5 ", pg, " Round 1](charts/", fname, ")\n\n"))
 }
 ```
