@@ -969,7 +969,8 @@ best_rb_return <- df_eligible %>% filter(pos_group == "RB", tier == "Top 10") %>
 med_wr_day2 <- df_eligible %>% filter(pos_group == "WR", tier == "Round 2") %>%
   summarise(med = median(player_return)) %>% pull(med)
 early_r2_wr <- df_eligible %>% filter(pos_group == "WR", tier == "Round 2") %>%
-  slice_max(player_return, n = 10) %>% summarise(med = median(player_return)) %>% pull(med)
+  arrange(desc(player_return)) %>% slice_head(prop = 0.5) %>%
+  summarise(med = median(player_return)) %>% pull(med)
 
 cat(paste0(
   "To further drive this point home, let's take a look at a recent signing. ",
@@ -986,8 +987,8 @@ cat(paste0(
   "This shows up clearly in the data. The **best top-10 RB return in the dataset** (",
   best_rb_return$pfr_player_name, ": ", round(best_rb_return$player_return, 3),
   ", or roughly **$", round(best_rb_return$player_return * 275), "M** of value at the 2026 cap) ",
-  "is outpaced by an early-Round-2 WR outcome. Taking the median of the top 10 Round 2 WR returns gives us a baseline for an early-R2 hit (",
-  round(early_r2_wr, 3), ", ~**$", round(early_r2_wr * 275), "M**). The *best* RB outcome in our sample doesn't match a *typical* early-R2 WR hit. ",
+  "is outpaced by a **high-end Round 2 WR** (median of the top half of R2 WR returns: ",
+  round(early_r2_wr, 3), ", ~**$", round(early_r2_wr * 275), "M**). The *best* RB outcome in our sample doesn't match a *typical high-end* R2 WR. ",
   "Names like DK Metcalf (pick 64), Davante Adams (pick 53), and A.J. Brown (pick 51) ",
   "all returned more than any top-10 RB since 2009.\n\n",
 
