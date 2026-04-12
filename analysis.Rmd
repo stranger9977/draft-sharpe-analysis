@@ -984,8 +984,8 @@ cat(paste0(
   "This shows up clearly in the data. The **best top-10 RB return in the dataset** (",
   best_rb_return$pfr_player_name, ": ", round(best_rb_return$player_return, 3),
   ", or roughly **$", round(best_rb_return$player_return * 275), "M** of value at the 2026 cap) ",
-  "barely matches the **median Round 2 WR** (", round(med_wr_day2, 3),
-  ", ~**$", round(med_wr_day2 * 275), "M**). ",
+  "is only modestly ahead of the **median Round 2 WR** (", round(med_wr_day2, 3),
+  ", ~**$", round(med_wr_day2 * 275), "M**). The *best* RB outcome in our sample is in the same ballpark as an *average* Round 2 WR. ",
   "Names like DK Metcalf (pick 64), Davante Adams (pick 53), and A.J. Brown (pick 51) ",
   "all returned more than any top-10 RB since 2009.\n\n",
 
