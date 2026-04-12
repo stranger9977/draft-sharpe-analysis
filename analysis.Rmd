@@ -139,7 +139,7 @@ scarcity or team-specific needs, and some sample sizes are small.
 
 ## Should a Team Love Love at #4 Overall?
 
-Mock drafts have Jeremiah Love going as high as [**#4 overall**](https://grindingthemocks.shinyapps.io/Dashboard/). He's been mocked to RB-needy teams like the Titans, Cardinals, Commanders, and Giants — all teams with top-10 picks and needs outside of the running back position.
+Mock drafts have Jeremiah Love going as high as [**#4 overall**](https://grindingthemocks.shinyapps.io/Dashboard/). He's been mocked to RB-needy teams like the Titans, Cardinals, Commanders, and Giants. These are all teams with top-10 picks that many would argue are not "a running back away."
 
 Analytic intuition says that spending premium draft capital on a "non-premium" position like RB is a horrible idea. On the other side, others cite Love's elite prospect profile and the impact a running back like Saquon Barkley can have on a team's Super Bowl run (see the [Eagles' Super Bowl LIX victory in 2024](https://en.wikipedia.org/wiki/Super_Bowl_LIX)).
 
@@ -296,8 +296,6 @@ r5_gt <- r5_by_team %>%
 
 gtsave(r5_gt, filename = "charts/r5_hits_by_team.png", vwidth = 900)
 cat("![Top 5 Teams by 5th-Round Hits](charts/r5_hits_by_team.png)\n\n")
-
-cat("")
 ```
 
 ## The Draft Is the Best Path to Acquiring Elite Talent
@@ -310,7 +308,7 @@ qb_n <- fa_replacement %>% filter(pos_group == "QB") %>% pull(fa_top_n)
 iol_n <- fa_replacement %>% filter(pos_group == "IOL") %>% pull(fa_top_n)
 rb_n <- fa_replacement %>% filter(pos_group == "RB") %>% pull(fa_top_n)
 cat(paste0("Only **", ot_n, " starter-caliber OTs** and **", qb_n, " QBs** hit free agency ",
-           "per year — compare that to **", rb_n, " RBs** and **", iol_n, " IOL**. ",
+           "per year compared to **", iol_n, " IOL**. ",
            "When the supply of free agents is this low, the draft becomes the only reliable pipeline ",
            "for building at that position."))
 ```
@@ -997,22 +995,6 @@ cat(paste0(
   "**RB Top 10 Sharpe: ", round(rb_top10$sharpe_elite, 2), "** vs ",
   "**WR Round 2 Sharpe: ", round(wr_day2$sharpe_elite, 2), "**\n\n",
 
-  "The market dictates the raw contractual value of these players. Teams are more willing to part ",
-  "with starting RB talent than they are for WR talent. I have a theory that the mid to low end of ",
-  "the WR market is inefficient due to the top end of the WR market pulling up those contracts, but ",
-  "that's a study for another day.\n\n",
-
-  "Why? Two reasons:\n\n",
-  "1. **Tiny rookie surplus.** FA RBs cost just ",
-  percent(fa_replacement %>% filter(pos_group == "RB") %>% pull(fa_median_apy_cap_pct), accuracy = 0.1),
-  " of the cap, the lowest of any position. Even when a top-10 RB starts every game, ",
-  "the savings over a free agent are minimal.\n\n",
-  "2. **Low second-contract ceiling.** The best RB second contract in the dataset is ~",
-  round(max(df_eligible %>% filter(pos_group == "RB") %>% pull(second_apy_cap_pct)) * 100),
-  "% of cap, while top WRs command ~",
-  round(max(df_eligible %>% filter(pos_group == "WR") %>% pull(second_apy_cap_pct)) * 100),
-  "%. The upside is structurally capped.\n\n",
-
   "In this framework, a Round 2 WR looks like a substantially better risk-adjusted investment ",
   "than a top-10 RB, though this model measures contract value, not on-field impact, a ",
   "distinction that matters most for running backs.\n"
@@ -1268,10 +1250,6 @@ cat(paste0(
   "many picks in many drafts so we come out ahead in the long run. At least that's what teams *should* ",
   "be doing.\n\n",
 
-  "**", length(positive_positions), " positions** show a positive Sharpe somewhere in Round 1: ",
-  paste(positive_positions, collapse = ", "), ". The remaining ", length(negative_positions),
-  " (", paste(negative_positions, collapse = ", "), ") show ",
-  "**negative Sharpe in every first-round slot**.\n\n",
   "By this measure, **", wasted_n, " of ", total_r1, " first-round picks (",
   round(wasted_n / total_r1 * 100), "%)** went to positions where the model sees negative ",
   "returns.\n"
@@ -1446,29 +1424,12 @@ cat(paste0(
 ```
 
 ```{r eagles-core-data}
-# Eagles key players — drafted + acquired
-phi_drafted <- player_lookup %>%
-  filter((team == "PHI" | grepl("PHI", team)),
-         season >= 2018, season <= 2022,
-         pick <= 64) %>%
-  arrange(desc(player_return))
+# Only the players discussed in the narrative
+phi_keep <- c("Jalen Hurts", "A.J. Brown", "DeVonta Smith",
+              "Jordan Mailata", "Landon Dickerson", "Saquon Barkley")
 
-# Also grab Mailata (late round pick)
-phi_mailata <- player_lookup %>%
-  filter(grepl("Mailata", pfr_player_name))
-
-# FA/trade acquisitions
-phi_fa_names <- c("Saquon Barkley", "A.J. Brown")
-phi_fa <- player_lookup %>%
-  filter(grepl(paste(phi_fa_names, collapse = "|"), pfr_player_name)) %>%
-  arrange(desc(player_return))
-
-# Combine all key Eagles pieces
-phi_all <- bind_rows(
-  phi_drafted,
-  phi_mailata %>% filter(!pfr_player_name %in% phi_drafted$pfr_player_name),
-  phi_fa
-) %>%
+phi_all <- player_lookup %>%
+  filter(pfr_player_name %in% phi_keep) %>%
   distinct(pfr_player_name, .keep_all = TRUE) %>%
   arrange(desc(player_return))
 ```
@@ -1480,16 +1441,21 @@ phi_table <- phi_all %>%
       grepl("Brown", pfr_player_name) ~ "Trade",
       grepl("Barkley", pfr_player_name) ~ "FA",
       TRUE ~ "Draft"
-    )
+    ),
+    second_contract_team = "PHI"
   ) %>%
-  select(pfr_player_name, pos_group, season, pick, channel, rookie_surplus, second_apy_cap_pct, player_return)
+  select(pfr_player_name, pos_group, season, pick, channel,
+         rookie_surplus, second_apy_cap_pct, second_contract_team, player_return)
 
 phi_gt <- phi_table %>%
   gt() %>%
+  gt_nfl_wordmarks(columns = "second_contract_team", height = 20) %>%
   cols_label(
     pfr_player_name = "PLAYER", pos_group = "POS", season = "YEAR",
     pick = "PICK", channel = "CHANNEL", rookie_surplus = "ROOKIE SURPLUS",
-    second_apy_cap_pct = "2ND CONTRACT", player_return = "PLAYER RETURN"
+    second_apy_cap_pct = "2ND CONTRACT",
+    second_contract_team = "2ND CONTRACT TEAM",
+    player_return = "PLAYER RETURN"
   ) %>%
   fmt_percent(columns = c(rookie_surplus, second_apy_cap_pct, player_return), decimals = 1) %>%
   data_color(columns = player_return,
@@ -1510,9 +1476,9 @@ cat("![Eagles Super Bowl LIX Core](charts/eagles_core.png)\n\n")
 ```
 
 ```{r eagles-narrative, results='asis'}
-hurts_pr <- phi_drafted %>% filter(grepl("Hurts", pfr_player_name)) %>% pull(player_return)
-smith_pr <- phi_drafted %>% filter(grepl("Smith", pfr_player_name)) %>% pull(player_return)
-dickerson_pr <- phi_drafted %>% filter(grepl("Dickerson", pfr_player_name)) %>% pull(player_return)
+hurts_pr <- phi_all %>% filter(grepl("Hurts", pfr_player_name)) %>% pull(player_return)
+smith_pr <- phi_all %>% filter(pfr_player_name == "DeVonta Smith") %>% pull(player_return)
+dickerson_pr <- phi_all %>% filter(grepl("Dickerson", pfr_player_name)) %>% pull(player_return)
 
 cat(paste0(
   "The Eagles are an interesting case because they built their Super Bowl roster through a perfect storm ",
@@ -1575,16 +1541,52 @@ cat(paste0(
 
   "6. **Rookie surplus makes up the majority of a draft pick's total return.** ",
   "For most positions, getting starter-level production at rookie-scale wages for 4 years ",
-  "is worth more than the second contract itself.\n\n",
-
-  "These findings come from a model that deliberately treats every draft class the same, every prospect at a ",
-  "position as interchangeable, and every team's roster as a blank slate. In [Part 2](counter_analysis.html), ",
-  "we keep the positional hierarchy intact and layer in three dimensions the model intentionally ignores: ",
-  "roster needs, class depth, and individual prospect talent."
+  "is worth more than the second contract itself."
 ))
 ```
 
+## Assumptions & What Comes Next
+
+These findings come from a model that deliberately treats every draft class the same, every prospect at a
+position as interchangeable, and every team's roster as a blank slate. In [Part 2](counter_analysis.html),
+we keep the positional hierarchy intact and layer in three dimensions the model intentionally ignores:
+roster needs, class depth, and individual prospect talent.
+
+Every model makes simplifying assumptions. Here's what this analysis assumes and how each could be
+refined. Three of these — uniform talent across classes, ignoring roster context, and treating all
+prospects as interchangeable — are directly tested in [Part 2](counter_analysis.html).
+
+| Assumption | Why it matters |
+|---|---|
+| **Snap % = production.** Playing time is used as a proxy for quality. | A player can play a lot and still be bad. |
+| **Second contract = market value.** The second deal is treated as the market's verdict. | Teams overpay and underpay. Extensions ≠ true free agency. |
+| **FA contracts include extensions.** The replacement cost may be inflated by teams retaining their own players. | Makes some positions (OT, QB) look more expensive to replace than they really are. |
+| **4-year evaluation window.** Snaps are measured over the rookie deal only. | Misses late bloomers and players who improve in year 5+. |
+| **No second contract = $0.** Players who leave the league get zero return. | Some players contributed but aged out (especially RBs). |
+| **Uniform elite threshold.** The 90th percentile is global, not position-specific. | An "elite" QB return is very different from an "elite" RB return. |
+| **Supply ≈ all contracts above hit threshold.** Extensions are counted as FA supply. | Overstates the available market for positions where stars rarely leave. |
+| **Cap% normalization.** Cap% is assumed to be the best cross-era comparator. | Doesn't account for structural cap changes (e.g., TV deal jumps). |
+| **Uniform talent across draft classes.** Each class is assumed to have roughly equal talent at each position. | In reality, some classes are deep at WR and thin at OT — positional Sharpe ratios would shift year to year. |
+| **QB projection is reliable.** QB is treated like any other position, but projecting NCAA QBs to the NFL is notoriously difficult. | The Sharpe says QB is the best top-10 investment *on average* — but "on average" hides enormous bust risk. The math still favors taking the shot, but the variance is real. |
+
+**How each could be improved:**
+
+- **Snap % → PFF grades or EPA.** Production-weighted returns would be more precise than a pure volume metric.
+- **Second contract → true FA signings only.** Separating extensions from open-market deals would better reflect actual market value.
+- **FA replacement → team-change contracts only.** Filtering out extensions would give a truer picture of what's actually available to a team shopping free agency, especially for positions where stars rarely leave (OT, QB).
+- **4-year window → development curve.** An extended window or position-specific development curves could capture late bloomers who break out in year 5+.
+- **$0 for no second contract → partial credit.** Players who contributed during their rookie deal but aged out (especially RBs) could receive credit proportional to their rookie-deal production.
+- **Global elite threshold → position-specific.** Position-specific thresholds would enable fairer within-position analysis — an "elite" QB return is structurally different from an "elite" S return.
+- **FA supply → actual team-change frequency.** Tracking how often starter-caliber players *actually change teams* per position per year would tighten the replacement cost estimate.
+- **Cap% → cap-growth-adjusted values.** Adjusting for structural cap jumps (e.g., new TV deals) would improve cross-era comparisons.
+- **Uniform talent → draft-class strength controls.** Year-over-year positional talent adjustments would reduce noise from unusually deep or thin classes.
+- **QB projection → bust-rate discount.** Explicitly modeling the NCAA-to-NFL translation failure rate for QBs could produce a more honest expected value, even though the math still favors taking the shot.
+
+---
+
 ## Player Surplus Leaderboard
+
+Before we leave, we'll leave you with player surplus leaderboards and more charts to chew on.
 
 Every drafted player scored by **total surplus value** generated over their rookie deal and second contract:
 
@@ -1683,55 +1685,65 @@ gtsave(top10_non_qb_gt, filename = "charts/player_lookup_non_qb.png", vwidth = 9
 cat("![Top 10 Non-QB Draft Picks by Total Surplus Value](charts/player_lookup_non_qb.png)\n")
 ```
 
-## Assumptions & What Comes Next
-
-Every model makes simplifying assumptions. Here's what this analysis assumes and how each could be
-refined. Three of these — uniform talent across classes, ignoring roster context, and treating all
-prospects as interchangeable — are directly tested in [Part 2](counter_analysis.html).
-
-| Assumption | Why it matters |
-|---|---|
-| **Snap % = production.** Playing time is used as a proxy for quality. | A player can play a lot and still be bad. |
-| **Second contract = market value.** The second deal is treated as the market's verdict. | Teams overpay and underpay. Extensions ≠ true free agency. |
-| **FA contracts include extensions.** The replacement cost may be inflated by teams retaining their own players. | Makes some positions (OT, QB) look more expensive to replace than they really are. |
-| **4-year evaluation window.** Snaps are measured over the rookie deal only. | Misses late bloomers and players who improve in year 5+. |
-| **No second contract = $0.** Players who leave the league get zero return. | Some players contributed but aged out (especially RBs). |
-| **Uniform elite threshold.** The 90th percentile is global, not position-specific. | An "elite" QB return is very different from an "elite" RB return. |
-| **Supply ≈ all contracts above hit threshold.** Extensions are counted as FA supply. | Overstates the available market for positions where stars rarely leave. |
-| **Cap% normalization.** Cap% is assumed to be the best cross-era comparator. | Doesn't account for structural cap changes (e.g., TV deal jumps). |
-| **Uniform talent across draft classes.** Each class is assumed to have roughly equal talent at each position. | In reality, some classes are deep at WR and thin at OT — positional Sharpe ratios would shift year to year. |
-| **QB projection is reliable.** QB is treated like any other position, but projecting NCAA QBs to the NFL is notoriously difficult. | The Sharpe says QB is the best top-10 investment *on average* — but "on average" hides enormous bust risk. The math still favors taking the shot, but the variance is real. |
-
-**How each could be improved:**
-
-- **Snap % → PFF grades or EPA.** Production-weighted returns would be more precise than a pure volume metric.
-- **Second contract → true FA signings only.** Separating extensions from open-market deals would better reflect actual market value.
-- **FA replacement → team-change contracts only.** Filtering out extensions would give a truer picture of what's actually available to a team shopping free agency, especially for positions where stars rarely leave (OT, QB).
-- **4-year window → development curve.** An extended window or position-specific development curves could capture late bloomers who break out in year 5+.
-- **$0 for no second contract → partial credit.** Players who contributed during their rookie deal but aged out (especially RBs) could receive credit proportional to their rookie-deal production.
-- **Global elite threshold → position-specific.** Position-specific thresholds would enable fairer within-position analysis — an "elite" QB return is structurally different from an "elite" S return.
-- **FA supply → actual team-change frequency.** Tracking how often starter-caliber players *actually change teams* per position per year would tighten the replacement cost estimate.
-- **Cap% → cap-growth-adjusted values.** Adjusting for structural cap jumps (e.g., new TV deals) would improve cross-era comparisons.
-- **Uniform talent → draft-class strength controls.** Year-over-year positional talent adjustments would reduce noise from unusually deep or thin classes.
-- **QB projection → bust-rate discount.** Explicitly modeling the NCAA-to-NFL translation failure rate for QBs could produce a more honest expected value, even though the math still favors taking the shot.
-
----
-
 ## Appendix: Round 1 Surplus Leaderboard
 
 ```{r round1-leaderboard, results='asis'}
+# Look up the team that signed each player's second contract
+contracts_raw <- nflreadr::load_contracts()
+
+second_contract_team <- contracts_raw %>%
+  filter(!is.na(gsis_id), !is.na(draft_year)) %>%
+  mutate(yrs_since_draft = year_signed - draft_year) %>%
+  # 2nd contract is the first contract signed after the rookie deal (~4 yrs after draft)
+  filter(yrs_since_draft >= 3) %>%
+  group_by(gsis_id) %>%
+  arrange(year_signed, .by_group = TRUE) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(gsis_id, second_contract_team = team)
+
 rd1 <- player_lookup %>%
   filter(pick <= 32, !is.na(player_return), player_return > 0, season <= 2022) %>%
   arrange(desc(player_return)) %>%
-  head(25)
+  head(25) %>%
+  left_join(second_contract_team, by = "gsis_id") %>%
+  mutate(second_contract_team = ifelse(is.na(second_contract_team), "—", second_contract_team))
 
-rd1_gt <- make_player_gt(
-  rd1,
-  title = "Top 25 Round 1 Picks by Total Surplus",
-  subtitle = "First-round picks only | Rookie surplus + second contract value vs FA replacement"
-)
+rd1_tbl <- rd1 %>%
+  mutate(rank = row_number()) %>%
+  select(rank, gsis_id, pfr_player_name, pos_group, team, second_contract_team,
+         season, pick, rookie_surplus, second_apy_cap_pct, player_return)
 
-gtsave(rd1_gt, filename = "charts/player_lookup_rd1.png", vwidth = 900)
+rd1_gt <- rd1_tbl %>%
+  gt() %>%
+  gt_nfl_headshots(columns = "gsis_id", height = 35) %>%
+  gt_nfl_wordmarks(columns = "team", height = 25) %>%
+  gt_nfl_wordmarks(columns = "second_contract_team", height = 25) %>%
+  cols_label(
+    rank = "", gsis_id = "",
+    pfr_player_name = "PLAYER", pos_group = "POS",
+    team = "DRAFTED BY", second_contract_team = "2ND CONTRACT",
+    season = "YEAR", pick = "PICK",
+    rookie_surplus = "ROOKIE SURPLUS",
+    second_apy_cap_pct = "2ND CONTRACT %",
+    player_return = "PLAYER RETURN"
+  ) %>%
+  fmt_percent(columns = c(rookie_surplus, second_apy_cap_pct, player_return), decimals = 1) %>%
+  data_color(columns = player_return,
+             palette = c("#f7f7f7", "#c6dbef", "#4292c6", "#08519c"), domain = NULL) %>%
+  data_color(columns = rookie_surplus,
+             palette = c("#f7f7f7", "#c7e9c0", "#41ab5d", "#006d2c"), domain = NULL) %>%
+  data_color(columns = second_apy_cap_pct,
+             palette = c("#f7f7f7", "#dadaeb", "#9e9ac8", "#6a51a3"), domain = NULL) %>%
+  tab_header(
+    title = "Top 25 Round 1 Picks by Total Surplus",
+    subtitle = "First-round picks only | Rookie surplus + second contract value vs FA replacement"
+  ) %>%
+  tab_style(style = cell_text(weight = "bold"), locations = cells_column_labels()) %>%
+  tab_options(table.font.size = px(13), column_labels.font.size = px(11),
+              data_row.padding = px(4))
+
+gtsave(rd1_gt, filename = "charts/player_lookup_rd1.png", vwidth = 1000)
 cat("![Top 25 Round 1 Picks by Total Surplus](charts/player_lookup_rd1.png)\n")
 ```
 
