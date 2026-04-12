@@ -1844,44 +1844,26 @@ second_contract_team_lookup <- contracts_raw %>%
 
 make_player_gt <- function(data, title, subtitle = NULL) {
   tbl <- data %>%
-    left_join(second_contract_team_lookup, by = "gsis_id") %>%
-    mutate(
-      second_contract_team = ifelse(is.na(second_contract_team), "—", second_contract_team),
-      rank = row_number()
-    ) %>%
-    # Rename directly so columns are crystal-clear regardless of gt label handling
-    rename(drafted_by = team, second_team = second_contract_team) %>%
-    # Normalize team codes for nflplotR wordmark rendering
+    mutate(rank = row_number()) %>%
+    rename(drafted_by = team) %>%
     mutate(
       drafted_by = dplyr::recode(drafted_by,
         "GNB"="GB","KAN"="KC","NOR"="NO","NWE"="NE","SFO"="SF","TAM"="TB",
-        "OAK"="LV","LVR"="LV","SD"="LAC","SDG"="LAC","STL"="LAR","LA"="LAR"),
-      second_team = dplyr::recode(second_team,
-        "Packers"="GB","Chiefs"="KC","Saints"="NO","Patriots"="NE","49ers"="SF",
-        "Buccaneers"="TB","Raiders"="LV","Chargers"="LAC","Rams"="LAR",
-        "Cardinals"="ARI","Falcons"="ATL","Ravens"="BAL","Bills"="BUF",
-        "Panthers"="CAR","Bears"="CHI","Bengals"="CIN","Browns"="CLE",
-        "Cowboys"="DAL","Broncos"="DEN","Lions"="DET","Texans"="HOU",
-        "Colts"="IND","Jaguars"="JAX","Dolphins"="MIA","Vikings"="MIN",
-        "Giants"="NYG","Jets"="NYJ","Eagles"="PHI","Steelers"="PIT",
-        "Seahawks"="SEA","Titans"="TEN","Commanders"="WAS","Redskins"="WAS",
-        "Football Team"="WAS")
+        "OAK"="LV","LVR"="LV","SD"="LAC","SDG"="LAC","STL"="LAR","LA"="LAR")
     ) %>%
-    select(rank, gsis_id, pfr_player_name, pos_group, second_team, drafted_by,
+    select(rank, gsis_id, pfr_player_name, pos_group, drafted_by,
            season, pick, rookie_surplus, second_apy_cap_pct, player_return)
 
   tbl %>%
     gt() %>%
     gt_nfl_headshots(columns = "gsis_id", height = 35) %>%
     gt_nfl_wordmarks(columns = "drafted_by", height = 25) %>%
-    gt_nfl_wordmarks(columns = "second_team", height = 25) %>%
     cols_label(
       rank = "",
       gsis_id = "",
       pfr_player_name = "PLAYER",
       pos_group = "POS",
-      drafted_by = "2ND CONTRACT TEAM",
-      second_team = "DRAFTED BY",
+      drafted_by = "DRAFTED BY",
       season = "YEAR",
       pick = "PICK",
       rookie_surplus = "ROOKIE SURPLUS",
