@@ -141,9 +141,9 @@ scarcity or team-specific needs, and some sample sizes are small.
 
 Mock drafts have Jeremiah Love going as high as [**#4 overall**](https://grindingthemocks.shinyapps.io/Dashboard/). He's been mocked to RB-needy teams like the Titans, Cardinals, Commanders, and Giants. These are all teams with top-10 picks that many would argue are not "a running back away."
 
-Analytic intuition says that spending premium draft capital on a "non-premium" position like RB is a horrible idea. On the other side, others cite Love's elite prospect profile and the impact a running back like Saquon Barkley can have on a team's Super Bowl run (see the [Eagles' Super Bowl LIX victory in 2024](https://en.wikipedia.org/wiki/Super_Bowl_LIX)).
+Analytic intuition says that spending premium draft capital on a "non-premium" position like RB is a horrible idea. On the other side, others cite Love's elite prospect profile and the impact a running back like Saquon Barkley can have on a team's Super Bowl run (see the [Eagles' Super Bowl LIX victory in 2024](https://www.dazn.com/en-US/news/american-football/super-bowl-lix-saquon-barkley-breaks-nfl-record-to-as-philadelphia-eagles-dominate-kansas-city-chiefs-in-first-half/12vr71rrd1txd1em5r9hbxmqh3)).
 
-In Part 1 of this series, I'll lean more into the analytics side of things — empirically defining what a "hit" means while building my own version of a [Sharpe ratio](https://en.wikipedia.org/wiki/Sharpe_ratio), a risk-adjusted return metric originally used in finance to evaluate investments relative to their volatility. In [Part 2](counter_analysis.html), we'll address some of the shortcomings of the Sharpe ratio to round out the argument about where exactly it makes sense to take a running back like Jeremiah Love. By the end of the series, hopefully there's a better understanding of what it means to successfully make the leap from college to pros across all position groups, how the actual NFL market views different positions, and how different teams approach the NFL draft.
+In Part 1 of this series, I'll lean more into the analytics side of things by empirically defining what a "hit" means while building my own version of a [Sharpe ratio](https://en.wikipedia.org/wiki/Sharpe_ratio), a risk-adjusted return metric originally used in finance to evaluate investments relative to their volatility. In [Part 2](counter_analysis.html), we'll address some of the shortcomings of the Sharpe ratio to round out the argument about where exactly it makes sense to take a running back like Jeremiah Love. By the end of the series, hopefully there's a better understanding of what it means to successfully make the leap from college to pros across all position groups, how the actual NFL market views different positions, and how different teams approach the NFL draft.
 
 ---
 
@@ -274,7 +274,7 @@ r5_by_team <- r5_by_team %>%
 cat(paste0(
   "Look at the 5th round: a hit rate of just **", percent(r5_hit_rate, accuracy = 0.1),
   "**. That's roughly one starter per decade per team. The draft's late rounds are essentially ",
-  "lottery tickets — but some teams buy more tickets than others."
+  "lottery tickets."
 ))
 ```
 
@@ -692,17 +692,17 @@ best_rb <- top10_rb_data %>% slice_max(player_return, n = 1)
 second_rb <- top10_rb_data %>% arrange(desc(player_return)) %>% slice(2)
 
 cat(paste0(
-  "Five of seven became starters — the hit rate (",
+  "Five of seven became starters and the hit rate (",
   percent(mean(top10_rb_data$is_hit), accuracy = 1),
   ") is solid. But **zero produced an elite return on the top-10 draft capital investment**. ",
   "The highest return belongs to ",
   best_rb$pfr_player_name, " at ", percent(best_rb$player_return, accuracy = 0.1),
   ", followed by ", second_rb$pfr_player_name, " at ", percent(second_rb$player_return, accuracy = 0.1),
-  " — both short of the ", percent(elite_threshold, accuracy = 0.1), " elite threshold.\n\n",
+  ", both short of the ", percent(elite_threshold, accuracy = 0.1), " elite threshold.\n\n",
 
-  "At pick #4, the positions that *do* produce elite returns are QB, EDGE, and OT — ",
-  "the positions where top-10 Sharpe is positive. On average, Round 2 or Round 3 RBs deliver ",
-  "nearly equivalent production at a fraction of the draft capital cost — though as we'll see in ",
+  "At pick #4, the positions that *do* produce elite returns are QB, EDGE, and OT ",
+  "(the positions where top-10 Sharpe is positive). On average, Round 2 or Round 3 RBs deliver ",
+  "nearly equivalent production at a fraction of the draft capital cost, though as we'll see in ",
   "[Part 2](counter_analysis.html), averages can obscure what happens when the class is thin and the prospect is elite."
 ))
 ```
@@ -767,7 +767,7 @@ ggplot(dumbbell_data, aes(y = pos_group)) +
 
 ### What Teams Left on the Table
 
-The Sharpe ratio flags specific position-tier combinations as negative — plays the model says teams shouldn't make. But what actually happened when teams made those picks? Instead of a theoretical counterfactual, we tracked the real one: for each negative-Sharpe first-round pick, we found the actual next QB, EDGE, OT, or WR drafted in the same year and compared surplus outcomes.
+The Sharpe ratio flags specific position-tier combinations as negative. In other words, draft decisions the model says teams shouldn't make. But what actually happened when teams made those picks? Instead of a theoretical counterfactual, we tracked the real one: for each negative-Sharpe first-round pick, we found the actual next QB, EDGE, OT, or WR drafted in the same year and compared surplus outcomes.
 
 ```{r neg-sharpe-picks}
 salary_cap <- 275  # $275M
