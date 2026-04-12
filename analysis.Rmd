@@ -1565,26 +1565,38 @@ cat("**Sample:** ", nrow(sw_panel), " team-seasons (2014–2025), ",
 
 We sorted every team-season into quartiles by total rookie-deal surplus and plotted win% and playoff rate by quartile.
 
-```{r sharpe-winning-deciles, fig.height=5, fig.width=10}
-sw_quartile_raw <- sw_panel %>%
-  mutate(bin = dplyr::ntile(total_surplus, 4)) %>%
-  group_by(bin) %>%
-  summarise(
-    win_pct = mean(win_pct),
-    po_rate = mean(made_po),
-    min_s = min(total_surplus),
-    max_s = max(total_surplus),
-    n = n(),
-    .groups = "drop"
-  ) %>%
+```{r sharpe-winning-deciles, fig.height=6, fig.width=12}
+cat_specs <- tibble::tribble(
+  ~cat_col,                  ~cat_label,
+  "qb_surplus",              "QB surplus",
+  "premium_non_qb_surplus",  "Premium non-QB surplus\n(OT / EDGE / WR)",
+  "non_premium_surplus",     "Non-premium surplus\n(everything else)"
+)
+
+sw_cat_raw <- purrr::map_dfr(cat_specs$cat_col, function(col) {
+  sw_panel %>%
+    mutate(val = .data[[col]], bin = dplyr::ntile(val, 4)) %>%
+    group_by(bin) %>%
+    summarise(
+      win_pct = mean(win_pct),
+      po_rate = mean(made_po),
+      min_s = min(val),
+      max_s = max(val),
+      n = n(),
+      .groups = "drop"
+    ) %>%
+    mutate(cat_col = col)
+}) %>%
+  left_join(cat_specs, by = "cat_col") %>%
   mutate(
     bin_label = paste0(
-      c("Bottom 25%", "Q2", "Q3", "Top 25%"),
+      c("Bottom 25%", "Q2", "Q3", "Top 25%")[bin],
       "\n(", round(min_s, 1), "–", round(max_s, 1), ")"
-    )
+    ),
+    cat_label = factor(cat_label, levels = cat_specs$cat_label)
   )
 
-sw_quartile <- sw_quartile_raw %>%
+sw_cat <- sw_cat_raw %>%
   tidyr::pivot_longer(c(win_pct, po_rate), names_to = "metric", values_to = "value") %>%
   mutate(metric = dplyr::recode(metric,
     win_pct = "Win %",
@@ -1592,21 +1604,25 @@ sw_quartile <- sw_quartile_raw %>%
   ),
   metric = factor(metric, levels = c("Win %", "Playoff appearance rate")))
 
-ggplot(sw_quartile, aes(x = bin, y = value, color = metric, group = metric)) +
+ggplot(sw_cat, aes(x = bin, y = value, color = metric, group = metric)) +
   geom_hline(yintercept = 0.5, linetype = "dashed", color = "grey60") +
   geom_line(linewidth = 1.4) +
-  geom_point(size = 4) +
+  geom_point(size = 3.5) +
   geom_text(aes(label = scales::percent(value, accuracy = 1)),
-            vjust = -1.1, size = 3.6, fontface = "bold", show.legend = FALSE) +
+            vjust = -1.1, size = 3.2, fontface = "bold", show.legend = FALSE) +
   scale_color_manual(values = c("Win %" = "#08519c", "Playoff appearance rate" = "#b45f06"),
                      name = NULL) +
-  scale_y_continuous(labels = scales::percent, limits = c(0.15, 0.7)) +
-  scale_x_continuous(breaks = 1:4, labels = sw_quartile_raw$bin_label) +
+  scale_y_continuous(labels = scales::percent, limits = c(0.15, 0.75)) +
+  scale_x_continuous(breaks = 1:4,
+                     labels = function(b) {
+                       c("Bottom 25%", "Q2", "Q3", "Top 25%")[b]
+                     }) +
+  facet_wrap(~ cat_label, nrow = 1) +
   labs(
-    title = "More draft surplus → more wins and more playoff berths",
-    subtitle = paste0("Team-seasons bucketed into quartiles by rookie-deal surplus (drafts Y–4 to Y–1) | 2014–2025, n = ",
+    title = "Where does draft surplus actually translate to wins?",
+    subtitle = paste0("Team-seasons bucketed into quartiles by category surplus (drafts Y–4 to Y–1) | 2014–2025, n = ",
                       nrow(sw_panel)),
-    x = "Quartile of rookie-deal surplus",
+    x = "Quartile of category surplus",
     y = NULL,
     caption = "Dashed line = .500"
   ) +
@@ -1616,7 +1632,8 @@ ggplot(sw_quartile, aes(x = bin, y = value, color = metric, group = metric)) +
     plot.subtitle = element_text(color = "grey30"),
     legend.position = "top",
     panel.grid.minor = element_blank(),
-    panel.grid.major.x = element_blank()
+    panel.grid.major.x = element_blank(),
+    strip.text = element_text(face = "bold", size = 11)
   )
 ```
 
