@@ -1528,6 +1528,10 @@ build_team_feats <- function(target_year, lookback = 4) {
     qb_surplus = sum(ifelse(pos_group == "QB", player_return, 0)),
     premium_non_qb_surplus = sum(ifelse(pos_group %in% premium_pos_set & pos_group != "QB", player_return, 0)),
     non_premium_surplus = sum(ifelse(!pos_group %in% premium_pos_set, player_return, 0)),
+    total_hits = sum(is_hit, na.rm = TRUE),
+    qb_hits = sum(ifelse(pos_group == "QB", is_hit, 0), na.rm = TRUE),
+    premium_non_qb_hits = sum(ifelse(pos_group %in% premium_pos_set & pos_group != "QB", is_hit, 0), na.rm = TRUE),
+    non_premium_hits = sum(ifelse(!pos_group %in% premium_pos_set, is_hit, 0), na.rm = TRUE),
     pick_weighted_adj = sum(pick_val * sharpe_adj, na.rm = TRUE) / pmax(sum(pick_val), 1),
     premium_allocation = sum(ifelse(pos_group %in% premium_pos_set, pick_val, 0)) / pmax(sum(pick_val), 1),
     .groups = "drop"
@@ -1561,27 +1565,26 @@ cat("**Sample:** ", nrow(sw_panel), " team-seasons (2014–2025), ",
     length(unique(sw_panel$team)), " teams.\n\n", sep = "")
 ```
 
-### Monotonicity: more rookie-deal surplus, more wins
+### Monotonicity: more rookie-deal hits, more wins
 
-We sorted every team-season into quartiles by total rookie-deal surplus and plotted win% and playoff rate by quartile.
+Using the same hit definition from earlier in the article — a player who plays at least **75% of a positional starter's snap share over their first four seasons** — we counted hits per team-season across the active rookie-deal class (drafts Y–4 to Y–1) and split them into three buckets: QB hits, premium non-QB hits (OT / EDGE / WR), and non-premium hits (everything else). Team-seasons are then bucketed into quartiles by hit count within each category.
 
 ```{r sharpe-winning-deciles, fig.height=6, fig.width=12}
 cat_specs <- tibble::tribble(
-  ~cat_col,                  ~cat_label,
-  "qb_surplus",              "QB surplus",
-  "premium_non_qb_surplus",  "Premium non-QB surplus\n(OT / EDGE / WR)",
-  "non_premium_surplus",     "Non-premium surplus\n(everything else)"
+  ~cat_col,               ~cat_label,
+  "qb_hits",              "QB hits",
+  "premium_non_qb_hits",  "Premium non-QB hits\n(OT / EDGE / WR)",
+  "non_premium_hits",     "Non-premium hits\n(everything else)"
 )
 
 sw_cat_raw <- purrr::map_dfr(cat_specs$cat_col, function(col) {
+  # Group by hit count directly (small integers). Collapse sparse tails.
   sw_panel %>%
-    mutate(val = .data[[col]], bin = dplyr::ntile(val, 4)) %>%
-    group_by(bin) %>%
+    mutate(val = .data[[col]]) %>%
+    group_by(val) %>%
     summarise(
       win_pct = mean(win_pct),
       po_rate = mean(made_po),
-      min_s = min(val),
-      max_s = max(val),
       n = n(),
       .groups = "drop"
     ) %>%
@@ -1589,10 +1592,6 @@ sw_cat_raw <- purrr::map_dfr(cat_specs$cat_col, function(col) {
 }) %>%
   left_join(cat_specs, by = "cat_col") %>%
   mutate(
-    bin_label = paste0(
-      c("Bottom 25%", "Q2", "Q3", "Top 25%")[bin],
-      "\n(", round(min_s, 1), "–", round(max_s, 1), ")"
-    ),
     cat_label = factor(cat_label, levels = cat_specs$cat_label)
   )
 
@@ -1604,27 +1603,30 @@ sw_cat <- sw_cat_raw %>%
   ),
   metric = factor(metric, levels = c("Win %", "Playoff appearance rate")))
 
-ggplot(sw_cat, aes(x = bin, y = value, color = metric, group = metric)) +
+sw_cat_plot <- sw_cat %>%
+  # Keep rows with enough support per bucket (avoid tiny-n noise at the tails).
+  group_by(cat_label, val) %>% filter(first(n) >= 10) %>% ungroup()
+
+ggplot(sw_cat_plot, aes(x = val, y = value, color = metric, group = metric)) +
   geom_hline(yintercept = 0.5, linetype = "dashed", color = "grey60") +
   geom_line(linewidth = 1.4) +
-  geom_point(size = 3.5) +
+  geom_point(aes(size = n)) +
   geom_text(aes(label = scales::percent(value, accuracy = 1)),
-            vjust = -1.1, size = 3.2, fontface = "bold", show.legend = FALSE) +
+            vjust = -1.3, size = 3.2, fontface = "bold", show.legend = FALSE) +
   scale_color_manual(values = c("Win %" = "#08519c", "Playoff appearance rate" = "#b45f06"),
                      name = NULL) +
-  scale_y_continuous(labels = scales::percent, limits = c(0.15, 0.75)) +
-  scale_x_continuous(breaks = 1:4,
-                     labels = function(b) {
-                       c("Bottom 25%", "Q2", "Q3", "Top 25%")[b]
-                     }) +
-  facet_wrap(~ cat_label, nrow = 1) +
+  scale_size_continuous(range = c(2, 6), name = "n team-seasons") +
+  scale_y_continuous(labels = scales::percent, limits = c(0.15, 0.85)) +
+  scale_x_continuous(breaks = function(r) seq(floor(r[1]), ceiling(r[2]), 1)) +
+  facet_wrap(~ cat_label, nrow = 1, scales = "free_x") +
   labs(
-    title = "Where does draft surplus actually translate to wins?",
-    subtitle = paste0("Team-seasons bucketed into quartiles by category surplus (drafts Y–4 to Y–1) | 2014–2025, n = ",
-                      nrow(sw_panel)),
-    x = "Quartile of category surplus",
+    title = "Where do draft hits actually translate to wins?",
+    subtitle = paste0("Hits per team-season, across the active rookie-deal class (drafts Y–4 to Y–1) | 2014–2025, n = ",
+                      nrow(sw_panel),
+                      ". Buckets with <10 team-seasons dropped."),
+    x = "Hits in category (active rookie-deal class)",
     y = NULL,
-    caption = "Dashed line = .500"
+    caption = "Hit = ≥75% of positional-starter snap share over first 4 seasons | Dashed line = .500"
   ) +
   theme_minimal(base_size = 12) +
   theme(
@@ -1638,22 +1640,28 @@ ggplot(sw_cat, aes(x = bin, y = value, color = metric, group = metric)) +
 ```
 
 ```{r sharpe-winning-decile-narrative, results='asis'}
-bot <- sw_panel %>% mutate(b = dplyr::ntile(total_surplus, 4)) %>% filter(b == 1) %>%
-  summarise(wp = mean(win_pct), po = mean(made_po))
-top <- sw_panel %>% mutate(b = dplyr::ntile(total_surplus, 4)) %>% filter(b == 4) %>%
-  summarise(wp = mean(win_pct), po = mean(made_po))
+gap_one <- function(col) {
+  d <- sw_panel %>% mutate(val = .data[[col]])
+  zero <- d %>% filter(val == 0) %>% summarise(wp = mean(win_pct), po = mean(made_po), n = n())
+  top <- d %>% filter(val >= quantile(val, 0.9, na.rm = TRUE)) %>%
+    summarise(wp = mean(win_pct), po = mean(made_po), n = n())
+  list(zero = zero, top = top)
+}
+qb_g <- gap_one("qb_hits")
+pnq_g <- gap_one("premium_non_qb_hits")
 
 cat(paste0(
-  "The pattern is monotonic: teams in the **top quartile** of rookie-deal surplus ",
-  "win **", scales::percent(top$wp, accuracy = 0.1),
-  "** of their games and make the playoffs **", scales::percent(top$po, accuracy = 1),
-  "** of the time. Teams in the **bottom quartile** win **",
-  scales::percent(bot$wp, accuracy = 0.1),
-  "** and reach the playoffs just **", scales::percent(bot$po, accuracy = 1),
-  "**. That is a **", round((top$wp - bot$wp) * 100, 1),
-  "-point** gap in win percentage and roughly a **", round(top$po / pmax(bot$po, 0.01), 1),
-  "× gap** in playoff rate, purely as a function of how much surplus value a team's active ",
-  "rookie class has generated."
+  "The QB panel is the clearest: team-seasons with **zero QB hits** on the active rookie class win just **",
+  scales::percent(qb_g$zero$wp, accuracy = 0.1),
+  "** of their games and make the playoffs **",
+  scales::percent(qb_g$zero$po, accuracy = 1),
+  "** of the time, while team-seasons in the top decile of QB hits win **",
+  scales::percent(qb_g$top$wp, accuracy = 0.1),
+  "** and reach the playoffs **", scales::percent(qb_g$top$po, accuracy = 1),
+  "** of the time. Premium non-QB hits show a smaller but still positive slope (**",
+  scales::percent(pnq_g$zero$wp, accuracy = 0.1), "** → **",
+  scales::percent(pnq_g$top$wp, accuracy = 0.1),
+  "**). Non-premium hits barely move the needle — hitting on day-three picks is nice but rarely decides seasons."
 ))
 ```
 
@@ -1784,13 +1792,12 @@ cat(paste0(
   "For most positions, getting starter-level production at rookie-scale wages for 4 years ",
   "is worth more than the second contract itself.\n\n",
 
-  "7. **Draft surplus actually translates to wins.** Across ", nrow(sw_panel), " team-seasons from 2014 to 2025, ",
-  "total rookie-deal surplus correlates with win % at **r = ",
-  round(cor(sw_panel$total_surplus, sw_panel$win_pct), 2),
-  "** (p < 0.0001). The top quartile of surplus wins **", scales::percent(top$wp, accuracy = 0.1),
-  "** and reaches the playoffs **", scales::percent(top$po, accuracy = 1),
-  "** of the time; the bottom quartile wins **", scales::percent(bot$wp, accuracy = 0.1),
-  "** and reaches the playoffs just **", scales::percent(bot$po, accuracy = 1), "**.\n\n",
+  "7. **Draft hits actually translate to wins — especially at QB.** Across ", nrow(sw_panel),
+  " team-seasons from 2014 to 2025, QB hits on the active rookie class move the needle most: ",
+  "zero QB hits → **", scales::percent(qb_g$zero$wp, accuracy = 0.1), "** win / **",
+  scales::percent(qb_g$zero$po, accuracy = 1), "** playoff rate, top-decile QB hits → **",
+  scales::percent(qb_g$top$wp, accuracy = 0.1), "** win / **",
+  scales::percent(qb_g$top$po, accuracy = 1), "** playoff rate.\n\n",
 
   "8. **It's execution, not allocation.** In the multivariate model, QB surplus (p = 0.03), non-premium ",
   "surplus (p = 0.006), and premium non-QB surplus (p = 0.06) all load positive on wins. But pure ",
