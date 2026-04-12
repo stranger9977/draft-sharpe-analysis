@@ -1489,7 +1489,7 @@ cat(paste0(
 
 ## Does This Actually Translate to Winning?
 
-The Sharpe framework is a story about *expected* surplus value. But the natural next question is: do the teams that generate the most surplus from their drafts actually win more games? To test this, we built a panel of every team-season from 2014 to 2025 (n = 301) and asked: for each team going into season *Y*, how much surplus value did their active rookie-deal class — drafts from *Y-4* through *Y-1* — generate, and how well did the team perform that year?
+The Sharpe framework is a story about *expected* surplus value. But the natural next question is: do the teams that generate the most surplus from their drafts actually win more games? To test this, we built a panel of every team-season from 2014 to 2025 and asked: for each team going into season *Y*, how much surplus value did their active rookie-deal class — drafts from *Y-4* through *Y-1* — generate, and how well did the team perform that year?
 
 ```{r sharpe-winning-panel, results='asis'}
 suppressMessages({library(purrr)})
@@ -1497,8 +1497,15 @@ suppressMessages({library(purrr)})
 # Per-pick Sharpe-adjusted values (round-adjusted)
 pv_fn <- function(p) ifelse(p <= 32, 3000 * (0.7^((p-1)/32)), 500 * exp(-(p-32)/60) + 50)
 
+# Normalize relocation codes so OAK/LV, SD/LAC, STL/LAR map to a single team
+normalize_team <- function(x) {
+  dplyr::recode(x, "OAK" = "LV", "SD" = "LAC", "STL" = "LAR",
+                   "LVR" = "LV", "SDG" = "LAC", "LA" = "LAR")
+}
+
 sw_base <- player_lookup %>%
   mutate(
+    team = normalize_team(team),
     player_return = ifelse(is.na(player_return), 0, player_return),
     pick_val = pv_fn(pick),
     rd = case_when(pick <= 32 ~ 1, pick <= 64 ~ 2, pick <= 100 ~ 3,
@@ -1529,12 +1536,14 @@ sw_wp <- bind_rows(
     sw_sch %>% transmute(season, team = home_team, win = result > 0, tie = result == 0),
     sw_sch %>% transmute(season, team = away_team, win = result < 0, tie = result == 0)
   ) %>%
+  mutate(team = normalize_team(team)) %>%
   group_by(team, season) %>% summarise(g = n(), w = sum(win) + 0.5 * sum(tie), .groups = "drop") %>%
   mutate(win_pct = w / g)
 
 sw_po <- nflreadr::load_schedules(sw_seasons) %>% filter(game_type != "REG") %>%
   select(season, home_team, away_team) %>%
   tidyr::pivot_longer(c(home_team, away_team), values_to = "team") %>%
+  mutate(team = normalize_team(team)) %>%
   distinct(season, team) %>% mutate(made_po = 1)
 
 sw_wp <- sw_wp %>% left_join(sw_po, by = c("season", "team")) %>%
@@ -1736,7 +1745,7 @@ cat(paste0(
   "For most positions, getting starter-level production at rookie-scale wages for 4 years ",
   "is worth more than the second contract itself.\n\n",
 
-  "7. **Draft surplus actually translates to wins.** Across 301 team-seasons from 2014 to 2025, ",
+  "7. **Draft surplus actually translates to wins.** Across ", nrow(sw_panel), " team-seasons from 2014 to 2025, ",
   "total rookie-deal surplus correlates with win % at **r = 0.23 (p < 0.0001)**. Teams in the top three ",
   "deciles of surplus win **~55%** of their games and make the playoffs **~51%** of the time; teams in the ",
   "bottom three win **~42%** and reach the playoffs **~26%** of the time.\n\n",
